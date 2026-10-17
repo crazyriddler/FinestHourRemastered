@@ -8,6 +8,7 @@
 #include <windows.h>
 #include <xaudio2.h>
 
+#include <mutex>
 #include <thread>
 #include <vector>
 
@@ -15,6 +16,16 @@
 #include "core/log.h"
 
 namespace audio {
+
+namespace {
+std::mutex g_tap_lock;
+std::function<void(const float*, uint32_t)> g_tap;
+}  // namespace
+
+void SetTap(std::function<void(const float*, uint32_t)> tap) {
+    std::lock_guard l(g_tap_lock);
+    g_tap = std::move(tap);
+}
 
 void StartOutput(std::function<void(float*, uint32_t)> render) {
     std::thread([render] {
@@ -46,6 +57,10 @@ void StartOutput(std::function<void(float*, uint32_t)> render) {
             }
             float* b = &bufs[(n % kSlots) * kFrames * 2];
             render(b, kFrames);
+            {
+                std::lock_guard l(g_tap_lock);
+                if (g_tap) g_tap(b, kFrames);
+            }
             XAUDIO2_BUFFER xb{};
             xb.AudioBytes = kFrames * 8;
             xb.pAudioData = reinterpret_cast<const BYTE*>(b);

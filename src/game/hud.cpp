@@ -21,7 +21,8 @@ using namespace kernel;
 
 namespace {
 
-enum Tag : uint32_t { kNone = 0, kHud = 1, kMenu = 2, kPixels = 0x100, kBeside = 0x200 };  // kBeside: a sprite beside Rt2d text
+// kBeside: a sprite beside Rt2d text; kInText: a button's picture in a line of it (a hint's "hold [LT] and ...")
+enum Tag : uint32_t { kNone = 0, kHud = 1, kMenu = 2, kPixels = 0x100, kBeside = 0x200, kInText = 0x400 };
 
 std::atomic<bool> g_front_end{false};
 std::atomic<bool> g_paused{false};  // the pause screen is up: a menu over the game
@@ -118,6 +119,17 @@ bool Layout(const gpu::Draw2D& d_in, float& scale, float& offset) {
         float right = d.x1 * narrowed + centre + cx * (1 - narrowed);
         scale = std::min(1.0f, (d.y1 - d.y0) / std::max(d.x1 - d.x0, 1.0f));
         offset = right - d.x1 * scale;
+        return true;
+    }
+    // a button's picture in a hint's line in the game: the game places it in the line's gap as it measured the line,
+    // narrowed with it, but draws it in the screen's pixels. Its centre goes where the line's narrowing undone puts
+    // it (the line placed as its side places text), its own width kept
+    if ((d.tag & kInText) && (d.tag & 0xFF) == kHud && !g_paused && !g_front_end && d.widen > 1.0f && d.bounded) {
+        float cs = (d.x0 + d.x1) * 0.5f, ct = cs * d.widen;
+        int side = Side(ct, ct, w);
+        float line = side < 0 ? 0 : side > 0 ? w * (1 - k) : centre;
+        scale = k;
+        offset = line + cs * (1 - k);
         return true;
     }
     if ((d.tag & 0xFF) == kMenu) {
@@ -252,7 +264,7 @@ void Sprites(X86Context& ctx, uint8_t* base, X86Func* draw, uint32_t extra = kBe
 }
 
 X86_EXTERN_FUNC(__imp__sub_000A68D0);
-X86_FUNC(sub_000A68D0) { Sprites(ctx, base, __imp__sub_000A68D0); }
+X86_FUNC(sub_000A68D0) { Sprites(ctx, base, __imp__sub_000A68D0, kBeside | kInText); }  // a picture in a line of text
 
 X86_EXTERN_FUNC(__imp__sub_000A84E0);
 X86_FUNC(sub_000A84E0) { Sprites(ctx, base, __imp__sub_000A84E0); }

@@ -22,6 +22,10 @@ static std::recursive_mutex g_lock;
 
 uint8_t* Base() { return g_base; }
 
+#ifdef _WIN32
+static LONG CALLBACK UserPageFault(EXCEPTION_POINTERS* e);
+#endif
+
 // physical memory shows at 0x80000000 and again at 0xF0000000 (write combined view)
 static bool InPhysical(uint32_t va) {
     return (va >= kContiguousBase && va < kContiguousBase + kPhysicalSize) ||
@@ -68,11 +72,37 @@ bool Init() {
         return false;
     }
     LOGI("memory: guest space at %p", static_cast<void*>(g_base));
+#ifdef _WIN32
+    AddVectoredExceptionHandler(1, UserPageFault);
+#endif
     return true;
 }
 
 // page commit map, one byte per 4 KB page
 static std::vector<uint8_t> g_committed(0x100000, 0);
+// user pages given memory when the game touched them uncommitted (freed, or never committed): the Xbox ran the game
+// without faulting there (a stale read, say: a matrix compared in a freed block), so the port goes on as well, with a
+// zeroed page; zeroed again when the game commits it
+static std::vector<uint8_t> g_touched(0x100000, 0);
+
+#ifdef _WIN32
+static LONG CALLBACK UserPageFault(EXCEPTION_POINTERS* e) {
+    auto* r = e->ExceptionRecord;
+    if (r->ExceptionCode != EXCEPTION_ACCESS_VIOLATION || r->NumberParameters < 2 || !g_base) return EXCEPTION_CONTINUE_SEARCH;
+    uint64_t va = uint64_t(r->ExceptionInformation[1]) - uint64_t(reinterpret_cast<uintptr_t>(g_base));
+    if (va < kUserLow || va >= kUserHigh) return EXCEPTION_CONTINUE_SEARCH;
+    uint32_t page = uint32_t(va) & ~(kPage - 1);
+    std::lock_guard<std::recursive_mutex> lock(g_lock);
+    if (g_committed[page >> 12]) return EXCEPTION_CONTINUE_SEARCH;  // (committed: another fault, not this)
+    if (!g_touched[page >> 12]) {
+        if (!VirtualAlloc(g_base + page, kPage, MEM_COMMIT, PAGE_READWRITE)) return EXCEPTION_CONTINUE_SEARCH;
+        g_touched[page >> 12] = 1;
+        LOGW("memory: %s of the uncommitted page %08X (guest %08X): a zeroed page given",
+             r->ExceptionInformation[0] ? "write" : "read", page, uint32_t(va));
+    }
+    return EXCEPTION_CONTINUE_EXECUTION;
+}
+#endif
 
 bool Commit(uint32_t va, uint32_t size) {
     if (!size || InPhysical(va)) return true;
@@ -90,7 +120,10 @@ bool Commit(uint32_t va, uint32_t size) {
         return false;
     }
 #endif
-    for (uint64_t p = first; p < end; p += kPage) g_committed[size_t(p >> 12)] = 1;
+    for (uint64_t p = first; p < end; p += kPage) {
+        if (g_touched[size_t(p >> 12)]) std::memset(g_base + p, 0, kPage), g_touched[size_t(p >> 12)] = 0;
+        g_committed[size_t(p >> 12)] = 1;
+    }
     return true;
 }
 
@@ -105,7 +138,7 @@ void Decommit(uint32_t va, uint32_t size) {
     madvise(g_base + first, size_t(end - first), MADV_DONTNEED);
     mprotect(g_base + first, size_t(end - first), PROT_NONE);
 #endif
-    for (uint64_t p = first; p < end; p += kPage) g_committed[size_t(p >> 12)] = 0;
+    for (uint64_t p = first; p < end; p += kPage) g_committed[size_t(p >> 12)] = 0, g_touched[size_t(p >> 12)] = 0;
 }
 
 bool IsCommitted(uint32_t va) { return InPhysical(va) || g_committed[va >> 12] != 0; }

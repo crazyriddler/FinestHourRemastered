@@ -37,6 +37,7 @@
 #include <backends/imgui_impl_win32.h>
 
 #include "app/app.h"
+#include "audio/audio.h"
 #include "core/control.h"
 #include "core/diag.h"
 #include "core/sampler.h"
@@ -1274,12 +1275,15 @@ private:
     // video recording (control "record <file.mp4>" / "record stop", XBE_RECORD): each shown frame, at most
     // XBE_RECORD_FPS (60) a second, copied into one of two readback buffers; a buffer is read once its copy is done
     // (a frame later, nobody waiting) and its pixels go to ffmpeg (XBE_FFMPEG, else on the PATH) on a writer thread,
-    // encoded with NVENC (HEVC, high quality; a fragmented MP4: a killed run still plays)
+    // encoded with NVENC (HEVC, high quality; a fragmented MP4: a killed run still plays). The video keeps the
+    // clock's time: a frame is written as many times as the rate's frames it stands for (a slow frame, a stall), so
+    // the game's sound, written beside it (<file>.wav, the mix as it goes out), stays in step.
     struct RecSlot {
         ComPtr<ID3D12Resource> rb;
         D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp{};
         uint64_t fence = 0;
         bool pending = false;
+        int64_t at = 0;  // the rate's frame it was taken at, from the start
     };
     RecSlot rec_slots_[2];
     int rec_next_ = 0;
@@ -1290,8 +1294,14 @@ private:
     std::thread rec_thread_;
     std::mutex rec_mu_;
     std::condition_variable rec_cv_;
-    std::deque<std::vector<uint8_t>> rec_queue_;
+    std::deque<std::pair<std::vector<uint8_t>, int64_t>> rec_queue_;  // a frame, how many times it is written
     bool rec_stop_ = false;
+    std::chrono::steady_clock::time_point rec_start_{};
+    int64_t rec_due_ = 0;     // the next of the rate's frames to take
+    int64_t rec_frames_ = 0;  // the frames given to the writer
+    FILE* rec_wav_ = nullptr;
+    uint64_t rec_wav_bytes_ = 0;
+    std::mutex rec_wav_mu_;
     bool rec_copied_ = false;
     void RecordFrame(uint32_t bi);   // before Submit: the copy of a due frame
     void RecordAfterSubmit();         // after Submit: the slot's fence
@@ -5655,8 +5665,21 @@ void D3D12Backend::RecordStop() {
         rec_cv_.notify_all();
         rec_thread_.join();
     }
-    if (rec_pipe_) _pclose(rec_pipe_), LOGR("record: %ls closed", rec_path_.c_str());
+    if (rec_pipe_) _pclose(rec_pipe_), LOGR("record: %ls closed, %lld frames", rec_path_.c_str(), (long long)rec_frames_);
     rec_pipe_ = nullptr;
+    audio::SetTap(nullptr);
+    {
+        std::lock_guard l(rec_wav_mu_);
+        if (rec_wav_) {
+            // the RIFF and data sizes
+            uint32_t riff = uint32_t(std::min<uint64_t>(rec_wav_bytes_ + 36, 0xFFFFFFFFu));
+            uint32_t data = uint32_t(std::min<uint64_t>(rec_wav_bytes_, 0xFFFFFFFFu - 36));
+            std::fseek(rec_wav_, 4, SEEK_SET), std::fwrite(&riff, 4, 1, rec_wav_);
+            std::fseek(rec_wav_, 40, SEEK_SET), std::fwrite(&data, 4, 1, rec_wav_);
+            std::fclose(rec_wav_);
+            rec_wav_ = nullptr;
+        }
+    }
     rec_queue_.clear();
     rec_stop_ = false;
     rec_w_ = rec_h_ = 0;
@@ -5676,7 +5699,11 @@ void D3D12Backend::RecordFrame(uint32_t bi) {
         return e ? std::atof(e) : 60.0;
     }();
     auto now = std::chrono::steady_clock::now();
-    if (rec_pipe_ && fps > 0 && std::chrono::duration<double>(now - rec_last_).count() < 0.9 / fps) return;
+    int64_t at = 0;
+    if (rec_pipe_) {
+        at = int64_t(std::chrono::duration<double>(now - rec_start_).count() * fps);
+        if (at < rec_due_) return;  // (this frame of the rate taken already)
+    }
     rec_last_ = now;
     ID3D12Resource* bb = bb_[bi].Get();
     D3D12_RESOURCE_DESC d = bb->GetDesc();
@@ -5700,9 +5727,30 @@ void D3D12Backend::RecordFrame(uint32_t bi) {
             return;
         }
         rec_w_ = uint32_t(d.Width), rec_h_ = d.Height;
+        rec_start_ = now, rec_due_ = 0, rec_frames_ = 0;
+        {
+            std::filesystem::path wav(rec_path_);
+            wav.replace_extension(L".wav");
+            std::lock_guard l(rec_wav_mu_);
+            rec_wav_ = _wfopen(wav.c_str(), L"wb");
+            rec_wav_bytes_ = 0;
+            if (rec_wav_) {
+                // RIFF WAVE, IEEE float stereo at the mixer's rate
+                uint8_t h[44] = {'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'A', 'V', 'E', 'f', 'm', 't', ' ', 16, 0, 0, 0, 3, 0, 2, 0};
+                auto put = [&](int o, uint32_t v) { std::memcpy(h + o, &v, 4); };
+                put(24, audio::kRate), put(28, audio::kRate * 8);
+                h[32] = 8, h[34] = 32;
+                std::memcpy(h + 36, "data", 4);
+                std::fwrite(h, 1, 44, rec_wav_);
+            }
+        }
+        audio::SetTap([this](const float* mix, uint32_t frames) {
+            std::lock_guard l(rec_wav_mu_);
+            if (rec_wav_) rec_wav_bytes_ += std::fwrite(mix, 8, frames, rec_wav_) * 8;
+        });
         rec_thread_ = std::thread([this] {
             for (;;) {
-                std::vector<uint8_t> f;
+                std::pair<std::vector<uint8_t>, int64_t> f;
                 {
                     std::unique_lock l(rec_mu_);
                     rec_cv_.wait(l, [this] { return rec_stop_ || !rec_queue_.empty(); });
@@ -5710,7 +5758,7 @@ void D3D12Backend::RecordFrame(uint32_t bi) {
                     f = std::move(rec_queue_.front());
                     rec_queue_.pop_front();
                 }
-                std::fwrite(f.data(), 1, f.size(), rec_pipe_);
+                for (int64_t i = 0; i < f.second; i++) std::fwrite(f.first.data(), 1, f.first.size(), rec_pipe_);
             }
         });
         LOGR("record: %ls, %ux%u at %g fps", rec_path_.c_str(), rec_w_, rec_h_, fps);
@@ -5718,6 +5766,8 @@ void D3D12Backend::RecordFrame(uint32_t bi) {
     if (uint32_t(d.Width) != rec_w_ || d.Height != rec_h_) return;  // (resized: frames of another size skipped)
     RecSlot& s = rec_slots_[rec_next_];
     if (s.pending) RecordFlush(s);
+    s.at = at;
+    rec_due_ = at + 1;
     UINT64 bytes = 0;
     dev_->GetCopyableFootprints(&d, 0, 1, 0, &s.fp, nullptr, nullptr, &bytes);
     if (!s.rb || s.rb->GetDesc().Width < bytes) {
@@ -5776,8 +5826,15 @@ void D3D12Backend::RecordFlush(RecSlot& s) {
     D3D12_RANGE none{0, 0};
     s.rb->Unmap(0, &none);
     {
+        // written for every frame of the rate up to its own (those it stands for); ffmpeg behind: the last one
+        // queued stands for them as well
         std::lock_guard l(rec_mu_);
-        if (rec_queue_.size() < 8) rec_queue_.push_back(std::move(f));  // (ffmpeg behind: dropped from the video)
+        int64_t times = s.at + 1 - rec_frames_;
+        if (times > 0) {
+            if (rec_queue_.size() < 8) rec_queue_.push_back({std::move(f), times});
+            else rec_queue_.back().second += times;
+            rec_frames_ += times;
+        }
     }
     rec_cv_.notify_one();
 }

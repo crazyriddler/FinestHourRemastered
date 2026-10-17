@@ -320,16 +320,20 @@ void Update() {
         }
         g_main = main;
         g_main_sel = mm.selected;
-        // the pause screen's options page: its frame's outer top, its bottom
+        // the pause screen's options page: its frame's outer top, its bottom. The frame is centred and as wide as
+        // its longest row in the language (66..574 in Spanish, 111..530 in English)
         bool popts = false;
         float bottom = 0;
         if (cod::Paused() && !cod::wide::FrontEnd() && !cod::InMovie()) {
             std::lock_guard l(g_lock);
-            for (const auto& d : g_last) {
-                if (d.tex) continue;
-                if (std::fabs(d.x0 - 66) < 3 && std::fabs(d.x1 - 574) < 3 && std::fabs(d.y0 - 87) < 3) popts = true;
-                if (std::fabs(d.x0 - 66) < 3 && std::fabs(d.x1 - 574) < 3 && d.y0 > 300) bottom = std::max(bottom, d.y1);
-            }
+            float fx0 = 0, fx1 = 0;
+            for (const auto& d : g_last)
+                if (!d.tex && std::fabs(d.y0 - 87) < 3 && std::fabs(d.x0 + d.x1 - 640) < 4 && d.x1 - d.x0 > 300 &&
+                    d.x1 - d.x0 > fx1 - fx0)
+                    popts = true, fx0 = d.x0, fx1 = d.x1;  // the outermost
+            if (popts)
+                for (const auto& d : g_last)
+                    if (!d.tex && std::fabs(d.x0 - fx0) < 3 && std::fabs(d.x1 - fx1) < 3 && d.y0 > 300) bottom = std::max(bottom, d.y1);
         }
         popts = popts && bottom > 300 && bottom < 380 && !mm.items.empty();
         if (!popts) g_pc_focus = false;

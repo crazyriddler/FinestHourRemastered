@@ -25,7 +25,7 @@ def main():
     ap.add_argument("--level", type=int, default=1)
     ap.add_argument("--tag", default="port")
     a = ap.parse_args()
-    exe = os.path.join(a.folder, "FinestHourRemastered.exe")
+    exe = os.path.join(a.folder, "CODFH.exe")
     log = os.path.join(a.folder, "logs", "codfh.log")
     control = os.path.join(WORK, a.tag + ".control.txt")
     open(control, "w").close()

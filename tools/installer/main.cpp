@@ -43,7 +43,7 @@ namespace {
 // the release the port was recompiled from
 constexpr char kXbeSha1[] = "938a7b1e17928de49cb3c5834d61abcd3d9081c8";
 constexpr wchar_t kProduct[] = L"Finest Hour Remastered";
-constexpr wchar_t kExe[] = L"FinestHourRemastered.exe";
+constexpr wchar_t kExe[] = L"CODFH.exe";
 constexpr char kRequired[] =
     "Call of Duty: Finest Hour for the original Xbox, PAL (Europe) release, title ID 4156002A, version 3.";
 
@@ -360,6 +360,8 @@ void Install() {
         }
         std::fclose(o);
     }
+    // the first release's exe, under another name (the game could not start itself again under it)
+    fs::remove(target / L"FinestHourRemastered.exe", ec);
     Log("Making shortcuts...");
     fs::path exe = target / kExe;
     PWSTR p = nullptr;

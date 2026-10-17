@@ -46,7 +46,7 @@ def main():
     for line in lines[1:]:
         size, path = line.split("\t")
         data = read(int(size))
-        if path == "FinestHourRemastered.exe":
+        if path == "CODFH.exe":
             built = os.path.join(a.to, "CODFH.exe")
             same = os.path.exists(built) and hashlib.sha1(open(built, "rb").read()).digest() == hashlib.sha1(data).digest()
             print("CODFH.exe built %s the release's" % ("is" if same else "differs from"))

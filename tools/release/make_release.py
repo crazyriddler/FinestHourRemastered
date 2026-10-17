@@ -25,7 +25,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 BUILD = os.path.join(ROOT, "out", "build", "release")
 PACK = os.path.join(ROOT, "work", "remaster", "pack")
 OUT = os.path.join(os.path.dirname(ROOT), "release")
-EXE = "FinestHourRemastered.exe"
+EXE = "CODFH.exe"  # its own name: the game starts itself again under it (a title launch)
 PART = 1900 * 1024 * 1024
 
 # what of the pack ships (the work_* folders are the tools' own)

@@ -316,9 +316,11 @@ std::vector<Page> BuildPages() {
                                        [&s](int i) { s.language = codes[i]; },
                                        "Text and speech. The game starts again in it when you leave these settings."));
     }
-    general.items.push_back(Toggle("Free Camera", cod::wide::FlyEnabled(),
-                                   "Fly through the level and its walls: move with WASD or the left stick, look with the mouse or the "
-                                   "right stick, Jump up, Crouch down, Fire faster. The player stays still."));
+    // the Free Camera: a tester's tool (developer = true in codfh.toml), not the player's
+    if (c.developer)
+        general.items.push_back(Toggle("Free Camera", cod::wide::FlyEnabled(),
+                                       "Fly through the level and its walls: move with WASD or the left stick, look with the mouse or "
+                                       "the right stick, Jump up, Crouch down, Fire faster. The player stays still."));
     pages.push_back(std::move(general));
     return pages;
 }

@@ -8041,8 +8041,35 @@ bool D3D12Backend::WeaponPieces(const State& s, const Assembled& a, const DrawSh
             x0 = std::min(x0, q[0]), x1 = std::max(x1, q[0]), y0 = std::min(y0, q[1]), y1 = std::max(y1, q[1]);
         }
         if (behind) continue;  // (through the eye: not on the screen as a triangle; kept)
-        on[t] = x1 >= -1 && x0 <= 1 && y1 >= -1 && y0 <= 1;
-        in43[t] = on[t] && x1 >= -half && x0 <= half;
+        // the triangle itself against a rectangle (its corners clipped by the rectangle's sides; something left: it
+        // shows there), not its bounding box: a long thin one by a corner has a box reaching in, and none of it does
+        auto overlaps = [&](float rx0, float rx1, float ry0, float ry1) {
+            if (x1 < rx0 || x0 > rx1 || y1 < ry0 || y0 > ry1) return false;
+            float poly[2][12][2];
+            int n = 3, cur = 0;
+            for (int k = 0; k < 3; k++) poly[0][k][0] = scr[tr.v[k]][0], poly[0][k][1] = scr[tr.v[k]][1];
+            for (int side = 0; side < 4 && n > 0; side++) {
+                const int axis = side / 2;
+                const float lim = side == 0 ? rx0 : side == 1 ? rx1 : side == 2 ? ry0 : ry1;
+                const bool keep_greater = side == 0 || side == 2;
+                int m = 0;
+                for (int i = 0; i < n && m < 10; i++) {
+                    const float* a0 = poly[cur][i];
+                    const float* b0 = poly[cur][(i + 1) % n];
+                    float da = keep_greater ? a0[axis] - lim : lim - a0[axis];
+                    float db = keep_greater ? b0[axis] - lim : lim - b0[axis];
+                    if (da >= 0) poly[1 - cur][m][0] = a0[0], poly[1 - cur][m][1] = a0[1], m++;
+                    if ((da >= 0) != (db >= 0) && m < 10) {
+                        float f = da / (da - db);
+                        poly[1 - cur][m][0] = a0[0] + (b0[0] - a0[0]) * f, poly[1 - cur][m][1] = a0[1] + (b0[1] - a0[1]) * f, m++;
+                    }
+                }
+                n = m, cur = 1 - cur;
+            }
+            return n >= 3;
+        };
+        on[t] = overlaps(-1, 1, -1, 1);
+        in43[t] = on[t] && overlaps(-half, half, -1, 1);
         if (on[t]) join(tr.v[0], tr.v[1]), join(tr.v[1], tr.v[2]);
     }
     std::unordered_set<uint32_t> shown;
@@ -8052,6 +8079,18 @@ bool D3D12Backend::WeaponPieces(const State& s, const Assembled& a, const DrawSh
     size_t dropped = 0;
     for (size_t t = 0; t < tris.size(); t++)
         if (on[t] && !shown.count(find(tris[t].v[0]))) weapon_keep_[t] = 0, dropped++;
+    // tests (cmd weaponwhole 3 / 4): the triangles wholly outside the 4:3 view wound one way (a strip's alternate
+    // triangles counted as the strip draws them) left out, the rest drawn
+    if (int ww = g_weapon_whole.load(std::memory_order_relaxed); ww == 3 || ww == 4) {
+        weapon_keep_.assign(tris.size(), 1), dropped = 0;
+        for (size_t t = 0; t < tris.size(); t++) {
+            if (!on[t] || in43[t]) continue;
+            const auto &p0 = scr[tris[t].v[0]], &p1 = scr[tris[t].v[1]], &p2 = scr[tris[t].v[2]];
+            float area = (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p2[0] - p0[0]) * (p1[1] - p0[1]);
+            if (a.strip && (t & 1)) area = -area;
+            if ((ww == 3) == (area > 0)) weapon_keep_[t] = 0, dropped++;
+        }
+    }
     weapon_filter_ = dropped > 0;
     static const bool log = std::getenv("XBE_WEAPON_LOG") != nullptr;
     if (log && presents_ % 120 == 0) {

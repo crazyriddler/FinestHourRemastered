@@ -75,22 +75,28 @@ def check(level, at, weapons, out):
     send("cmd weaponwhole 0")
     time.sleep(0.5)
     drive.kill_build_exe()
-    sheet = Image.new("RGB", (1600, 300 * len(rows)))
-    for r, (label, pair) in enumerate(rows):
+    # what the player sees outside the 4:3 view (the side strips, an eighth of the width each, the lower two thirds),
+    # at half the full resolution: as drawn, and the game's whole model beside it
+    tiles = []
+    for label, pair in rows:
         for c, bmp in enumerate(pair):
             try:
                 im = Image.open(bmp).convert("RGB")
-                w, h = im.size
-                left = im.crop((0, h // 3, w // 2, h)).resize((640, 300))
-                right = im.crop((w * 7 // 8, h // 3, w, h)).resize((160, 300))
-                tile = Image.new("RGB", (800, 300))
-                tile.paste(left, (0, 0))
-                tile.paste(right, (640, 0))
-                ImageDraw.Draw(tile).text((6, 6), "lv%d %s %s" % (level, label, "whole" if c == 0 else "drawn"), fill=(255, 255, 0))
-                sheet.paste(tile, (c * 800, r * 300))
                 os.remove(bmp)
             except OSError:
-                pass
+                continue
+            w, h = im.size
+            strip = Image.new("RGB", (w // 8 * 2 + 8, h * 2 // 3))
+            strip.paste(im.crop((0, h // 3, w // 8, h)), (0, 0))
+            strip.paste(im.crop((w - w // 8, h // 3, w, h)), (w // 8 + 8, 0))
+            strip = strip.resize((strip.width // 2, strip.height // 2))
+            ImageDraw.Draw(strip).text((6, 6), "%s %s" % (label, "whole" if c == 0 else "DRAWN"), fill=(255, 255, 0))
+            tiles.append(strip)
+    tw, th = tiles[0].size if tiles else (1, 1)
+    cols = 4
+    sheet = Image.new("RGB", (tw * cols, th * ((len(tiles) + cols - 1) // cols)))
+    for i, t in enumerate(tiles):
+        sheet.paste(t, ((i % cols) * tw, (i // cols) * th))
     sheet.save(os.path.join(out, "lv%02d.png" % level))
     print("lv%d: %d rows" % (level, len(rows)), flush=True)
 

@@ -219,6 +219,36 @@ bool ReadPayload(Payload& p, std::string& err) {
     return true;
 }
 
+// the downloads beside the installer: the index and every data part it names, whole (their sizes add up to its
+// total; a download cut short does not). What is missing, for the welcome page, one line a file
+constexpr wchar_t kReleaseUrl[] = L"https://github.com/crazyriddler/FinestHourRemastered/releases/latest";
+std::vector<std::string> g_missing;
+
+void CheckDownloads() {
+    g_missing.clear();
+    fs::path dir = ExeDir();
+    std::ifstream idx(dir / "FinestHourRemastered.index");
+    std::string magic;
+    int parts = 0;
+    uint64_t total = 0;
+    if (!idx || !(idx >> magic >> parts >> total) || magic != "FHR1" || parts <= 0) {
+        g_missing.push_back("FinestHourRemastered.index");
+        g_missing.push_back("FinestHourRemastered.data.001, .002, .003 (every part)");
+        return;
+    }
+    uint64_t have = 0;
+    for (int i = 1; i <= parts; i++) {
+        wchar_t name[64];
+        swprintf(name, 64, L"FinestHourRemastered.data.%03d", i);
+        std::error_code ec;
+        uint64_t size = fs::file_size(dir / name, ec);
+        if (ec) g_missing.push_back(Narrow(name));
+        else have += size;
+    }
+    if (g_missing.empty() && have != total)
+        g_missing.push_back("a .data part is incomplete (its download did not finish): download the parts again");
+}
+
 // a stream over the payload's parts, one after another
 struct PartStream {
     std::vector<fs::path> parts;
@@ -400,6 +430,22 @@ void Frame() {
     };
     switch (g_page) {
         case Page::Welcome:
+            if (!g_missing.empty()) {
+                // the release's own downloads are needed beside the installer first
+                para("Before installing, the release's other downloads are needed in this installer's folder:", kGold);
+                para(Narrow(ExeDir().wstring()).c_str(), kDim);
+                ImGui::Dummy(ImVec2(0, 6));
+                para("Missing:", kRed);
+                for (const std::string& m : g_missing) para(("  - " + m).c_str(), kRed);
+                ImGui::Dummy(ImVec2(0, 6));
+                para("Download them from the release page into that folder, then check again.", kDim);
+                ImGui::Dummy(ImVec2(0, 12));
+                ImGui::SetCursorPosX(x);
+                if (Button("Release page", true, 190)) ShellExecuteW(nullptr, L"open", kReleaseUrl, nullptr, nullptr, SW_SHOWNORMAL);
+                ImGui::SameLine();
+                if (Button("Check again", true, 190)) CheckDownloads();
+                break;
+            }
             para("Welcome. This installs Finest Hour Remastered, a native Windows port of the original Xbox game with "
                  "a remastered renderer, from your own copy of the game.");
             ImGui::Dummy(ImVec2(0, 10));
@@ -613,6 +659,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
         g_target = (fs::path(pf).parent_path() / L"Games" / kProduct).wstring();
     CoTaskMemFree(pf);
     if (g_target.empty()) g_target = L"C:\\Games\\Finest Hour Remastered";
+    CheckDownloads();
 
     // unattended: --source <the game's folder or disc image> [--target <folder>] [--shortcuts] [--log <file>]; the
     // same checks and steps as the window's, the outcome in the exit code (0 installed, 1 failed, 2 not the release)

@@ -17,13 +17,13 @@ volumetric fog and much more, while keeping the game's own art direction and lig
 | Original | Finest Hour Remastered |
 |---|---|
 | ![](docs/media/compare_1_off.jpg) | ![](docs/media/compare_1_on.jpg) |
-| ![](docs/media/compare_2_off.jpg) | ![](docs/media/compare_2_on.jpg) |
+| ![](docs/media/snow_off.jpg) | ![](docs/media/snow_on.jpg) |
 | ![](docs/media/compare_3_off.jpg) | ![](docs/media/compare_3_on.jpg) |
-| ![](docs/media/compare_4_off.jpg) | ![](docs/media/compare_4_on.jpg) |
+| ![](docs/media/cobbles_off.jpg) | ![](docs/media/cobbles_on.jpg) |
 
 | Tracers light their path | Snow tracks | Water interaction |
 |---|---|---|
-| ![](docs/media/tracers.gif) | ![](docs/media/snow_tracks.gif) | ![](docs/media/boat_wake.gif) |
+| ![](docs/media/tracers.gif) | ![](docs/media/snow_tracks_v2.gif) | ![](docs/media/boat_wake.gif) |
 
 The trailer (2560x1440, 60 FPS) is among the release's downloads: `FinestHourRemastered_Trailer_1440p60.mp4`.
 

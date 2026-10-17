@@ -1,0 +1,5 @@
+#include "resource.h"
+IDI_APP ICON "art/app.ico"
+IDR_ART RCDATA "art/background.png"
+IDR_FONT_BODY RCDATA "art/CourierPrime-Bold.ttf"
+IDR_FONT_TITLE RCDATA "art/Jost-Bold.ttf"

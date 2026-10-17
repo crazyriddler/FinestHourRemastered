@@ -1,0 +1,2 @@
+// the executable's icon (the window loads it as 1): the release's star
+1 ICON "../tools/installer/art/app.ico"

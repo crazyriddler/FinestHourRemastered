@@ -1,0 +1,722 @@
+// The PC settings, as a screen of the game's own front end: the options' paper and stone bar (from the remaster pack),
+// the menus' typefaces (Jost for their Futura, Courier Prime for their typewriter), the selection strip and the button
+// prompts below. Keyboard (arrows, Enter, Escape, Q and E for the pages), mouse (point, click, wheel, right click back)
+// and controller (d-pad or stick, A, B, LB and RB) all work it. Opened from the main menu's PC Settings or with F10.
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
+#include <algorithm>
+#include <atomic>
+#include <cmath>
+#include <cstdio>
+#include <functional>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include <imgui.h>
+
+#include "app/app.h"
+#include "common/cod.h"
+#include "common/overlay.h"
+#include "common/widescreen.h"
+#include "common/overlay_text.h"
+#include "common/pc_input.h"
+#include "common/prompts.h"
+#include "core/input.h"
+#include "gpu/backend.h"
+#include "gpu/remaster.h"
+
+namespace {
+
+std::atomic<bool> g_open{false};
+ImFont* g_title = nullptr;  // Jost Bold: the menus' Futura
+ImFont* g_type = nullptr;   // Courier Prime Bold: their typewriter
+ImFont* g_ui = nullptr;     // Segoe UI: the FPS counter, and the menu without the pack's fonts
+ImFont* g_hud = nullptr;    // DejaVu Sans Condensed: the HUD's and the pause screen's
+
+// the pack's pictures of the options screen (content ids of the game's front end textures)
+constexpr const char* kPaper = "textures/41f8455def1f2b91.c.dds";  // fend_392, the paper and its surroundings
+constexpr const char* kStone = "textures/ec0414aca61f7b19.c.dds";  // fend_208, the stone bar of prompts
+constexpr const char* kStrip = "textures/cb8517244f0b8da6.c.dds";  // fend_394, the selection's paper strip
+
+std::vector<std::pair<uint32_t, uint32_t>> Modes() {
+    static std::vector<std::pair<uint32_t, uint32_t>> modes;
+    if (!modes.empty()) return modes;
+    std::set<std::pair<uint32_t, uint32_t>> seen;
+    DEVMODEW dm{};
+    dm.dmSize = sizeof(dm);
+    for (DWORD i = 0; EnumDisplaySettingsW(nullptr, i, &dm); i++)
+        if (dm.dmPelsWidth >= 640 && dm.dmPelsHeight >= 480) seen.insert({dm.dmPelsWidth, dm.dmPelsHeight});
+    modes.assign(seen.rbegin(), seen.rend());
+    return modes;
+}
+
+void Saved() { app::Save(); }
+
+// The language the game started in: the game reads it once, at boot (its text and its speech). Closing the settings
+// with another one starts the game again in it.
+uint32_t BootLanguage() {
+    static const uint32_t boot = app::Get().language;
+    return boot;
+}
+
+// the display's mode and resolution change when the settings close: not a new mode on the screen at each step
+bool g_display_changed = false;
+
+void RestartIfNeeded() {
+    if (g_display_changed) {
+        g_display_changed = false;
+        app::ApplyDisplay();
+    }
+    if (app::Get().language == BootLanguage()) return;
+    app::Save();
+    wchar_t path[MAX_PATH];
+    GetModuleFileNameW(nullptr, path, MAX_PATH);
+    // the same arguments, but a fresh start (not a relaunch's hidden handover)
+    std::wstring line = GetCommandLineW();
+    if (size_t at = line.find(L" --relaunched"); at != std::wstring::npos) line.erase(at, 13);
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi{};
+    std::wstring dir = app::ExeDir().wstring();
+    if (!CreateProcessW(path, line.data(), nullptr, nullptr, FALSE, 0, nullptr, dir.c_str(), &si, &pi)) return;
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    PostMessageW(static_cast<HWND>(app::Window()), WM_CLOSE, 0, 0);
+}
+
+std::string Fmt(const char* f, int v) {
+    char b[64];
+    std::snprintf(b, sizeof(b), f, v);
+    return b;
+}
+
+// --- the menu's model ------------------------------------------------------------------------------------------
+
+struct Item {
+    std::string label;
+    std::function<std::string()> value;        // empty for an action
+    std::function<void(int)> change;           // -1 or 1: the previous or next value
+    std::function<void()> activate;            // Enter or A: an action, or the next value
+    std::string hint;
+    int binding = -1;                          // a key binding row: the action
+};
+
+struct Page {
+    const char* title;
+    std::vector<Item> items;
+};
+
+Item Toggle(const char* label, bool* v, const char* hint = "") {
+    Item it{label, [v] { return std::string(*v ? "On" : "Off"); }, [v](int) { *v = !*v; Saved(); }, nullptr, hint};
+    it.activate = [v] { *v = !*v; Saved(); };
+    return it;
+}
+
+Item Choice(const char* label, std::vector<std::string> names, std::function<int()> get, std::function<void(int)> set,
+            const char* hint = "") {
+    auto n = int(names.size());
+    Item it{label, [names, get] { int i = get(); return i >= 0 && i < int(names.size()) ? names[size_t(i)] : std::string("-"); },
+            [n, get, set](int d) { set((std::max(get(), 0) + d + n) % n); Saved(); }, nullptr, hint};
+    it.activate = [n, get, set] { set((std::max(get(), 0) + 1) % n); Saved(); };
+    return it;
+}
+
+Item Slider(const char* label, uint32_t* v, int lo, int hi, int step, const char* fmt, const char* hint = "",
+            std::function<std::string(int)> name = nullptr) {
+    Item it{label,
+            [v, fmt, name] { return name ? name(int(*v)) : Fmt(fmt, int(*v)); },
+            [v, lo, hi, step](int d) { *v = uint32_t(std::clamp(int(*v) + d * step, lo, hi)); Saved(); }, nullptr, hint};
+    return it;
+}
+
+std::vector<Page> BuildPages() {
+    app::Settings& s = app::Get();
+    cod::Settings& c = cod::Get();
+    std::vector<Page> pages;
+
+    Page display{"DISPLAY", {}};
+    display.items.push_back(Choice("Display Mode", {"Fullscreen", "Borderless", "Windowed"},
+                                   [&s] { return int(s.display_mode); },
+                                   [&s](int i) { s.display_mode = app::DisplayMode(i); g_display_changed = true; },
+                                   "Fullscreen changes the screen's mode; borderless covers it with a window."));
+    {
+        auto modes = Modes();
+        std::vector<std::string> names{"Desktop"};
+        for (auto [w, h] : modes) names.push_back(Fmt("%d", int(w)) + "x" + Fmt("%d", int(h)));
+        display.items.push_back(Choice("Resolution", names,
+                                       [&s, modes] {
+                                           for (size_t i = 0; i < modes.size(); i++)
+                                               if (modes[i].first == s.width && modes[i].second == s.height) return int(i) + 1;
+                                           return 0;
+                                       },
+                                       [&s, modes](int i) {
+                                           if (i == 0) s.width = s.height = 0;
+                                           else s.width = modes[size_t(i - 1)].first, s.height = modes[size_t(i - 1)].second;
+                                           g_display_changed = true;
+                                       },
+                                       "Takes effect when you leave these settings."));
+    }
+    display.items.push_back(Slider("Render Scale", &s.render_percent, 25, 200, 5, "%d%%",
+                                   "The game is drawn at this share of the screen's resolution: above 100% supersamples."));
+    {
+        static const uint32_t caps[] = {30, 60, 75, 90, 120, 144, 165, 240, 360, 0};
+        std::vector<std::string> names;
+        for (uint32_t v : caps) names.push_back(v ? Fmt("%d FPS", int(v)) : "Unlimited");
+        display.items.push_back(Choice("Max Frame Rate", names,
+                                       [&s] {
+                                           for (int i = 0; i < 10; i++)
+                                               if (caps[i] == s.fps_cap) return i;
+                                           return 1;
+                                       },
+                                       [&s](int i) { s.fps_cap = caps[i]; },
+                                       "The game runs on real time at any frame rate."));
+    }
+    display.items.push_back(Toggle("V-Sync", &s.vsync));
+    display.items.push_back(Toggle("Widescreen", &c.widescreen,
+                                   "The game at your screen's shape with more to the sides; menus stay in the middle."));
+    display.items.push_back(Toggle("Television Frame", &c.tv_frame,
+                                   "On a wide screen, the menus and movies play in a 1940s television."));
+    // (no field of view setting for now: a wider one broke the first person view; the game's always)
+    display.items.push_back(Slider("Brightness", &s.brightness, 50, 200, 5, "%d%%", "100% is the original picture."));
+    display.items.push_back(Toggle("FPS Counter", &c.fps_counter));
+    pages.push_back(std::move(display));
+
+    Page graphics{"GRAPHICS", {}};
+    {
+        static const uint32_t an[] = {0, 2, 4, 8, 16};
+        graphics.items.push_back(Choice("Anisotropic Filter", {"Game", "2x", "4x", "8x", "16x"},
+                                        [&s] {
+                                            for (int i = 0; i < 5; i++)
+                                                if (an[i] == s.aniso) return i;
+                                            return 0;
+                                        },
+                                        [&s](int i) { s.aniso = an[i]; }, "Textures stay sharp at a slant."));
+    }
+    graphics.items.push_back(Choice("Shadows", {"Off", "Low", "Medium", "High", "Ultra"},
+                                    [&s] { return int(std::min<uint32_t>(s.shadow_quality, 4)); },
+                                    [&s](int i) { s.shadow_quality = uint32_t(i); },
+                                    "Real time shadows from the scene's main light: sharper and further with each step."));
+    graphics.items.push_back(Toggle("Anti-Aliasing", &s.taa, "4x MSAA and temporal anti-aliasing: smooth edges, fences and foliage."));
+    graphics.items.push_back(Slider("Sharpening", &s.sharpening, 0, 10, 1, "%d", "Contrast adaptive sharpening.",
+                                    [](int v) { return v ? Fmt("%d", v) : std::string("Off"); }));
+    graphics.items.push_back(Toggle("Remastered Textures", &s.remaster, "Every texture redrawn at four times the detail."));
+    graphics.items.push_back(Toggle("Character Detail", &s.character_detail, "Close up, skin's pores and uniforms' weave."));
+    graphics.items.push_back(Toggle("Weapon Materials", &s.weapon_materials, "Your weapon's wood and metal with relief and a metal sheen."));
+    graphics.items.push_back(Toggle("Sharper Distance", &s.sharp_distance, "Distant surfaces' textures a little sharper."));
+    graphics.items.push_back(Toggle("Surface Materials", &s.materials, "Relief and highlights of stone, wood, metal and cloth."));
+    graphics.items.push_back(Toggle("Parallax", &s.parallax, "Cobbles, bricks and rubble with depth."));
+    graphics.items.push_back(Toggle("Detail Textures", &s.detail, "Fine detail on surfaces close up."));
+    graphics.items.push_back(Toggle("Height Blending", &s.height_blend, "Ground layers meet along their stones and cracks."));
+    graphics.items.push_back(Slider("Specular", &s.specular, 0, 200, 10, "%d%%", "The strength of the surfaces' highlights."));
+    graphics.items.push_back(Toggle("Per-Pixel Lighting", &s.pixel_lighting, "Smooth light on characters, no facets."));
+    graphics.items.push_back(Toggle("Smooth Models", &s.smooth_models, "Characters and weapons rounded: no angular outlines."));
+    graphics.items.push_back(Toggle("Reflections", &s.reflections, "Metal, glass, varnished wood and stone reflect what is around them."));
+    pages.push_back(std::move(graphics));
+
+    Page effects{"EFFECTS", {}};
+    effects.items.push_back(Toggle("Bloom", &s.bloom, "Bright light and flashes glow."));
+    effects.items.push_back(Toggle("Ambient Occlusion", &s.ao, "Soft shade in corners and creases."));
+    effects.items.push_back(Toggle("Contact Shadows", &s.contact_shadows, "Small shadows where things meet the ground."));
+    effects.items.push_back(Toggle("Dynamic Lights", &s.dynamic_lights, "Muzzle flashes, tracers, fire and explosions light the scene."));
+    effects.items.push_back(Toggle("Light Halos", &s.light_halos, "The air glows around flashes and fire."));
+    effects.items.push_back(Toggle("Muzzle Flash Shadows", &s.flash_shadows,
+                                   "Shots, fires and big lights cast shadows: eight of each, near and far."));
+    effects.items.push_back(Toggle("Soft Particles", &s.soft_particles, "Smoke and dust without hard edges on walls and floors."));
+    effects.items.push_back(Toggle("Heat Haze", &s.heat_haze, "The air shimmers over fires and explosions."));
+    effects.items.push_back(Toggle("Sun and Moon", &s.sun_moon, "The sun by day, the moon by night, where the level's light comes from."));
+    effects.items.push_back(Toggle("Clouds", &s.clouds, "Drifting clouds over the sky, lit as the level is."));
+    effects.items.push_back(Toggle("Lens Flare", &s.lens_flare, "A faint flare from the sun, and dirt on the lens catching bright light."));
+    effects.items.push_back(Toggle("Water", &s.water, "Rivers, puddles and sewers ripple and reflect what is above them."));
+    effects.items.push_back(Toggle("Water Interaction", &s.water_interaction,
+                                   "Boats, oars, swimmers, falling bodies and shots stir the water: rings, wakes and splashes."));
+    effects.items.push_back(Toggle("Snow Tracks", &s.snow_tracks, "Soldiers leave footprints in the snow, which gives under their weight."));
+    effects.items.push_back(Toggle("Shockwaves", &s.shockwaves, "An explosion's shock ripples through the air; close ones spatter the view with dirt."));
+    effects.items.push_back(Toggle("Animated Fire", &s.animated_fire, "Fires move inside, rising and wavering, not just still pictures."));
+    effects.items.push_back(Toggle("Barrel Heat", &s.barrel_heat, "Your gun's barrel shimmers after firing and smokes after a long burst."));
+    effects.items.push_back(Toggle("Wind", &s.wind, "Trees, bushes and flags sway in the wind."));
+    effects.items.push_back(Toggle("Ambient Particles", &s.ambient_particles, "Dust floating where light falls, embers rising over fires."));
+    effects.items.push_back(Toggle("Lit Smoke", &s.lit_smoke, "Smoke and dust glow with the fire and flashes inside and near them."));
+    effects.items.push_back(Toggle("Character Lighting", &s.character_light,
+                                   "Softer, warmer light through characters' skin and clothes."));
+    effects.items.push_back(Toggle("Bounce Light", &s.bounce_light,
+                                   "Lit surfaces tint what is near them (a sunlit wall's colour on the floor); dark places stay dark."));
+    effects.items.push_back(Toggle("Soft Shadows", &s.soft_shadows,
+                                   "The sun's shadows sharp at their foot, softer further from what casts them."));
+    effects.items.push_back(Toggle("Volumetric Fog", &s.volumetric_fog,
+                                   "A light haze in the air, lit by the sun through the gaps and by the flashes."));
+    effects.items.push_back(Toggle("Cloud Shadows", &s.cloud_shadows, "The clouds' shadows drift over the sunlit ground."));
+    effects.items.push_back(Toggle("Sun Shafts", &s.sun_shafts, "Beams of sunlight past columns and ruins."));
+    effects.items.push_back(Toggle("Aim Depth of Field", &s.aim_dof, "Aiming down the sights blurs the edges and the background."));
+    effects.items.push_back(Toggle("Eye Adaptation", &s.auto_exposure,
+                                   "The view adapts a little between dark rooms and bright streets."));
+    effects.items.push_back(Toggle("Color Grading", &s.color_grade, "Each campaign's own tones: winter, desert, Europe."));
+    effects.items.push_back(Toggle("Film Grain", &s.film_grain, "A faint, fine grain."));
+    effects.items.push_back(Toggle("Explosion Flash", &s.explosion_flash, "A close explosion lights up the whole view."));
+    effects.items.push_back(Toggle("Hit Reactions", &s.hit_reactions, "Soldiers flinch where bullets hit them."));
+    effects.items.push_back(Toggle("Damage Shake", &s.damage_shake, "Being hit shakes the view a little."));
+    pages.push_back(std::move(effects));
+
+    Page controls{"CONTROLS", {}};
+    controls.items.push_back(Toggle("Keyboard & Mouse", &c.keyboard_mouse));
+    controls.items.push_back(Slider("Mouse Sensitivity", &c.mouse_sensitivity, 10, 400, 10, "%d%%"));
+    controls.items.push_back(Toggle("Invert Mouse", &c.invert_mouse));
+    controls.items.push_back(Choice("Button Prompts", {"Automatic", "Controller", "Keyboard"},
+                                    [&c] { return int(std::min<uint32_t>(c.button_prompts, 2)); },
+                                    [&c](int i) { c.button_prompts = uint32_t(i); },
+                                    "Automatic follows the last device used."));
+    controls.items.push_back(Choice("Controller Layout", {"Modern", "Classic"},
+                                    [&c] { return int(std::min<uint32_t>(c.pad_layout, 1)); },
+                                    [&c](int i) { c.pad_layout = uint32_t(i); },
+                                    "Modern: A jump, B crouch, X reload, Y weapon, LB use, RB grenade, RS melee."));
+    controls.items.push_back(Slider("Stick Dead Zone", &c.stick_deadzone, 0, 40, 1, "%d%%",
+                                    "How far the right stick moves before the view turns."));
+    controls.items.push_back(Slider("Look Sensitivity", &c.stick_sensitivity, 25, 300, 5, "%d%%"));
+    controls.items.push_back(Slider("Look Horizontal", &c.stick_sens_x, 25, 200, 5, "%d%%", "The controller's turn across."));
+    controls.items.push_back(Slider("Look Vertical", &c.stick_sens_y, 25, 200, 5, "%d%%", "The controller's turn up and down."));
+    controls.items.push_back(Slider("Fast Turn", &c.stick_outer_boost, 100, 400, 10, "%d%%",
+                                    "The turn at the stick's edge, for quick turns; the centre stays precise."));
+    controls.items.push_back(Toggle("Invert Look", &c.invert_stick_y, "The controller's vertical look."));
+    controls.items.push_back(Toggle("Look Acceleration", &c.look_acceleration,
+                                    "The original's eased turn: it ramps up and drifts on after the stick is let go."));
+    pages.push_back(std::move(controls));
+
+    Page keys{"KEYBOARD", {}};
+    for (int a = 0; a < pc_input::kActionCount; a++) {
+        if (a >= pc_input::kLookUp && a <= pc_input::kLookRight) continue;  // the mouse looks
+        Item it;
+        it.label = pc_input::ActionLabel(pc_input::Action(a));
+        it.binding = a;
+        it.hint = "Enter to change, then press the new key or mouse button. Escape cancels, Delete clears.";
+        keys.items.push_back(std::move(it));
+    }
+    Item reset{"Default Keys", nullptr, nullptr, [] { pc_input::ResetKeys(); Saved(); }, "Every key back to its default."};
+    keys.items.push_back(std::move(reset));
+    pages.push_back(std::move(keys));
+
+    Page general{"GENERAL", {}};
+    general.items.push_back(Toggle("Skip Intros", &c.skip_intros, "Straight to the title screen."));
+    {
+        static const uint32_t codes[] = {1, 4, 6, 5};
+        BootLanguage();
+        // UTF-8, as ImGui takes text
+        general.items.push_back(Choice("Language", {"English", "Fran\xC3\xA7" "ais", "Italiano", "Espa\xC3\xB1ol"},
+                                       [&s] {
+                                           for (int i = 0; i < 4; i++)
+                                               if (codes[i] == s.language) return i;
+                                           return 0;
+                                       },
+                                       [&s](int i) { s.language = codes[i]; },
+                                       "Text and speech. The game starts again in it when you leave these settings."));
+    }
+    general.items.push_back(Toggle("Free Camera", cod::wide::FlyEnabled(),
+                                   "Fly through the level and its walls: move with WASD or the left stick, look with the mouse or the "
+                                   "right stick, Jump up, Crouch down, Fire faster. The player stays still."));
+    pages.push_back(std::move(general));
+    return pages;
+}
+
+// --- input -----------------------------------------------------------------------------------------------------
+
+struct Nav {
+    int move = 0, change = 0, page = 0;
+    bool accept = false, back = false, clear = false;
+};
+
+// the controller's presses, with a repeat for held directions
+Nav PadNav() {
+    Nav n;
+    static input::Pad last;
+    static double held_since = 0, next_repeat = 0;
+    input::Pad p = input::Raw(0);
+    double now = ImGui::GetTime();
+    auto edge = [&](bool a, bool b) { return a && !b; };
+    int dy = (p.buttons & 0x1) || p.ly > 16000 ? -1 : (p.buttons & 0x2) || p.ly < -16000 ? 1 : 0;
+    int dx = (p.buttons & 0x4) || p.lx < -16000 ? -1 : (p.buttons & 0x8) || p.lx > 16000 ? 1 : 0;
+    static int ldx = 0, ldy = 0;
+    if (dx != ldx || dy != ldy) {
+        held_since = now, next_repeat = now + 0.4;
+        n.move = dy, n.change = dx;
+    } else if ((dx || dy) && now >= next_repeat) {
+        next_repeat = now + 0.08;
+        n.move = dy, n.change = dx;
+    }
+    ldx = dx, ldy = dy;
+    n.accept = edge(p.analog[0] > 100, last.analog[0] > 100);
+    n.back = edge(p.analog[1] > 100, last.analog[1] > 100) || edge(p.buttons & 0x10, last.buttons & 0x10);
+    n.clear = edge(p.analog[2] > 100, last.analog[2] > 100);
+    if (edge(p.analog[5] > 100, last.analog[5] > 100)) n.page = -1;  // LB (the game's white)
+    if (edge(p.analog[4] > 100, last.analog[4] > 100)) n.page = 1;   // RB (black)
+    if (n.move || n.change || n.accept || n.back || n.page) cod::prompts::PadUsed();
+    last = p;
+    return n;
+}
+
+Nav KeyNav() {
+    Nav n;
+    auto k = [](ImGuiKey key) { return ImGui::IsKeyPressed(key, true); };
+    if (k(ImGuiKey_UpArrow) || k(ImGuiKey_W)) n.move = -1;
+    if (k(ImGuiKey_DownArrow) || k(ImGuiKey_S)) n.move = 1;
+    if (k(ImGuiKey_LeftArrow) || k(ImGuiKey_A)) n.change = -1;
+    if (k(ImGuiKey_RightArrow) || k(ImGuiKey_D)) n.change = 1;
+    if (ImGui::IsKeyPressed(ImGuiKey_Q, false) || ImGui::IsKeyPressed(ImGuiKey_PageUp, false)) n.page = -1;
+    if (ImGui::IsKeyPressed(ImGuiKey_E, false) || ImGui::IsKeyPressed(ImGuiKey_PageDown, false) ||
+        ImGui::IsKeyPressed(ImGuiKey_Tab, false))
+        n.page = 1;
+    n.accept = ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_Space, false) ||
+               ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false);
+    n.back = ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsKeyPressed(ImGuiKey_Backspace, false);
+    n.clear = ImGui::IsKeyPressed(ImGuiKey_Delete, false);
+    if (n.move || n.change || n.accept || n.back || n.page) cod::prompts::KeyboardUsed();
+    return n;
+}
+
+// --- drawing ---------------------------------------------------------------------------------------------------
+
+// the 4:3 screen in the middle of the window, in the console's 640 by 480
+struct Screen {
+    float x0, y0, s;
+    ImVec2 P(float x, float y) const { return ImVec2(x0 + x * s, y0 + y * s); }
+};
+
+constexpr ImU32 kInk = IM_COL32(52, 47, 41, 255);       // the selected row's, the title's
+constexpr ImU32 kInkSoft = IM_COL32(96, 88, 78, 255);   // the other rows'
+constexpr ImU32 kInkFaint = IM_COL32(120, 112, 100, 255);
+constexpr ImU32 kStoneInk = IM_COL32(40, 38, 36, 255);  // the prompts' words on the stone
+
+void Text(ImDrawList* dl, ImFont* f, float size, ImVec2 at, ImU32 col, const std::string& t, float align = 0) {
+    if (!f) f = g_ui;
+    ImVec2 ext = f->CalcTextSizeA(size, FLT_MAX, 0, t.c_str());
+    dl->AddText(f, size, ImVec2(std::round(at.x - ext.x * align), std::round(at.y - ext.y * 0.5f)), col, t.c_str());
+}
+
+float Width(ImFont* f, float size, const std::string& t) {
+    if (!f) f = g_ui;
+    return f->CalcTextSizeA(size, FLT_MAX, 0, t.c_str()).x;
+}
+
+// a prompt's picture: the pack's (keys by their binding, the controller's buttons by its kind), a drawn cap without it
+void Prompt(ImDrawList* dl, ImVec2 c, float size, int vk, const char* pad_button, const char* fallback) {
+    std::string name;
+    if (cod::prompts::KeyboardShown() || !pad_button) {
+        char b[16];
+        std::snprintf(b, sizeof(b), "kb_%02x", vk);
+        name = b;
+    } else {
+        input::Kind k = input::ControllerKind(0);
+        name = std::string("pad_") + (k == input::kPlayStation ? "ps" : k == input::kNintendo ? "nin" : "xbox") + "_" + pad_button;
+    }
+    uint64_t id = gpu::UiTexture("prompts/" + name + ".dds");
+    ImVec2 a(c.x - size / 2, c.y - size / 2), b(c.x + size / 2, c.y + size / 2);
+    if (id) {
+        dl->AddImage(ImTextureID(id), a, b);
+    } else {
+        dl->AddRectFilled(a, b, IM_COL32(30, 30, 32, 255), size * 0.2f);
+        Text(dl, g_type, size * 0.5f, c, IM_COL32(240, 240, 240, 255), fallback, 0.5f);
+    }
+}
+
+int g_page = 0, g_sel = 0, g_scroll = 0;
+
+}  // namespace
+
+namespace cod {
+
+bool OverlayOpen() { return g_open; }
+
+namespace overlay {
+
+void Init() {
+    ImGuiIO& io = ImGui::GetIO();
+    char path[MAX_PATH];
+    GetWindowsDirectoryA(path, MAX_PATH);
+    std::string segoe = std::string(path) + "/Fonts/segoeui.ttf";
+    if (GetFileAttributesA(segoe.c_str()) != INVALID_FILE_ATTRIBUTES) g_ui = io.Fonts->AddFontFromFileTTF(segoe.c_str(), 36.0f);
+    // the pack's typefaces, large enough for a 4K screen and filtered down below that; Latin-1 for the languages
+    std::wstring dir = gpu::remaster::Dir() + L"\\ui\\";
+    auto load = [&](const wchar_t* file, float px) -> ImFont* {
+        std::wstring w = dir + file;
+        char utf8[MAX_PATH * 3];
+        WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, utf8, sizeof(utf8), nullptr, nullptr);
+        if (GetFileAttributesW(w.c_str()) == INVALID_FILE_ATTRIBUTES) return nullptr;
+        ImFontConfig cfg;
+        cfg.OversampleH = 2;
+        return io.Fonts->AddFontFromFileTTF(utf8, px, &cfg, io.Fonts->GetGlyphRangesDefault());
+    };
+    g_title = load(L"Jost-Bold.ttf", 96.0f);
+    g_type = load(L"CourierPrime-Bold.ttf", 80.0f);
+    g_hud = load(L"DejaVuSansCondensed.ttf", 72.0f);
+    if (!g_ui) g_ui = io.Fonts->AddFontDefault();
+    // the window's pointer is ours (pc_input hides it, menu_mouse draws the game's): ImGui leaves it alone
+    io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
+}
+
+bool g_fresh = false;  // just opened: the pointer where it rests selects nothing
+
+ImFont* MenuFont() { return g_title ? g_title : g_ui; }
+ImFont* HudFont() { return g_hud ? g_hud : g_ui; }
+bool PauseRequested() { return false; }
+
+void Toggle() {
+    g_open = !g_open;
+    if (g_open) g_sel = 0, g_scroll = 0, g_fresh = true;
+    else RestartIfNeeded();
+}
+
+void Draw(double fps) {
+    if (cod::Get().fps_counter) {
+        char text[32];
+        std::snprintf(text, sizeof(text), "%.0f FPS", fps);
+        ImDrawList* fg = ImGui::GetForegroundDrawList();
+        float size = std::max(16.0f, ImGui::GetIO().DisplaySize.y / 45.0f);
+        fg->AddText(g_ui, size, ImVec2(11, 9), IM_COL32(0, 0, 0, 200), text);
+        fg->AddText(g_ui, size, ImVec2(10, 8), IM_COL32(255, 230, 80, 255), text);
+    }
+    if (!g_open) return;
+    ImGuiIO& io = ImGui::GetIO();
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    Screen sc;
+    float tv[4];
+    if (gpu::TvScreen(tv)) {
+        // inside the television's screen, which shows around it
+        sc.s = (tv[3] - tv[1]) / 480.0f;
+        sc.x0 = tv[0], sc.y0 = tv[1];
+        dl->PushClipRect(ImVec2(tv[0], tv[1]), ImVec2(tv[2], tv[3]));
+    } else {
+        sc.s = io.DisplaySize.y / 480.0f;
+        sc.x0 = (io.DisplaySize.x - 640 * sc.s) * 0.5f;
+        sc.y0 = 0;
+        dl->AddRectFilled(ImVec2(0, 0), io.DisplaySize, IM_COL32(0, 0, 0, 255));
+    }
+
+    // the screen: the paper, the stone bar over its foot
+    // as the options screen places it (fitted to the game's own: 640 by 516 from 18 above the top)
+    if (uint64_t id = gpu::UiTexture(kPaper)) dl->AddImage(ImTextureID(id), sc.P(0, -18), sc.P(640, 498));
+    else dl->AddRectFilled(sc.P(84, 40), sc.P(533, 382), IM_COL32(205, 198, 182, 255));
+    if (uint64_t id = gpu::UiTexture(kStone)) dl->AddImage(ImTextureID(id), sc.P(0, 352), sc.P(640, 480));
+    else dl->AddRectFilled(sc.P(0, 380), sc.P(640, 480), IM_COL32(110, 110, 110, 255));
+
+    std::vector<Page> pages = BuildPages();
+    const int np = int(pages.size());
+    const bool rebinding = pc_input::Rebinding() >= 0;
+    Nav n = rebinding ? Nav{} : PadNav();
+    Nav k = rebinding ? Nav{} : KeyNav();
+    n.move += k.move, n.change += k.change, n.page += k.page;
+    n.accept |= k.accept, n.back |= k.back, n.clear |= k.clear;
+
+    // pages: the title between the page prompts
+    g_page = (g_page + np) % np;
+    const float title_y = 62;
+    Text(dl, g_title, 26 * sc.s, sc.P(308, title_y), kInk, Tr(pages[size_t(g_page)].title), 0.5f);
+    {
+        float half = Width(g_title, 26 * sc.s, pages[size_t(g_page)].title) / sc.s / 2 + 26;
+        Prompt(dl, sc.P(308 - half, title_y), 20 * sc.s, 'Q', "lb", "Q");
+        Prompt(dl, sc.P(308 + half, title_y), 20 * sc.s, 'E', "rb", "E");
+        // the page's dots
+        for (int i = 0; i < np; i++)
+            dl->AddCircleFilled(sc.P(308 + (i - (np - 1) / 2.0f) * 11, title_y + 19), 2.6f * sc.s,
+                                i == g_page ? kInk : IM_COL32(150, 142, 128, 255));
+        // the prompts can be clicked
+        if (ImGui::IsMouseClicked(0)) {
+            ImVec2 m = io.MousePos;
+            auto close_to = [&](float x) { ImVec2 c = sc.P(x, title_y); return std::fabs(m.x - c.x) < 12 * sc.s && std::fabs(m.y - c.y) < 12 * sc.s; };
+            if (close_to(308 - half)) n.page = -1;
+            if (close_to(308 + half)) n.page = 1;
+        }
+    }
+    if (n.page) {
+        g_page = (g_page + n.page + np) % np, g_sel = 0, g_scroll = 0;
+    }
+    Page& page = pages[size_t(g_page)];
+    const int count = int(page.items.size());
+
+    // rows
+    constexpr int kRows = 9;
+    constexpr float kTop = 104, kStep = 23.5f, kLabelX = 127, kValueX = 309, kAltX = 425;
+    g_sel = std::clamp(g_sel + n.move, 0, count - 1);
+    if (n.move) {
+        if (g_sel < g_scroll) g_scroll = g_sel;
+        if (g_sel >= g_scroll + kRows) g_scroll = g_sel - kRows + 1;
+    }
+    // the mouse: pointing selects, the wheel scrolls, a click does what Enter does (a value's arrows change it)
+    static ImVec2 last_mouse(-1, -1);
+    bool mouse_moved = !g_fresh && (io.MousePos.x != last_mouse.x || io.MousePos.y != last_mouse.y);
+    last_mouse = io.MousePos;
+    g_fresh = false;
+    if (!rebinding && io.MouseWheel != 0) g_scroll = std::clamp(g_scroll - int(io.MouseWheel), 0, std::max(0, count - kRows));
+    int hover = -1, hover_slot = 0;
+    {
+        ImVec2 m = io.MousePos;
+        for (int r = 0; r < kRows && g_scroll + r < count; r++) {
+            ImVec2 a = sc.P(110, kTop + r * kStep - kStep / 2), b = sc.P(517, kTop + r * kStep + kStep / 2);
+            if (m.x >= a.x && m.x < b.x && m.y >= a.y && m.y < b.y) {
+                hover = g_scroll + r;
+                hover_slot = m.x >= sc.P(kAltX - 8, 0).x ? 1 : 0;
+            }
+        }
+        if (hover >= 0 && mouse_moved && !rebinding) g_sel = hover, cod::prompts::KeyboardUsed();
+    }
+    static int slot = 0;  // a binding row's column
+    Item& sel = page.items[size_t(g_sel)];
+    if (sel.binding >= 0) {
+        if (n.change) slot = std::clamp(slot + n.change, 0, 1);
+        if (hover == g_sel && mouse_moved) slot = hover_slot;
+    }
+    bool clicked = !rebinding && ImGui::IsMouseClicked(0) && hover >= 0;
+    if (ImGui::IsMouseClicked(1) && !rebinding) n.back = true;
+
+    // what the presses do
+    if (!rebinding) {
+        if (sel.binding >= 0) {
+            if (n.accept || clicked) pc_input::StartRebind(sel.binding, slot);
+            if (n.clear) pc_input::Keys().key[sel.binding][slot] = 0, Saved();
+        } else {
+            if (n.change && sel.change) sel.change(n.change);
+            if (n.accept || clicked) {
+                if (clicked && sel.change && hover == g_sel) {
+                    // a click on the value's < steps back, anywhere else on the row forward
+                    float back = sc.P(kValueX - 4, 0).x, label = sc.P(kValueX - 30, 0).x;
+                    sel.change(io.MousePos.x >= label && io.MousePos.x < back ? -1 : 1);
+                } else if (sel.activate) {
+                    sel.activate();
+                } else if (sel.change) {
+                    sel.change(1);
+                }
+            }
+        }
+        if (n.back) {
+            g_open = false;
+            RestartIfNeeded();
+            if (gpu::TvScreen(tv)) dl->PopClipRect();
+            return;
+        }
+    }
+    static int last_rebind = -1;
+    if (last_rebind >= 0 && !rebinding) Saved();
+    last_rebind = pc_input::Rebinding();
+
+    // the rows themselves
+    const float fs = 19.5f * sc.s, vs = 17.5f * sc.s;
+    for (int r = 0; r < kRows && g_scroll + r < count; r++) {
+        int i = g_scroll + r;
+        const Item& it = page.items[size_t(i)];
+        float y = kTop + r * kStep;
+        bool on = i == g_sel;
+        if (on) {
+            if (uint64_t id = gpu::UiTexture(kStrip)) dl->AddImage(ImTextureID(id), sc.P(110, y - 13), sc.P(517, y + 13));
+            else dl->AddRectFilled(sc.P(110, y - 13), sc.P(517, y + 13), IM_COL32(170, 162, 146, 255));
+        }
+        ImU32 ink = on ? kInk : kInkSoft;
+        {
+            // in the game's language; a long one smaller, to stay clear of the value
+            std::string label = Tr(it.label);
+            float room = (kValueX - 22 - kLabelX) * sc.s, lw = Width(g_title, fs, label);
+            Text(dl, g_title, lw > room ? fs * room / lw : fs, sc.P(kLabelX, y + 1), ink, label);
+        }
+        if (it.binding >= 0) {
+            const pc_input::Bindings& b = pc_input::Keys();
+            for (int sl = 0; sl < 2; sl++) {
+                float x = sl ? kAltX : kValueX;
+                std::string v = pc_input::Rebinding() == it.binding && slot == sl && on ? "..." : (app::Get().language == 1 ? pc_input::FileKeyName(b.key[it.binding][sl]) : pc_input::KeyName(b.key[it.binding][sl]));
+                if (v.empty()) v = "-";
+                if (v.size() > 9) v = v.substr(0, 9);
+                bool cell = on && slot == sl;
+                if (cell) dl->AddRect(sc.P(x - 5, y - 10), sc.P(x + 105, y + 10), kInk, 2 * sc.s, 0, 1.2f * sc.s);
+                Text(dl, g_type, vs, sc.P(x, y + 1), cell ? kInk : kInkSoft, v);
+            }
+        } else if (it.value) {
+            std::string v = Tr(it.value());
+            Text(dl, g_type, vs, sc.P(kValueX, y + 1), ink, v);
+            if (on && it.change) {
+                Text(dl, g_type, vs, sc.P(kValueX - 14, y + 1), kInkFaint, "<");
+                Text(dl, g_type, vs, sc.P(kValueX + 6 + Width(g_type, vs, v) / sc.s, y + 1), kInkFaint, ">");
+            }
+        }
+    }
+    // more above or below
+    // (drawn: the typefaces have no arrows)
+    auto arrow = [&](float y, float dir) {
+        ImVec2 c = sc.P(313, y);
+        float r = 5 * sc.s;
+        dl->AddTriangleFilled(ImVec2(c.x - r, c.y - dir * r * 0.6f), ImVec2(c.x + r, c.y - dir * r * 0.6f),
+                              ImVec2(c.x, c.y + dir * r * 0.6f), kInkSoft);
+    };
+    if (g_scroll > 0) arrow(kTop - 16, -1);
+    if (g_scroll + kRows < count) arrow(kTop + kRows * kStep - 8, 1);
+
+    // the selected row's hint at the foot of the paper
+    {
+        std::string hint = Tr(rebinding ? std::string("Press the new key or mouse button. Escape cancels, Delete clears.") : sel.hint);
+        if (!hint.empty()) {
+            // two lines at most, broken at the last space that fits
+            float wmax = 300 * sc.s, hs = 11 * sc.s;
+            std::string line1 = hint, line2;
+            if (Width(g_type, hs, hint) > wmax) {
+                size_t cut = hint.size();
+                while (cut > 0 && (hint[cut - 1] != ' ' || Width(g_type, hs, hint.substr(0, cut - 1)) > wmax)) cut--;
+                if (cut > 0) line1 = hint.substr(0, cut - 1), line2 = hint.substr(cut);
+            }
+            Text(dl, g_type, hs, sc.P(300, 322), kInkSoft, line1, 0.5f);
+            if (!line2.empty()) Text(dl, g_type, hs, sc.P(300, 334), kInkSoft, line2, 0.5f);
+        }
+    }
+
+    // the prompts on the stone
+    struct P {
+        int vk;
+        const char* pad;
+        const char* fallback;
+        const char* word;
+    };
+    std::vector<P> prompts;
+    if (rebinding) {
+        prompts = {{VK_ESCAPE, nullptr, "Esc", "Cancel"}, {VK_DELETE, nullptr, "Del", "Clear"}};
+    } else if (sel.binding >= 0) {
+        prompts = {{VK_RETURN, "a", "Enter", "Change"}, {VK_DELETE, "x", "Del", "Clear"}, {VK_ESCAPE, "b", "Esc", "Back"}};
+    } else {
+        prompts = {{VK_RIGHT, nullptr, "<>", "Change"}, {VK_ESCAPE, "b", "Esc", "Back"}};
+        if (!cod::prompts::KeyboardShown()) prompts[0] = {VK_RIGHT, "a", "A", "Change"};
+    }
+    const float py = 416, ps = 22;
+    float total = 0;
+    std::vector<float> widths;
+    for (const P& p : prompts) {
+        float w = ps + 8 + Width(g_type, 20 * sc.s, Tr(p.word)) / sc.s;
+        widths.push_back(w);
+        total += w;
+    }
+    float gap = (420 - total) / float(prompts.size() + 1), x = 110 + gap;
+    for (size_t i = 0; i < prompts.size(); i++) {
+        const P& p = prompts[i];
+        if (p.vk == VK_RIGHT && cod::prompts::KeyboardShown()) {
+            uint64_t id = gpu::UiTexture("prompts/kb_leftright.dds");
+            if (id) dl->AddImage(ImTextureID(id), sc.P(x, py - ps / 2), sc.P(x + ps, py + ps / 2));
+        } else {
+            Prompt(dl, sc.P(x + ps / 2, py), ps * sc.s, p.vk, p.pad, Tr(p.fallback));
+        }
+        Text(dl, g_type, 20 * sc.s, sc.P(x + ps + 8, py + 1), kStoneInk, Tr(p.word));
+        x += widths[i] + gap;
+    }
+    if (gpu::TvScreen(tv)) {
+        dl->PopClipRect();
+        // the television again over the panel: its glass rounds the corners, its reflections lie over it
+        float w = io.DisplaySize.x, h = io.DisplaySize.y;
+        float vw = std::min(w, h * 16.0f / 9.0f), vh = vw * 9.0f / 16.0f;
+        if (uint64_t id = gpu::UiTexture("ui/tv_frame.dds"))
+            dl->AddImage(ImTextureID(id), ImVec2((w - vw) / 2, (h - vh) / 2), ImVec2((w + vw) / 2, (h + vh) / 2));
+    }
+}
+
+// the pages hold every option; the extra sections of the old window are gone
+void GraphicsExtra() {}
+void GeneralExtra() {}
+
+}  // namespace overlay
+}  // namespace cod

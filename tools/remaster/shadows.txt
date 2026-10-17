@@ -1,0 +1,12 @@
+# The shadows' level settings (read from the remaster pack's folder, beside materials.txt).
+# By default each level takes its main light from the game's own lighting (the static models' directional light,
+# else the fixed function lights) and shadows follow it. A line here changes one level, by its index (the
+# game's SetCurrentLevel, as the "level N" test command takes it):
+#
+#   <level> off               no shadows in the level
+#   <level> dir x y z         the light comes from this world direction (towards the light, y up)
+#   <level> strength s        the shadows' darkness times s (1 as found)
+#   <level> auto              as found (the default)
+#
+# Example:
+#   12 strength 0.6

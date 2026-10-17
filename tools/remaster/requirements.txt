@@ -1,0 +1,7 @@
+# the remaster tools (Python 3.11 or later); torch with CUDA from https://download.pytorch.org/whl/cu126
+torch>=2.5
+spandrel==0.4.2
+open_clip_torch>=2.24
+numpy
+pillow
+potracer

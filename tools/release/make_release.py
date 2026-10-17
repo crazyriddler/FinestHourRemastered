@@ -51,7 +51,7 @@ pad_layout = 0
 render_percent = 100
 shadow_quality = 4
 sharpening = 0
-skip_intros = true
+skip_intros = false
 """
 
 
@@ -84,6 +84,8 @@ def defaults_from_user():
             continue
         if k == "language":
             l = "language = 1"
+        if k == "skip_intros":
+            l = "skip_intros = false"  # (the publishers' logos and the opening movie shown, as the game first starts)
         lines.append(l)
     return "\n".join(lines) + "\n"
 

@@ -301,6 +301,24 @@ void Pad(int port, input::Pad& pad) {
     }
     pc_input::Pad(port, pad);
     if (port == 0) cod::menu_mouse::Filter(pad);
+    // the press that closed the settings (Escape, Backspace, the right button, B, START) is not the game's: still
+    // held as they close, it would go back a menu (to the profiles from the main menu) or pause. The game has the
+    // controller and the keyboard again once it is let go.
+    if (port == 0) {
+        static bool was_open = false, held = false;
+        const bool open = cod::OverlayOpen();
+        if (was_open && !open) held = true;
+        was_open = open;
+        if (held) {
+            if (pad.analog[1] > 100 || (pad.buttons & 0x10)) {
+                bool connected = pad.connected;
+                pad = input::Pad{};
+                pad.connected = connected;
+            } else {
+                held = false;
+            }
+        }
+    }
     if (port == 0 && !cod::InMenu() && !cod::OverlayOpen()) cod::wide::FlyUpdate(pad);  // Free Camera
     if (port == 0) gpu::g_aiming = pad.analog[6] > 100 && !cod::InMenu() && !cod::OverlayOpen();  // LT: aim
     // what the game is handed, keyboard and all, when it changes

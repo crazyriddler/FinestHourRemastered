@@ -461,6 +461,7 @@ void Init() {
 }
 
 bool g_fresh = false;  // just opened: the pointer where it rests selects nothing
+bool g_held = false;   // just opened: the press that opened the settings (Enter, A, a click) does nothing in them
 
 ImFont* MenuFont() { return g_title ? g_title : g_ui; }
 ImFont* HudFont() { return g_hud ? g_hud : g_ui; }
@@ -468,7 +469,7 @@ bool PauseRequested() { return false; }
 
 void Toggle() {
     g_open = !g_open;
-    if (g_open) g_sel = 0, g_scroll = 0, g_fresh = true;
+    if (g_open) g_sel = 0, g_scroll = 0, g_fresh = true, g_held = true;
     else RestartIfNeeded();
 }
 
@@ -549,6 +550,7 @@ void Draw(double fps) {
     }
     // the mouse: pointing selects, the wheel scrolls, a click does what Enter does (a value's arrows change it)
     static ImVec2 last_mouse(-1, -1);
+    const bool opening = g_fresh;
     bool mouse_moved = !g_fresh && (io.MousePos.x != last_mouse.x || io.MousePos.y != last_mouse.y);
     last_mouse = io.MousePos;
     g_fresh = false;
@@ -573,6 +575,14 @@ void Draw(double fps) {
     }
     bool clicked = !rebinding && ImGui::IsMouseClicked(0) && hover >= 0;
     if (ImGui::IsMouseClicked(1) && !rebinding) n.back = true;
+    // the press that chose PC Settings in the game's menu is not one on the first row: nothing is accepted until
+    // it is let go
+    if (g_held) {
+        bool down = ImGui::IsKeyDown(ImGuiKey_Enter) || ImGui::IsKeyDown(ImGuiKey_Space) ||
+                    ImGui::IsKeyDown(ImGuiKey_KeypadEnter) || ImGui::IsMouseDown(0) || input::Raw(0).analog[0] > 100;
+        if (down || opening) n.accept = false, clicked = false;
+        if (!down) g_held = false;
+    }
 
     // what the presses do
     if (!rebinding) {

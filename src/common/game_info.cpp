@@ -587,6 +587,37 @@ void Command(const std::string& line) {
     if (line == "angles" && cod::wide::CameraAngles(yaw, pitch)) LOGR("camera: yaw %.2f pitch %.2f", yaw, pitch);
 }
 
+// The HUD's pieces the settings hide: their textures' content ids (the game's, whichever picture the pack draws for
+// them), handed to the renderer (gpu::g_game_hidden_tex)
+void HudPieces() {
+    static constexpr uint64_t kHitMarkers[] = {
+        0x0e30e882653a1b13,  // hud_enemy_hit_indicator: a shot of yours hit
+        0x4287efaf571ca472,  // hud_hit_indicator5: where the shots hitting you come from
+    };
+    static constexpr uint64_t kCompass[] = {
+        0x92c1dfb682b56d5d, 0xdec48f377e5b4684, 0x3b85684838815a71,  // hud_compass_arrow, _bg, _glass
+        0x6dbbaae5119e1354, 0xcb0a77345ca0e523, 0xc0c3891843e894c3,  // hud_compass_star, _star_arrow, _star_pulse
+    };
+    static constexpr uint64_t kStance[] = {
+        0xe67bb8cbd91d5674, 0x78aa5a7bf1a08670, 0xa4db31f92c1ea1a4,  // hud_posture_stand, _crouch, _prone
+    };
+    static constexpr uint64_t kCrosshair[] = {
+        0xa56bd892e4cb0adf, 0x4b85d789cdfe022d, 0x8bf20f88516e996b,  // hud_crosshair, _gogo1, _gogo2
+        0x2d613c78def6368e,                                          // hud_crosshair_overbuddy
+    };
+    const cod::Settings& c = cod::Get();
+    size_t n = 0;
+    auto add = [&n](const uint64_t* ids, size_t count) {
+        for (size_t i = 0; i < count && n + 1 < std::size(gpu::g_game_hidden_tex); i++)
+            gpu::g_game_hidden_tex[n++].store(ids[i], std::memory_order_relaxed);
+    };
+    if (!c.hud_hit_markers) add(kHitMarkers, std::size(kHitMarkers));
+    if (!c.hud_compass) add(kCompass, std::size(kCompass));
+    if (!c.hud_stance) add(kStance, std::size(kStance));
+    if (!c.hud_crosshair) add(kCrosshair, std::size(kCrosshair));
+    gpu::g_game_hidden_tex[n].store(0, std::memory_order_relaxed);
+}
+
 void Ui(double fps) {
     g_fps = fps;
     cod::ragdoll::NewFrame();
@@ -600,8 +631,11 @@ void Ui(double fps) {
     pc_input::SetCapture(!cod::wide::FrontEnd());
     // widescreen is the output's shape: wider than 4:3 (Hor+), or the game's own 4:3
     cod::Get().widescreen = cod::wide::Widen() > 1.001f;
-    // the television around the 4:3 screens: the front end, the loading screens and the movies, not the pause screen
-    gpu::g_tv_frame = cod::Get().tv_frame && cod::Get().widescreen && (cod::wide::FrontEnd() || cod::InMovie());
+    HudPieces();
+    // the television around the 4:3 screens: the front end, the loading screens and the movies, not the pause screen;
+    // and the PC settings wherever they open (from the pause screen too: there as in the main menu)
+    gpu::g_tv_frame = cod::Get().tv_frame && cod::Get().widescreen &&
+                      (cod::wide::FrontEnd() || cod::InMovie() || cod::OverlayOpen());
     gpu::g_tv_movies = cod::Get().tv_frame && cod::Get().widescreen;
     cod::menu_mouse::Update();
     cod::overlay::Draw(fps);
@@ -648,6 +682,10 @@ const app::GameInfo app::kGame = {
             {"tv_frame", &cod::Get().tv_frame, nullptr},
             {"fov", nullptr, &cod::Get().fov},
             {"fps_counter", &cod::Get().fps_counter, nullptr},
+            {"hud_hit_markers", &cod::Get().hud_hit_markers, nullptr},
+            {"hud_compass", &cod::Get().hud_compass, nullptr},
+            {"hud_stance", &cod::Get().hud_stance, nullptr},
+            {"hud_crosshair", &cod::Get().hud_crosshair, nullptr},
             {"keyboard_mouse", &cod::Get().keyboard_mouse, nullptr},
             {"mouse_sensitivity", nullptr, &cod::Get().mouse_sensitivity},
             {"invert_mouse", &cod::Get().invert_mouse, nullptr},

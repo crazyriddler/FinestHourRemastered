@@ -79,6 +79,8 @@ inline std::atomic<bool> g_texview{false};
 inline std::atomic<int> g_frame_stats{0};  // 1 recording, 2 the report due
 inline char g_frame_stats_label[64];  // tests: each draw in its texture's own colour (logged), to tell what is where
 inline std::atomic<uint64_t> g_hidden_tex[256]{};
+// the game's: textures whose draws its settings hide (the HUD's pieces), by their content ids, 0 ends the list
+inline std::atomic<uint64_t> g_game_hidden_tex[32]{};
 // tests: a shot's flash held steady at a place (world x y z, radius; radius 0 none): its light and shadows
 inline std::atomic<float> g_test_light[4]{};  // tests: draws of these textures skipped (hidetex)
 inline std::atomic<float> g_hurt{0.0f};  // the player's pain, 0 to 1: the 3D scene shakes and wavers by it

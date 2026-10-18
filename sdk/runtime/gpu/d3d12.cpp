@@ -4712,6 +4712,11 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
         for (const auto& hidden : g_hidden_tex)
             for (int st = 0; st < 4; st++)
                 if (stages.id[st] && hidden.load() == stages.id[st]) return;
+    for (const auto& hidden : g_game_hidden_tex) {
+        uint64_t id = hidden.load(std::memory_order_relaxed);
+        if (!id) break;
+        if (id == stages.id[0]) return;
+    }
     // tests (XBE_HIDE_BLENDED): the blended draws alone of a hidden texture's id
     {
         static const uint64_t blended = [] {

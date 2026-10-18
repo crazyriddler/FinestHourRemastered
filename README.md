@@ -81,8 +81,9 @@ Choose **PC Settings** in the main menu (or press **F10** at any time) for every
 - **Widescreen** follows the resolution: wider than 4:3 is Hor+ (the HUD keeps its proportions at the screen's
   edges), 4:3 plays the game's own 4:3 screen.
 - **Television Frame**: on a wide screen the 4:3 menus, briefings and movies play inside a 1940s television, through
-  a curved CRT tube with scan lines.
+  a curved CRT tube with scan lines (the PC settings too, wherever they open).
 - **Brightness**, **FPS Counter**, **Anisotropic Filtering** up to 16x, **Sharpening**.
+- **HUD**: the **Hit Markers**, the **Compass**, the **Stance** and the **Crosshair** can each be hidden.
 
 ### Graphics presets
 **Very High** (everything on), **High**, **Medium**, **Low** and **Original** set every graphics setting at once; any

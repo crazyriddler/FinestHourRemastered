@@ -14,6 +14,11 @@ struct Settings {
     bool tv_frame = true;      // the 4:3 menus and movies inside an old television on a wide screen
     uint32_t fov = 0;          // horizontal field of view at 4:3 in degrees, 0 the game's
     bool fps_counter = false;
+    // the HUD's pieces (hidden by their textures: the original and the remastered alike)
+    bool hud_hit_markers = true;  // the marks of a shot of yours hitting and of where shots hitting you come from
+    bool hud_compass = true;
+    bool hud_stance = true;       // standing, crouching, lying down
+    bool hud_crosshair = true;
     // input
     bool keyboard_mouse = true;
     uint32_t mouse_sensitivity = 100;  // percent

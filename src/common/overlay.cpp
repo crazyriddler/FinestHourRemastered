@@ -295,6 +295,11 @@ std::vector<Page> BuildPages() {
     // (no field of view setting for now: a wider one broke the first person view; the game's always)
     display.items.push_back(Slider("Brightness", &s.brightness, 50, 200, 5, "%d%%", "100% is the original picture."));
     display.items.push_back(Toggle("FPS Counter", &c.fps_counter));
+    display.items.push_back(Toggle("Hit Markers", &c.hud_hit_markers,
+                                   "The marks when your shots hit and from where you are being hit."));
+    display.items.push_back(Toggle("Compass", &c.hud_compass, "The compass and its objective star."));
+    display.items.push_back(Toggle("Stance", &c.hud_stance, "Standing, crouching or lying down, beside the compass."));
+    display.items.push_back(Toggle("Crosshair", &c.hud_crosshair, "The aim's crosshair (a tank's sight stays)."));
     pages.push_back(std::move(display));
 
     Page graphics{"GRAPHICS", {}};

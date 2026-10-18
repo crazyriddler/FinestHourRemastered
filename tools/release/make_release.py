@@ -5,19 +5,26 @@
                                              --game under assets/)
   release/source/FinestHourRemastered/       the repository's committed files (git archive): the code, the tools, the
                                              installer; no game files, no remaster pack, no work files
-  release/github/                            the public one: the installer, FinestHourRemastered.index and the payload
-                                             in parts under 1.9 GB (GitHub's limit is 2 GB a file): the exe, the pack,
-                                             the shaders' recipes (prepared on the player's PC at its first start),
-                                             the default settings, the readme and licences; no game files
+  release/github/                            the public one, the v1.0 release: the base payload (fixed since: its
+                                             FinestHourRemastered.index and .data parts as published, listed in
+                                             base_manifest.txt) and the installer, which carries the latest update
+                                             inside it (every file changed since the base) and applies it after
+  release/update/                            the latest update release: the same exe as FinestHourRemasteredUpdate.exe,
+                                             the updater of an installation of any earlier version
 
-    python tools/release/make_release.py [--game ../COD] [--only portable|github|source]
+    python tools/release/make_release.py [--game ../COD] [--only portable|github|source] [--version text]
+    python tools/release/make_release.py --only github --rebase   (a new base payload: the parts written again)
 """
 import argparse
+import ctypes
+import datetime
+import hashlib
 import io
 import os
 import shutil
 import stat
 import subprocess
+import struct
 import sys
 import tarfile
 
@@ -142,7 +149,111 @@ def portable(game):
     print("portable: %d port files, %d game files -> %s" % (len(items), n, base))
 
 
-def github():
+# the update: every file the base payload lacks or has otherwise, and those that changed between the published
+# versions of the base (the exe, the shaders, the readme and licences: an installation of any earlier version is
+# brought up to date by them); the base's other files are checked by size; the first release's exe is deleted
+ALWAYS = ("CODFH.exe", "d3dcompiler_47.dll", "README.md", "LICENSE.txt", "THIRD_PARTY.txt")
+DELETE = ("FinestHourRemastered.exe",)
+KEEP = ("codfh.toml",)  # the player's own settings: never written by an update
+
+
+def sha1_of(path):
+    h = hashlib.sha1()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 22), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def base_manifest():
+    out = {}
+    for line in open(os.path.join(ROOT, "tools", "release", "base_manifest.txt"), encoding="utf-8"):
+        if line.startswith("#") or not line.strip():
+            continue
+        sha, size, path = line.rstrip("\r\n").split(" ", 2)
+        out[path] = (sha, int(size))
+    return out
+
+
+def lzms(data, compress):
+    """Windows' compression API (cabinet.dll), LZMS: what the installer unpacks with"""
+    cab = ctypes.windll.cabinet
+    h = ctypes.c_void_p()
+    make = cab.CreateCompressor if compress else cab.CreateDecompressor
+    if not make(5, None, ctypes.byref(h)):
+        sys.exit("cabinet: no LZMS")
+    run = cab.Compress if compress else cab.Decompress
+    run.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t)]
+    size = ctypes.c_size_t()
+    run(h, data, len(data), None, 0, ctypes.byref(size))
+    out = ctypes.create_string_buffer(size.value)
+    if not run(h, data, len(data), out, size.value, ctypes.byref(size)):
+        sys.exit("cabinet: failed")
+    (cab.CloseCompressor if compress else cab.CloseDecompressor)(h)
+    return out.raw[:size.value]
+
+
+def build_patch(items, version):
+    """the update over the base payload: (packed bytes, unpacked size, what it holds)"""
+    base = base_manifest()
+    head, data, files = ["FHRU 1", "version " + version], [], []
+    staged = {}
+    for s, r in items:
+        r = r.replace("\\", "/")
+        staged[r] = s
+    for r, s in staged.items():
+        if r in KEEP:
+            continue
+        sha = sha1_of(s)
+        if r in ALWAYS or r.startswith("shadercache/") or r not in base or base[r][0] != sha:
+            size = os.path.getsize(s)
+            head.append("file %d %s %s" % (size, sha, r))
+            files.append(r)
+            with open(s, "rb") as f:
+                data.append(f.read())
+    for r in DELETE:
+        head.append("delete " + r)
+    for r, (sha, size) in base.items():
+        if r in KEEP or r in files:
+            continue
+        if r not in staged:
+            head.append("delete " + r)
+        else:
+            head.append("check %d %s" % (size, r))
+    head.append("end")
+    raw = ("\n".join(head) + "\n").encode("utf-8") + b"".join(data)
+    return lzms(raw, True), len(raw), files
+
+
+def write_installer(setup, packed, raw_size, to):
+    with open(to, "wb") as o:
+        with open(setup, "rb") as f:
+            o.write(f.read())
+        o.write(packed)
+        o.write(struct.pack("<QQ", len(packed), raw_size) + b"FHRPATCH")
+
+
+def github(version, rebase=False):
+    if not rebase:
+        # the base stays as published: the installer and the updater, each with the latest update inside
+        base = os.path.join(OUT, "github")
+        os.makedirs(base, exist_ok=True)
+        items = stage_list(cache_all=False)
+        packed, raw_size, files = build_patch(items, version)
+        setup = os.path.join(BUILD, "tools", "installer", "FinestHourRemasteredSetup.exe")
+        write_installer(setup, packed, raw_size, os.path.join(base, "FinestHourRemasteredSetup.exe"))
+        upd = os.path.join(OUT, "update")
+        if os.path.exists(upd):
+            remove_tree(upd)
+        os.makedirs(upd)
+        write_installer(setup, packed, raw_size, os.path.join(upd, "FinestHourRemasteredUpdate.exe"))
+        shutil.copy2(os.path.join(ROOT, "tools", "release", "RELEASE_NOTES.md"), base)
+        shutil.copy2(os.path.join(ROOT, "tools", "release", "UPDATE_NOTES.md"), upd)
+        print("github: update %s: %d files (%.1f MB unpacked, %.1f MB packed) in the installer and the updater" % (
+            version, len(files), raw_size / 2**20, len(packed) / 2**20))
+        for r in files:
+            print("   ", r)
+        return
     base = os.path.join(OUT, "github")
     if os.path.exists(base):
         remove_tree(base)
@@ -208,6 +319,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--game", default=os.path.join(os.path.dirname(ROOT), "COD"))
     ap.add_argument("--only", choices=["portable", "github", "source"])
+    ap.add_argument("--version", default=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    help="the update's name, shown by the installer and the updater")
+    ap.add_argument("--rebase", action="store_true", help="a new base payload (its parts written again)")
     a = ap.parse_args()
     if a.only == "source":
         source()
@@ -217,7 +331,7 @@ def main():
     if a.only in (None, "portable"):
         portable(a.game)
     if a.only in (None, "github"):
-        github()
+        github(a.version, a.rebase)
     if a.only is None:
         source()
 

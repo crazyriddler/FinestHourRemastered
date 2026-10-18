@@ -17,6 +17,7 @@
 #include "core/log.h"
 #include "gpu/backend.h"
 #include "kernel/kernel.h"
+#include "kernel/memory.h"
 
 #include <algorithm>
 #include <atomic>
@@ -471,6 +472,55 @@ void Command(const std::string& line) {
         if (line == "showtex")
             for (auto& slot : gpu::g_hidden_tex) slot = 0;
         if (line.rfind("memseq ", 0) == 0) MemSeq(line.substr(7));
+        // tests: a RenderWare texture by its name (RwTexture: its name at +0x10), and what points at an address
+        // (a material at its texture, a list at its entries): "texfind <name>", "refs <hex address>"
+        if (line.rfind("texfind ", 0) == 0 || line.rfind("refs ", 0) == 0) {
+            const bool by_name = line[0] == 't';
+            std::string name = line.substr(by_name ? 8 : 5);
+            uint32_t want = by_name ? 0 : uint32_t(std::strtoul(name.c_str(), nullptr, 16));
+            int found = 0;
+            for (uint32_t a = 0x10000; a + 0x40 < 0x4000000 && found < 64; a += 4) {
+                if (!mem::IsCommitted(a) || !mem::IsCommitted(a + 0x3C)) {
+                    a = (a | 0xFFF);  // (the next page)
+                    a -= 3;
+                    continue;
+                }
+                bool hit = by_name ? std::strncmp(static_cast<const char*>(kernel::HostPtr(a + 0x10)), name.c_str(), 32) == 0 &&
+                                         name.size() < 32 && static_cast<const char*>(kernel::HostPtr(a + 0x10))[name.size()] == 0
+                                   : kernel::R32(a) == want;
+                if (!hit) continue;
+                found++;
+                LOGR("%s %08X: %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X", by_name ? "texfind" : "refs", a,
+                     kernel::R32(a), kernel::R32(a + 4), kernel::R32(a + 8), kernel::R32(a + 12), kernel::R32(a + 16),
+                     kernel::R32(a + 20), kernel::R32(a + 24), kernel::R32(a + 28), kernel::R32(a + 32), kernel::R32(a + 36),
+                     kernel::R32(a + 40), kernel::R32(a + 44));
+            }
+            LOGR("%s: %d found", by_name ? "texfind" : "refs", found);
+        }
+        // tests: a texture's materials (what points at each texture of that name), with the 0x60 bytes after each
+        if (line.rfind("texmats ", 0) == 0) {
+            std::string name = line.substr(8);
+            std::vector<uint32_t> texs;
+            for (uint32_t a = 0x10000; a + 0x40 < 0x4000000; a += 4) {
+                if (!mem::IsCommitted(a) || !mem::IsCommitted(a + 0x3C)) { a = (a | 0xFFF) - 3; continue; }
+                const char* n = static_cast<const char*>(kernel::HostPtr(a + 0x10));
+                if (name.size() < 32 && std::strncmp(n, name.c_str(), 32) == 0 && n[name.size()] == 0) texs.push_back(a);
+            }
+            for (uint32_t t : texs) {
+                LOGR("texmats: texture %08X", t);
+                int found = 0;
+                for (uint32_t a = 0x10000; a + 0x60 < 0x4000000 && found < 16; a += 4) {
+                    if (!mem::IsCommitted(a) || !mem::IsCommitted(a + 0x5C)) { a = (a | 0xFFF) - 3; continue; }
+                    if (kernel::R32(a) != t) continue;
+                    found++;
+                    for (uint32_t o = 0; o < 0x60; o += 0x20)
+                        LOGR("texmats:   %08X+%02X: %08X %08X %08X %08X %08X %08X %08X %08X", a, o, kernel::R32(a + o), kernel::R32(a + o + 4),
+                             kernel::R32(a + o + 8), kernel::R32(a + o + 12), kernel::R32(a + o + 16), kernel::R32(a + o + 20),
+                             kernel::R32(a + o + 24), kernel::R32(a + o + 28));
+                }
+            }
+            LOGR("texmats: %zu textures", texs.size());
+        }
         unsigned at = 0, words = 0;
         if (std::sscanf(line.c_str(), "memdump %x %u", &at, &words) == 2)
             for (unsigned i = 0; i < words; i += 4)

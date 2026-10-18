@@ -17,6 +17,12 @@ A native PC port of Call of Duty: Finest Hour (original Xbox, 2004) with a remas
 Run `FinestHourRemasteredSetup.exe`, choose your copy (its folder, a disc image or an XISO) and where to install.
 The first start prepares every shader for your GPU in a few seconds; none is compiled while you play.
 
+## Updates
+The installer here always carries the latest update and installs it with the game. Already installed? Get
+`FinestHourRemasteredUpdate.exe` from the [latest update](https://github.com/crazyriddler/FinestHourRemastered/releases/tag/update)
+release (its date is the update's): it brings any earlier installation to the latest version and keeps your
+settings and saved games.
+
 ## Highlights
 - Statically recompiled to native x86-64 code: no emulator. Any resolution, widescreen (Hor+), 30 to 360 FPS or
   unlimited, keyboard and mouse with rebinding, Xbox, PlayStation and Switch controllers.

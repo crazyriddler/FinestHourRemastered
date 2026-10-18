@@ -5064,14 +5064,6 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
                 c.mrefl[0] = 0.12f, c.mrefl[2] = 0;
                 c.mtl[1][3] *= 0.25f;
             }
-        // the sewer waterfall's second pass over its streaks: untextured, blended and lit pale blue by the tunnel's
-        // lamp; drawn nearly opaque it hid the streaks and read as a flat wall. On the console the sheet shows its
-        // streaks all down it, dark grey: this pass faint over them
-        if (draw_tex0_ == 0 && k.blend && k.zwrite && (a.index_count ? a.index_count : a.draw_count) == 243) {
-            c.flow[0] = 0.1f, c.flow[1] = 0, c.flow[2] = 0.85f, c.flow[3] = 0.3f;
-            c.mrefl[0] = 0.12f, c.mrefl[2] = 0;
-            c.mtl[1][3] *= 0.25f;
-        }
     }
     // aircraft propellers (VT_Aircraft_propeller): spun into a soft disc (shaders.cpp, flow.x < 0: a turn, the opacity)
     if (!flat) {

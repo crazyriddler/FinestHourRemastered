@@ -47,8 +47,9 @@ The trailer (2560x1440, 60 FPS) is among the release's downloads: `FinestHourRem
   this one.
 
 ## Installation
-1. Download the release: `FinestHourRemasteredSetup.exe`, `FinestHourRemastered.index` and every
-   `FinestHourRemastered.data.NNN` part, all into the same folder.
+1. Download the [1.0 release](https://github.com/crazyriddler/FinestHourRemastered/releases/tag/v1.0):
+   `FinestHourRemasteredSetup.exe`, `FinestHourRemastered.index` and every `FinestHourRemastered.data.NNN` part, all
+   into the same folder. Its installer always carries the latest update.
 2. Run `FinestHourRemasteredSetup.exe`.
 3. Choose your copy of the game: its **folder** (the one with `default.xbe`, `COD.PAK`, `AUDIO`, `SHELL`, ...), or a
    **disc image** (`.iso`, a full "redump" image or an XISO). The installer checks it is the supported release.
@@ -59,6 +60,14 @@ The trailer (2560x1440, 60 FPS) is among the release's downloads: `FinestHourRem
 The installer also runs unattended, for scripts:
 `FinestHourRemasteredSetup.exe --source "D:\Games\COD.iso" --target "C:\Games\Finest Hour Remastered" --shortcuts --log install.log`
 (exit code 0 installed, 1 failed, 2 not the supported release).
+
+### Updates
+Fixes come as updates. The [latest update](https://github.com/crazyriddler/FinestHourRemastered/releases/tag/update)
+release holds `FinestHourRemasteredUpdate.exe`, published again with each update (its date is the update's). It is
+cumulative: run it, choose the installation's folder and **Update**, whatever version is installed; your settings
+and saved games are kept. The installed version is in `version.txt` beside the game. Unattended:
+`FinestHourRemasteredUpdate.exe --update "C:\Games\Finest Hour Remastered" --log update.log` (exit code 0 updated,
+1 failed).
 
 Settings are kept in `codfh.toml` beside the exe, saved games in `hdd`, the prepared shaders in `shadercache`.
 Choose **PC Settings** in the main menu (or press **F10** at any time) for every option below.
@@ -73,7 +82,7 @@ Choose **PC Settings** in the main menu (or press **F10** at any time) for every
   edges), 4:3 plays the game's own 4:3 screen.
 - **Television Frame**: on a wide screen the 4:3 menus, briefings and movies play inside a 1940s television, through
   a curved CRT tube with scan lines.
-- **Brightness**, **Field of View**, **FPS Counter**, **Anisotropic Filtering** up to 16x, **Sharpening**.
+- **Brightness**, **FPS Counter**, **Anisotropic Filtering** up to 16x, **Sharpening**.
 
 ### Graphics presets
 **Very High** (everything on), **High**, **Medium**, **Low** and **Original** set every graphics setting at once; any
@@ -170,11 +179,13 @@ out byte for byte the release's, wherever the repository is.
    `CODFH.exe` (the game) and `tools\installer\FinestHourRemasteredSetup.exe` (the installer). The C runtime is
    linked in: they need no Visual C++ redistributable.
 4. Take the release's remaster pack, shaders' recipes and default settings from its downloads (the index and the
-   `.data` parts) into the build; it also checks the exe built against the release's:
+   `.data` parts, then the latest update inside `FinestHourRemasteredSetup.exe`) into the build; it also checks the
+   exe built against the release's:
    `python tools\release\unpack.py <folder with the downloads>`
 5. To play from the build, put the rest of your game's files in `assets\` too (or its disc image).
-6. `python tools\release\make_release.py --only github` assembles a release in `..\release\github` (installer,
-   index and payload parts).
+6. `python tools\release\make_release.py --only github` makes the latest update (every file that differs from the
+   1.0 payload, `tools\release\base_manifest.txt`) and puts it inside the installer (`..\release\github`) and the
+   updater (`..\release\update`); `--rebase` assembles a new payload too (index and parts).
 
 For development, `cmake --preset release -DXBE_SYMBOLS=ON` adds a PDB beside the exe, with which crash dumps, the
 stall watchdog and the sampling profiler name functions (the exe is then no longer the release's, byte for byte).

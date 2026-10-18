@@ -1,13 +1,17 @@
 // Finest Hour Remastered's installer: a small styled window (Dear ImGui on Direct3D 11) that takes the player's own
 // copy of Call of Duty: Finest Hour (its files, a disc image or an XISO), checks it is the release the port was made
-// from, and installs the port beside it: the game's files under assets\, the port's files from the payload that
-// ships beside the installer (FinestHourRemastered.index and its .data.NNN parts), shortcuts.
+// from, and installs the port beside it: the game's files under assets\, the port's files from the base payload that
+// ships beside the installer (FinestHourRemastered.index and its .data.NNN parts, the v1.0 release's, fixed), then
+// the latest update carried inside this exe (every change since that base), shortcuts.
+// Named ...Update.exe it is the updater: it brings an installation of any earlier version to the update inside it.
+// Its text in the game's languages (English, French, Italian, Spanish), by Windows' own.
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
 #include <windows.h>
 #include <windowsx.h>
 #include <bcrypt.h>
+#include <compressapi.h>
 #include <d3d11.h>
 #include <shlobj.h>
 #include <shobjidl.h>
@@ -21,6 +25,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -46,6 +51,275 @@ constexpr wchar_t kProduct[] = L"Finest Hour Remastered";
 constexpr wchar_t kExe[] = L"CODFH.exe";
 constexpr char kRequired[] =
     "Call of Duty: Finest Hour for the original Xbox, PAL (Europe) release, title ID 4156002A, version 3.";
+
+// --- text in the game's languages -----------------------------------------------------------------------------------
+
+int g_lang = 0;  // 0 English, 1 French, 2 Italian, 3 Spanish: Windows' language, else English
+struct Row {
+    const char *en, *fr, *it, *es;
+};
+// UTF-8
+constexpr Row kStrings[] = {
+    {"A native PC port of Call of Duty: Finest Hour  -  by crazyriddler",
+     "Un portage PC natif de Call of Duty: Finest Hour  -  par crazyriddler",
+     "Un port nativo per PC di Call of Duty: Finest Hour  -  di crazyriddler",
+     "Un port nativo para PC de Call of Duty: Finest Hour  -  por crazyriddler"},
+    {"Before installing, the release's other downloads are needed in this installer's folder:",
+     "Avant d'installer, les autres téléchargements de la version doivent être dans le dossier de ce programme :",
+     "Prima di installare servono gli altri download della versione nella cartella di questo programma:",
+     "Antes de instalar, hacen falta las demás descargas de la versión en la carpeta de este instalador:"},
+    {"Missing:", "Manquant :", "Mancano:", "Faltan:"},
+    {"Download them from the release page into that folder, then check again.",
+     "Téléchargez-les depuis la page de la version dans ce dossier, puis vérifiez à nouveau.",
+     "Scaricali dalla pagina della versione in quella cartella, poi controlla di nuovo.",
+     "Descárgalas desde la página de la versión en esa carpeta y vuelve a comprobarlo."},
+    {"Release page", "Page de la version", "Pagina della versione", "Página de la versión"},
+    {"Check again", "Vérifier à nouveau", "Controlla di nuovo", "Comprobar de nuevo"},
+    {"Welcome. This installs Finest Hour Remastered, a native Windows port of the original Xbox game with a remastered "
+     "renderer, from your own copy of the game.",
+     "Bienvenue. Ce programme installe Finest Hour Remastered, un portage Windows natif du jeu Xbox original avec un "
+     "rendu remasterisé, à partir de votre propre copie du jeu.",
+     "Benvenuto. Questo programma installa Finest Hour Remastered, un port nativo per Windows del gioco originale per "
+     "Xbox con una grafica rimasterizzata, dalla tua copia del gioco.",
+     "Bienvenido. Esto instala Finest Hour Remastered, un port nativo para Windows del juego original de Xbox con unos "
+     "gráficos remasterizados, a partir de tu propia copia del juego."},
+    {"You need:", "Il vous faut :", "Ti serve:", "Necesitas:"},
+    {"Call of Duty: Finest Hour for the original Xbox, PAL (Europe) release, title ID 4156002A, version 3.",
+     "Call of Duty: Finest Hour pour la Xbox originale, version PAL (Europe), title ID 4156002A, version 3.",
+     "Call of Duty: Finest Hour per la Xbox originale, versione PAL (Europa), title ID 4156002A, versione 3.",
+     "Call of Duty: Finest Hour para la Xbox original, versión PAL (Europa), title ID 4156002A, versión 3."},
+    {"Its files (a folder with default.xbe), a disc image (.iso) or an XISO. No game files are included: they are "
+     "read from your copy.",
+     "Ses fichiers (un dossier avec default.xbe), une image disque (.iso) ou un XISO. Aucun fichier du jeu n'est "
+     "inclus : ils sont lus depuis votre copie.",
+     "I suoi file (una cartella con default.xbe), un'immagine disco (.iso) o un XISO. Non è incluso alcun file del "
+     "gioco: vengono letti dalla tua copia.",
+     "Sus archivos (una carpeta con default.xbe), una imagen de disco (.iso) o un XISO. No se incluye ningún archivo "
+     "del juego: se leen de tu copia."},
+    {"Continue", "Continuer", "Continua", "Continuar"},
+    {"Back", "Retour", "Indietro", "Atrás"},
+    {"Install", "Installer", "Installa", "Instalar"},
+    {"Update", "Mettre à jour", "Aggiorna", "Actualizar"},
+    {"Cancel", "Annuler", "Annulla", "Cancelar"},
+    {"Close", "Fermer", "Chiudi", "Cerrar"},
+    {"Play now", "Jouer", "Gioca ora", "Jugar ahora"},
+    {"Browse...", "Parcourir...", "Sfoglia...", "Examinar..."},
+    {"Where is your copy of the game?", "Où se trouve votre copie du jeu ?", "Dov'è la tua copia del gioco?",
+     "¿Dónde está tu copia del juego?"},
+    {"Game folder...", "Dossier du jeu...", "Cartella del gioco...", "Carpeta del juego..."},
+    {"Disc image / XISO...", "Image disque / XISO...", "Immagine disco / XISO...", "Imagen de disco / XISO..."},
+    {"The image has no default.xbe: it is not this game's disc.",
+     "L'image n'a pas de default.xbe : ce n'est pas le disque de ce jeu.",
+     "L'immagine non ha default.xbe: non è il disco di questo gioco.",
+     "La imagen no tiene default.xbe: no es el disco de este juego."},
+    {"The folder has no default.xbe: choose the folder that holds the game's files\n(default.xbe, COD.PAK, AUDIO, "
+     "SHELL, SB_AGD, ...).",
+     "Le dossier n'a pas de default.xbe : choisissez le dossier qui contient les fichiers du jeu\n(default.xbe, COD.PAK, "
+     "AUDIO, SHELL, SB_AGD, ...).",
+     "La cartella non ha default.xbe: scegli la cartella con i file del gioco\n(default.xbe, COD.PAK, AUDIO, SHELL, "
+     "SB_AGD, ...).",
+     "La carpeta no tiene default.xbe: elige la carpeta con los archivos del juego\n(default.xbe, COD.PAK, AUDIO, "
+     "SHELL, SB_AGD, ...)."},
+    {"This copy is a different release of the game. The port only runs the PAL (Europe) release, version 3.",
+     "Cette copie est une autre version du jeu. Le portage ne fonctionne qu'avec la version PAL (Europe), version 3.",
+     "Questa copia è un'altra versione del gioco. Il port funziona solo con la versione PAL (Europa), versione 3.",
+     "Esta copia es otra versión del juego. El port solo funciona con la versión PAL (Europa), versión 3."},
+    {"Your copy is the right release.", "Votre copie est la bonne version.", "La tua copia è la versione giusta.",
+     "Tu copia es la versión correcta."},
+    {"Install to:", "Installer dans :", "Installa in:", "Instalar en:"},
+    {"About 9 GB: the game's files and the remastered textures.",
+     "Environ 9 Go : les fichiers du jeu et les textures remasterisées.",
+     "Circa 9 GB: i file del gioco e le texture rimasterizzate.",
+     "Unos 9 GB: los archivos del juego y las texturas remasterizadas."},
+    {"Desktop shortcut", "Raccourci sur le bureau", "Collegamento sul desktop", "Acceso directo en el escritorio"},
+    {"Start menu shortcut", "Raccourci dans le menu Démarrer", "Collegamento nel menu Start",
+     "Acceso directo en el menú Inicio"},
+    {"Copying the game's files...", "Copie des fichiers du jeu...", "Copia dei file del gioco...",
+     "Copiando los archivos del juego..."},
+    {"Installing Finest Hour Remastered...", "Installation de Finest Hour Remastered...",
+     "Installazione di Finest Hour Remastered...", "Instalando Finest Hour Remastered..."},
+    {"Applying the latest update...", "Application de la dernière mise à jour...", "Applicazione dell'ultimo aggiornamento...",
+     "Aplicando la última actualización..."},
+    {"Checking the installed files...", "Vérification des fichiers installés...", "Controllo dei file installati...",
+     "Comprobando los archivos instalados..."},
+    {"Making shortcuts...", "Création des raccourcis...", "Creazione dei collegamenti...", "Creando los accesos directos..."},
+    {"Done.", "Terminé.", "Fatto.", "Hecho."},
+    {"Finest Hour Remastered is installed.", "Finest Hour Remastered est installé.", "Finest Hour Remastered è installato.",
+     "Finest Hour Remastered está instalado."},
+    {"In the game, choose PC Settings in the main menu (or press F10) for the display, graphics and control options. "
+     "The first start prepares the shaders for your graphics card.",
+     "Dans le jeu, choisissez Options PC dans le menu principal (ou appuyez sur F10) pour l'affichage, les graphismes "
+     "et les commandes. Le premier lancement prépare les shaders pour votre carte graphique.",
+     "Nel gioco, scegli Opzioni PC nel menu principale (o premi F10) per schermo, grafica e comandi. Il primo avvio "
+     "prepara gli shader per la tua scheda grafica.",
+     "En el juego, elige Opciones de PC en el menú principal (o pulsa F10) para la pantalla, los gráficos y los "
+     "controles. El primer arranque prepara los shaders para tu tarjeta gráfica."},
+    {"The installation did not finish.", "L'installation n'a pas abouti.", "L'installazione non è terminata.",
+     "La instalación no ha terminado."},
+    {"Not affiliated with Activision. Call of Duty is a trademark of Activision.",
+     "Sans lien avec Activision. Call of Duty est une marque d'Activision.",
+     "Non affiliato ad Activision. Call of Duty è un marchio di Activision.",
+     "Sin relación con Activision. Call of Duty es una marca de Activision."},
+    {"Cancelled.", "Annulé.", "Annullato.", "Cancelado."},
+    {"This updates an installed Finest Hour Remastered to the latest version, whatever version it has now. Your "
+     "settings and saved games are kept.",
+     "Ce programme met à jour une installation de Finest Hour Remastered vers la dernière version, quelle que soit sa "
+     "version actuelle. Vos réglages et sauvegardes sont conservés.",
+     "Questo programma aggiorna un'installazione di Finest Hour Remastered all'ultima versione, qualunque sia la sua "
+     "versione attuale. Impostazioni e salvataggi vengono mantenuti.",
+     "Esto actualiza una instalación de Finest Hour Remastered a la última versión, sea cual sea la que tenga ahora. "
+     "Tus ajustes y partidas guardadas se conservan."},
+    {"Update:", "Mise à jour :", "Aggiornamento:", "Actualización:"},
+    {"Installed:", "Installée :", "Installata:", "Instalada:"},
+    {"an earlier version", "une version antérieure", "una versione precedente", "una versión anterior"},
+    {"Where is Finest Hour Remastered installed?", "Où est installé Finest Hour Remastered ?",
+     "Dove è installato Finest Hour Remastered?", "¿Dónde está instalado Finest Hour Remastered?"},
+    {"This folder has no Finest Hour Remastered installation.",
+     "Ce dossier ne contient pas d'installation de Finest Hour Remastered.",
+     "Questa cartella non contiene un'installazione di Finest Hour Remastered.",
+     "Esta carpeta no tiene una instalación de Finest Hour Remastered."},
+    {"Updating Finest Hour Remastered...", "Mise à jour de Finest Hour Remastered...", "Aggiornamento di Finest Hour Remastered...",
+     "Actualizando Finest Hour Remastered..."},
+    {"Finest Hour Remastered is up to date.", "Finest Hour Remastered est à jour.", "Finest Hour Remastered è aggiornato.",
+     "Finest Hour Remastered está actualizado."},
+    {"The update did not finish.", "La mise à jour n'a pas abouti.", "L'aggiornamento non è terminato.",
+     "La actualización no ha terminado."},
+    {"Some installed files differ from the release and are not in this update. If the game misbehaves, install it "
+     "again with the full release.",
+     "Certains fichiers installés diffèrent de la version et ne sont pas dans cette mise à jour. Si le jeu se comporte "
+     "mal, réinstallez-le avec la version complète.",
+     "Alcuni file installati sono diversi dalla versione e non sono in questo aggiornamento. Se il gioco non funziona "
+     "bene, reinstallalo con la versione completa.",
+     "Algunos archivos instalados no coinciden con la versión y no vienen en esta actualización. Si el juego falla, "
+     "vuelve a instalarlo con la versión completa."},
+    {"This program has no update inside: download it again.",
+     "Ce programme ne contient pas de mise à jour : téléchargez-le à nouveau.",
+     "Questo programma non contiene un aggiornamento: scaricalo di nuovo.",
+     "Este programa no lleva ninguna actualización dentro: vuelve a descargarlo."},
+    {"Cannot write ", "Impossible d'écrire ", "Impossibile scrivere ", "No se puede escribir "},
+    {"The folder cannot be made: ", "Impossible de créer le dossier : ", "Impossibile creare la cartella: ",
+     "No se puede crear la carpeta: "},
+};
+
+// the text in the player's language (English as written when it has none)
+const char* T(const char* en) {
+    for (const Row& r : kStrings)
+        if (std::strcmp(r.en, en) == 0) {
+            const char* t[] = {r.en, r.fr, r.it, r.es};
+            return t[g_lang];
+        }
+    return en;
+}
+
+// Windows' language: French, Italian or Spanish, else English
+int SystemLanguage() {
+    switch (PRIMARYLANGID(GetUserDefaultUILanguage())) {
+        case LANG_FRENCH: return 1;
+        case LANG_ITALIAN: return 2;
+        case LANG_SPANISH: return 3;
+        default: return 0;
+    }
+}
+
+// the game's language codes (XC_LANGUAGE): 1 English, 4 French, 6 Italian, 5 Spanish
+uint32_t GameLanguage() {
+    const uint32_t codes[] = {1, 4, 6, 5};
+    return codes[g_lang];
+}
+
+// --- the update inside this exe -------------------------------------------------------------------------------------
+// make_release.py appends it: the packed update (Windows' compression API, LZMS), its packed and unpacked sizes and
+// "FHRPATCH". Unpacked: a text head, then each file's bytes in the head's order.
+//   FHRU 1 / version <text> / file <size> <sha1> <path> / delete <path> / check <size> <path> / end
+// file: written to the installation; delete: an earlier version's file gone (the first release's exe); check: a base
+// file this update leaves alone, its size compared (an installation of any earlier version is brought up to date by
+// the files; one that differs elsewhere is told)
+
+struct PatchFile {
+    std::string path, sha1;
+    uint64_t size = 0, at = 0;  // at: where its bytes begin in data
+};
+struct Patch {
+    std::string version;
+    std::vector<PatchFile> files;
+    std::vector<std::string> deletes;
+    std::vector<std::pair<uint64_t, std::string>> checks;
+    std::vector<uint8_t> data;
+    bool ok = false;
+};
+Patch g_patch;
+bool g_update_mode = false;  // the updater (its exe named ...Update.exe, or --update)
+std::wstring g_installed;    // the update's: the installation's version as found
+size_t g_differ = 0;         // files of the installation not as the release's and not in the update
+
+bool ReadPatch(Patch& p) {
+    wchar_t self[MAX_PATH];
+    GetModuleFileNameW(nullptr, self, MAX_PATH);
+    FILE* f = _wfopen(self, L"rb");
+    if (!f) return false;
+    uint8_t tail[24];
+    _fseeki64(f, -24, SEEK_END);
+    int64_t end = _ftelli64(f);
+    bool ok = std::fread(tail, 1, 24, f) == 24 && std::memcmp(tail + 16, "FHRPATCH", 8) == 0;
+    uint64_t packed = 0, raw = 0;
+    if (ok) std::memcpy(&packed, tail, 8), std::memcpy(&raw, tail + 8, 8);
+    ok = ok && packed > 0 && packed <= uint64_t(end) && raw < (uint64_t(1) << 33);
+    std::vector<uint8_t> blob;
+    if (ok) {
+        blob.resize(size_t(packed));
+        _fseeki64(f, end - int64_t(packed), SEEK_SET);
+        ok = std::fread(blob.data(), 1, blob.size(), f) == blob.size();
+    }
+    std::fclose(f);
+    if (!ok) return false;
+    DECOMPRESSOR_HANDLE d = nullptr;
+    if (!CreateDecompressor(COMPRESS_ALGORITHM_LZMS, nullptr, &d)) return false;
+    p.data.resize(size_t(raw));
+    SIZE_T got = 0;
+    ok = Decompress(d, blob.data(), blob.size(), p.data.data(), p.data.size(), &got) && got == raw;
+    CloseDecompressor(d);
+    if (!ok) return false;
+    // the head: lines up to "end"
+    size_t at = 0;
+    auto line = [&](std::string& out) {
+        size_t nl = std::find(p.data.begin() + ptrdiff_t(at), p.data.end(), '\n') - p.data.begin();
+        if (nl >= p.data.size()) return false;
+        out.assign(reinterpret_cast<const char*>(p.data.data()) + at, nl - at);
+        at = nl + 1;
+        return true;
+    };
+    std::string l;
+    if (!line(l) || l != "FHRU 1") return false;
+    std::vector<PatchFile> files;
+    while (line(l) && l != "end") {
+        std::istringstream s(l);
+        std::string kind;
+        s >> kind;
+        std::string rest;
+        if (kind == "version") std::getline(s >> std::ws, p.version);
+        else if (kind == "file") {
+            PatchFile pf;
+            s >> pf.size >> pf.sha1;
+            std::getline(s >> std::ws, pf.path);
+            files.push_back(pf);
+        } else if (kind == "delete") std::getline(s >> std::ws, rest), p.deletes.push_back(rest);
+        else if (kind == "check") {
+            uint64_t size = 0;
+            s >> size;
+            std::getline(s >> std::ws, rest);
+            p.checks.push_back({size, rest});
+        }
+    }
+    if (l != "end") return false;
+    for (PatchFile& pf : files) {
+        pf.at = at;
+        at += pf.size;
+    }
+    if (at > p.data.size()) return false;
+    p.files = std::move(files);
+    p.ok = true;
+    return true;
+}
 
 ComPtr<ID3D11Device> g_dev;
 ComPtr<ID3D11DeviceContext> g_ctx;
@@ -156,26 +430,27 @@ void CheckSource() {
         }
         const xdvdfs::Entry* e = img.Find("default.xbe");
         if (!e || !img.Read(*e, xbe)) {
-            g_source_note = "The image has no default.xbe: it is not this game's disc.";
+            g_source_note = T("The image has no default.xbe: it is not this game's disc.");
             return;
         }
     } else {
         std::ifstream f(fs::path(g_source) / "default.xbe", std::ios::binary);
         if (!f) {
-            g_source_note = "The folder has no default.xbe: choose the folder that holds the game's files\n"
-                            "(default.xbe, COD.PAK, AUDIO, SHELL, SB_AGD, ...).";
+            g_source_note = T("The folder has no default.xbe: choose the folder that holds the game's files\n(default.xbe, COD.PAK, "
+                              "AUDIO, SHELL, SB_AGD, ...).");
             return;
         }
         xbe.assign(std::istreambuf_iterator<char>(f), {});
     }
     std::string sha = Sha1(xbe);
     if (sha != kXbeSha1) {
-        g_source_note = "This copy is a different release of the game (default.xbe SHA-1 " + sha.substr(0, 12) +
-                        "...).\nThe port only runs the release it was made from.";
+        g_source_note = std::string(T("This copy is a different release of the game. The port only runs the PAL (Europe) "
+                                      "release, version 3.")) +
+                        "\n(default.xbe SHA-1 " + sha.substr(0, 12) + "...)";
         return;
     }
     g_source_ok = true;
-    g_source_note = "Your copy is the right release.";
+    g_source_note = T("Your copy is the right release.");
 }
 
 // --- installing ----------------------------------------------------------------------------------------------------
@@ -221,7 +496,7 @@ bool ReadPayload(Payload& p, std::string& err) {
 
 // the downloads beside the installer: the index and every data part it names, whole (their sizes add up to its
 // total; a download cut short does not). What is missing, for the welcome page, one line a file
-constexpr wchar_t kReleaseUrl[] = L"https://github.com/crazyriddler/FinestHourRemastered/releases/latest";
+constexpr wchar_t kReleaseUrl[] = L"https://github.com/crazyriddler/FinestHourRemastered/releases/tag/v1.0";
 std::vector<std::string> g_missing;
 
 void CheckDownloads() {
@@ -283,6 +558,118 @@ void CreateShortcut(const fs::path& lnk, const fs::path& target) {
     if (SUCCEEDED(sl.As(&pf))) pf->Save(lnk.c_str(), TRUE);
 }
 
+// the installation's version (version.txt, written by the installer and the updater; an earlier version has none)
+std::string InstalledVersion(const fs::path& dir) {
+    std::ifstream f(dir / "version.txt");
+    std::string v;
+    if (!f || !std::getline(f, v) || v.empty()) return T("an earlier version");
+    return v;
+}
+
+// the update written into an installation: its files, an earlier version's left overs gone, version.txt. check: the
+// base files it leaves alone compared by size first (g_differ: those not as the release's)
+bool ApplyPatch(const fs::path& target, bool check, const std::function<bool(uint64_t)>& step, std::string& err) {
+    std::error_code ec;
+    if (check) {
+        Log(T("Checking the installed files..."));
+        g_differ = 0;
+        for (const auto& [size, rel] : g_patch.checks) {
+            uint64_t have = fs::file_size(target / fs::path(Widen(rel)), ec);
+            if (ec || have != size) g_differ++;
+        }
+    }
+    for (const PatchFile& pf : g_patch.files) {
+        fs::path to = target / fs::path(Widen(pf.path));
+        fs::create_directories(to.parent_path(), ec);
+        // written beside, then put in place: a file in use or a full disk leaves the old one whole
+        fs::path tmp = to;
+        tmp += L".new";
+        FILE* o = _wfopen(tmp.c_str(), L"wb");
+        if (!o) {
+            err = T("Cannot write ") + pf.path;
+            return false;
+        }
+        bool ok = std::fwrite(g_patch.data.data() + pf.at, 1, size_t(pf.size), o) == pf.size;
+        ok = std::fclose(o) == 0 && ok;
+        if (ok) fs::rename(tmp, to, ec), ok = !ec;
+        if (!ok) {
+            fs::remove(tmp, ec);
+            err = T("Cannot write ") + pf.path;
+            return false;
+        }
+        if (!step(pf.size)) {
+            err = T("Cancelled.");
+            return false;
+        }
+    }
+    for (const std::string& rel : g_patch.deletes) fs::remove(target / fs::path(Widen(rel)), ec);
+    if (FILE* f = _wfopen((target / "version.txt").c_str(), L"w")) std::fprintf(f, "%s\n", g_patch.version.c_str()), std::fclose(f);
+    return true;
+}
+
+// the game's language in a new installation: Windows' own when the game has it (codfh.toml's language line)
+void SetGameLanguage(const fs::path& target) {
+    fs::path toml = target / "codfh.toml";
+    std::vector<std::string> lines;
+    {
+        std::ifstream f(toml);
+        for (std::string l; std::getline(f, l);) lines.push_back(l);
+    }
+    bool set = false;
+    for (std::string& l : lines)
+        if (l.rfind("language", 0) == 0 && l.find('=') != std::string::npos) l = "language = " + std::to_string(GameLanguage()), set = true;
+    if (!set) lines.insert(lines.begin(), "language = " + std::to_string(GameLanguage()));
+    std::ofstream o(toml, std::ios::trunc);
+    for (const std::string& l : lines) o << l << "\n";
+}
+
+// the shortcuts an earlier version made, pointing at the exe of today (the first release's had another name)
+void RepairShortcuts(const fs::path& exe) {
+    for (const KNOWNFOLDERID& id : {FOLDERID_Desktop, FOLDERID_Programs}) {
+        PWSTR p = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderPath(id, 0, nullptr, &p))) {
+            fs::path lnk = fs::path(p) / (std::wstring(kProduct) + L".lnk");
+            std::error_code ec;
+            if (fs::exists(lnk, ec)) CreateShortcut(lnk, exe);
+        }
+        CoTaskMemFree(p);
+    }
+}
+
+// an installation of Finest Hour Remastered (of any version): its exe of today or the first release's
+bool IsInstallation(const fs::path& dir) {
+    std::error_code ec;
+    return fs::exists(dir / kExe, ec) || fs::exists(dir / L"FinestHourRemastered.exe", ec);
+}
+
+void Update() {
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    auto fail = [](const std::string& e) {
+        g_error = e;
+        Log("Failed: " + e);
+        g_working = false;
+        g_page = Page::Failed;
+    };
+    if (!g_patch.ok) return fail(T("This program has no update inside: download it again."));
+    fs::path target = g_target;
+    if (!IsInstallation(target)) return fail(T("This folder has no Finest Hour Remastered installation."));
+    Log(T("Updating Finest Hour Remastered..."));
+    uint64_t total = 0, done = 0;
+    for (const PatchFile& pf : g_patch.files) total += pf.size;
+    auto step = [&](uint64_t n) {
+        done += n;
+        g_progress = total ? double(done) / double(total) : 1;
+        return !g_cancel.load();
+    };
+    std::string err;
+    if (!ApplyPatch(target, true, step, err)) return fail(err);
+    RepairShortcuts(target / kExe);
+    g_progress = 1;
+    Log(T("Done."));
+    g_working = false;
+    g_page = Page::Done;
+}
+
 void Install() {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     auto fail = [](const std::string& e) {
@@ -297,7 +684,7 @@ void Install() {
     fs::path target = g_target, assets = target / "assets";
     std::error_code ec;
     fs::create_directories(assets, ec);
-    if (ec) return fail("The folder cannot be made: " + ec.message());
+    if (ec) return fail(T("The folder cannot be made: ") + ec.message());
     // the game's own bytes
     uint64_t game_total = 0;
     xdvdfs::Image img;
@@ -309,20 +696,22 @@ void Install() {
         for (auto& e : fs::recursive_directory_iterator(g_source, ec))
             if (e.is_regular_file(ec)) game_files.push_back(e.path()), game_total += e.file_size(ec);
     }
-    const double all = double(game_total + pay.total);
+    uint64_t patch_total = 0;
+    for (const PatchFile& pf : g_patch.files) patch_total += pf.size;
+    const double all = double(game_total + pay.total + patch_total);
     uint64_t done = 0;
     auto step = [&](uint64_t n) {
         done += n;
         g_progress = all > 0 ? double(done) / all : 1;
         return !g_cancel.load();
     };
-    Log("Copying the game's files...");
+    Log(T("Copying the game's files..."));
     std::vector<uint8_t> buf(8 << 20);
     if (g_source_is_image) {
         for (const xdvdfs::Entry& e : img.Files()) {
             fs::path to = assets / fs::path(Widen(e.path));
             fs::create_directories(to.parent_path(), ec);
-            if (!img.Extract(e, to.wstring(), step)) return fail(g_cancel ? "Cancelled." : "Cannot extract " + e.path);
+            if (!img.Extract(e, to.wstring(), step)) return fail(g_cancel ? std::string(T("Cancelled.")) : "Cannot extract " + e.path);
         }
     } else {
         for (const fs::path& from : game_files) {
@@ -339,30 +728,37 @@ void Install() {
             }
             if (i) std::fclose(i);
             if (o) std::fclose(o);
-            if (!ok) return fail(g_cancel ? "Cancelled." : "Cannot copy " + Narrow(rel.wstring()));
+            if (!ok) return fail(g_cancel ? std::string(T("Cancelled.")) : "Cannot copy " + Narrow(rel.wstring()));
         }
     }
-    Log("Installing Finest Hour Remastered...");
+    Log(T("Installing Finest Hour Remastered..."));
     PartStream ps{pay.parts};
     for (auto& [size, rel] : pay.files) {
         fs::path to = target / fs::path(Widen(rel));
         fs::create_directories(to.parent_path(), ec);
         FILE* o = _wfopen(to.c_str(), L"wb");
-        if (!o) return fail("Cannot write " + rel);
+        if (!o) return fail(T("Cannot write ") + rel);
         uint64_t left = size;
         while (left > 0) {
             size_t n = ps.Read(buf.data(), size_t(std::min<uint64_t>(left, buf.size())));
             if (n == 0 || std::fwrite(buf.data(), 1, n, o) != n || !step(n)) {
                 std::fclose(o);
-                return fail(g_cancel ? "Cancelled." : "The payload ended early (" + rel + ").");
+                return fail(g_cancel ? std::string(T("Cancelled.")) : "The payload ended early (" + rel + ").");
             }
             left -= n;
         }
         std::fclose(o);
     }
+    // the latest update over the base, and the game in Windows' language when it has it
+    if (g_patch.ok) {
+        Log(T("Applying the latest update..."));
+        std::string perr;
+        if (!ApplyPatch(target, false, step, perr)) return fail(perr);
+    }
+    SetGameLanguage(target);
     // the first release's exe, under another name (the game could not start itself again under it)
     fs::remove(target / L"FinestHourRemastered.exe", ec);
-    Log("Making shortcuts...");
+    Log(T("Making shortcuts..."));
     fs::path exe = target / kExe;
     PWSTR p = nullptr;
     if (g_shortcut_desktop && SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Desktop, 0, nullptr, &p)))
@@ -372,7 +768,7 @@ void Install() {
         CreateShortcut(fs::path(p) / (std::wstring(kProduct) + L".lnk"), exe);
     CoTaskMemFree(p);
     g_progress = 1;
-    Log("Done.");
+    Log(T("Done."));
     g_working = false;
     g_page = Page::Done;
 }
@@ -421,7 +817,7 @@ void Frame() {
     ImGui::TextColored(kText, "REMASTERED");
     ImGui::PopFont();
     ImGui::SetCursorPosX(58);
-    ImGui::TextColored(kDim, "A native PC port of Call of Duty: Finest Hour  -  by crazyriddler");
+    ImGui::TextColored(kDim, "%s", T("A native PC port of Call of Duty: Finest Hour  -  by crazyriddler"));
     ImGui::Dummy(ImVec2(0, 28));
 
     const float x = 58, wrap = 600;
@@ -430,47 +826,64 @@ void Frame() {
         ImGui::SetCursorPosX(x);
         ImGui::TextColored(c, "%s", s);
     };
+    auto start = [](void (*work)()) {
+        g_page = Page::Install;
+        g_working = true;
+        g_cancel = false;
+        std::thread(work).detach();
+    };
     switch (g_page) {
         case Page::Welcome:
-            if (!g_missing.empty()) {
-                // the release's own downloads are needed beside the installer first
-                para("Before installing, the release's other downloads are needed in this installer's folder:", kGold);
-                para(Narrow(ExeDir().wstring()).c_str(), kDim);
-                ImGui::Dummy(ImVec2(0, 6));
-                para("Missing:", kRed);
-                for (const std::string& m : g_missing) para(("  - " + m).c_str(), kRed);
-                ImGui::Dummy(ImVec2(0, 6));
-                para("Download them from the release page into that folder, then check again.", kDim);
-                ImGui::Dummy(ImVec2(0, 12));
+            if (g_update_mode) {
+                para(T("This updates an installed Finest Hour Remastered to the latest version, whatever version it has "
+                       "now. Your settings and saved games are kept."));
+                ImGui::Dummy(ImVec2(0, 10));
+                para((std::string(T("Update:")) + " " + (g_patch.ok ? g_patch.version : std::string("-"))).c_str(), kGold);
+                if (!g_patch.ok) para(T("This program has no update inside: download it again."), kRed);
+                ImGui::Dummy(ImVec2(0, 14));
                 ImGui::SetCursorPosX(x);
-                if (Button("Release page", true, 190)) ShellExecuteW(nullptr, L"open", kReleaseUrl, nullptr, nullptr, SW_SHOWNORMAL);
-                ImGui::SameLine();
-                if (Button("Check again", true, 190)) CheckDownloads();
+                if (Button(T("Continue"), g_patch.ok)) g_page = Page::Folder;
                 break;
             }
-            para("Welcome. This installs Finest Hour Remastered, a native Windows port of the original Xbox game with "
-                 "a remastered renderer, from your own copy of the game.");
+            if (!g_missing.empty()) {
+                // the release's own downloads are needed beside the installer first
+                para(T("Before installing, the release's other downloads are needed in this installer's folder:"), kGold);
+                para(Narrow(ExeDir().wstring()).c_str(), kDim);
+                ImGui::Dummy(ImVec2(0, 6));
+                para(T("Missing:"), kRed);
+                for (const std::string& m : g_missing) para(("  - " + m).c_str(), kRed);
+                ImGui::Dummy(ImVec2(0, 6));
+                para(T("Download them from the release page into that folder, then check again."), kDim);
+                ImGui::Dummy(ImVec2(0, 12));
+                ImGui::SetCursorPosX(x);
+                if (Button(T("Release page"), true, 220)) ShellExecuteW(nullptr, L"open", kReleaseUrl, nullptr, nullptr, SW_SHOWNORMAL);
+                ImGui::SameLine();
+                if (Button(T("Check again"), true, 220)) CheckDownloads();
+                break;
+            }
+            para(T("Welcome. This installs Finest Hour Remastered, a native Windows port of the original Xbox game with a "
+                   "remastered renderer, from your own copy of the game."));
             ImGui::Dummy(ImVec2(0, 10));
-            para("You need:", kGold);
-            para(kRequired);
+            para(T("You need:"), kGold);
+            para(T(kRequired));
             ImGui::Dummy(ImVec2(0, 10));
-            para("Its files (a folder with default.xbe), a disc image (.iso) or an XISO. No game files are "
-                 "included: they are read from your copy.",
+            para(T("Its files (a folder with default.xbe), a disc image (.iso) or an XISO. No game files are included: they "
+                   "are read from your copy."),
                  kDim);
             ImGui::Dummy(ImVec2(0, 14));
             ImGui::SetCursorPosX(x);
-            if (Button("Continue")) g_page = Page::Source;
+            if (Button(T("Continue"))) g_page = Page::Source;
             break;
         case Page::Source:
-            para("Where is your copy of the game?", kGold);
+            para(T("Where is your copy of the game?"), kGold);
             ImGui::Dummy(ImVec2(0, 8));
             ImGui::SetCursorPosX(x);
-            if (Button("Game folder...", true, 200)) {
+            if (Button(T("Game folder..."), true, 230)) {
                 std::wstring p;
                 if (Pick(true, p)) g_source = p, g_source_is_image = false, CheckSource();
             }
             ImGui::SameLine();
-            if (Button("Disc image / XISO...", true, 230)) {
+            if (Button(T("Disc image / XISO..."), true, 260)) {
                 std::wstring p;
                 if (Pick(false, p)) g_source = p, g_source_is_image = true, CheckSource();
             }
@@ -481,12 +894,12 @@ void Frame() {
             }
             ImGui::Dummy(ImVec2(0, 24));
             ImGui::SetCursorPosX(x);
-            if (Button("Back")) g_page = Page::Welcome;
+            if (Button(T("Back"))) g_page = Page::Welcome;
             ImGui::SameLine();
-            if (Button("Continue", g_source_ok)) g_page = Page::Folder;
+            if (Button(T("Continue"), g_source_ok)) g_page = Page::Folder;
             break;
         case Page::Folder: {
-            para("Install to:", kGold);
+            para(g_update_mode ? T("Where is Finest Hour Remastered installed?") : T("Install to:"), kGold);
             ImGui::Dummy(ImVec2(0, 6));
             static char buf[1024] = {};
             if (!buf[0]) std::snprintf(buf, sizeof(buf), "%s", Narrow(g_target).c_str());
@@ -494,30 +907,34 @@ void Frame() {
             ImGui::SetNextItemWidth(470);
             if (ImGui::InputText("##target", buf, sizeof(buf))) g_target = Widen(buf);
             ImGui::SameLine();
-            if (Button("Browse...", true, 120)) {
+            if (Button(T("Browse..."), true, 150)) {
                 std::wstring p;
                 if (Pick(true, p)) {
-                    g_target = (fs::path(p) / kProduct).wstring();
+                    // the updater takes the installation's folder itself, the installer a new one inside the chosen
+                    g_target = g_update_mode ? p : (fs::path(p) / kProduct).wstring();
                     std::snprintf(buf, sizeof(buf), "%s", Narrow(g_target).c_str());
                 }
             }
             ImGui::Dummy(ImVec2(0, 6));
-            para("About 9 GB: the game's files and the remastered textures.", kDim);
-            ImGui::Dummy(ImVec2(0, 8));
-            ImGui::SetCursorPosX(x);
-            ImGui::Checkbox("Desktop shortcut", &g_shortcut_desktop);
-            ImGui::SetCursorPosX(x);
-            ImGui::Checkbox("Start menu shortcut", &g_shortcut_menu);
+            bool can = !g_target.empty();
+            if (g_update_mode) {
+                can = can && IsInstallation(g_target);
+                if (!g_target.empty() && !can) para(T("This folder has no Finest Hour Remastered installation."), kRed);
+                if (can) para((std::string(T("Installed:")) + " " + InstalledVersion(g_target)).c_str(), kDim);
+                para((std::string(T("Update:")) + " " + g_patch.version).c_str(), kGold);
+            } else {
+                para(T("About 9 GB: the game's files and the remastered textures."), kDim);
+                ImGui::Dummy(ImVec2(0, 8));
+                ImGui::SetCursorPosX(x);
+                ImGui::Checkbox(T("Desktop shortcut"), &g_shortcut_desktop);
+                ImGui::SetCursorPosX(x);
+                ImGui::Checkbox(T("Start menu shortcut"), &g_shortcut_menu);
+            }
             ImGui::Dummy(ImVec2(0, 24));
             ImGui::SetCursorPosX(x);
-            if (Button("Back")) g_page = Page::Source;
+            if (Button(T("Back"))) g_page = g_update_mode ? Page::Welcome : Page::Source;
             ImGui::SameLine();
-            if (Button("Install", !g_target.empty())) {
-                g_page = Page::Install;
-                g_working = true;
-                g_cancel = false;
-                std::thread(Install).detach();
-            }
+            if (Button(g_update_mode ? T("Update") : T("Install"), can)) start(g_update_mode ? Update : Install);
             break;
         }
         case Page::Install: {
@@ -536,38 +953,43 @@ void Frame() {
             ImGui::PopStyleColor();
             ImGui::Dummy(ImVec2(0, 24));
             ImGui::SetCursorPosX(x);
-            if (Button("Cancel", !g_cancel)) g_cancel = true;
+            if (Button(T("Cancel"), !g_cancel)) g_cancel = true;
             break;
         }
         case Page::Done:
-            para("Finest Hour Remastered is installed.", kGreen);
+            para(g_update_mode ? T("Finest Hour Remastered is up to date.") : T("Finest Hour Remastered is installed."), kGreen);
             ImGui::Dummy(ImVec2(0, 8));
-            para("In the game, choose PC Settings in the main menu (or press F10) for the display, graphics and control "
-                 "options. The first start prepares the shaders for your graphics card.",
-                 kDim);
+            if (g_update_mode && g_differ)
+                para(T("Some installed files differ from the release and are not in this update. If the game misbehaves, "
+                       "install it again with the full release."),
+                     kRed);
+            else
+                para(T("In the game, choose PC Settings in the main menu (or press F10) for the display, graphics and control "
+                       "options. The first start prepares the shaders for your graphics card."),
+                     kDim);
             ImGui::Dummy(ImVec2(0, 24));
             ImGui::SetCursorPosX(x);
-            if (Button("Play now")) {
+            if (Button(T("Play now"))) {
                 fs::path exe = fs::path(g_target) / kExe;
                 ShellExecuteW(nullptr, L"open", exe.c_str(), nullptr, exe.parent_path().c_str(), SW_SHOWNORMAL);
                 PostQuitMessage(0);
             }
             ImGui::SameLine();
-            if (Button("Close")) PostQuitMessage(0);
+            if (Button(T("Close"))) PostQuitMessage(0);
             break;
         case Page::Failed:
-            para("The installation did not finish.", kRed);
+            para(g_update_mode ? T("The update did not finish.") : T("The installation did not finish."), kRed);
             para(g_error.c_str(), kDim);
             ImGui::Dummy(ImVec2(0, 24));
             ImGui::SetCursorPosX(x);
-            if (Button("Back")) g_page = Page::Folder;
+            if (Button(T("Back"))) g_page = Page::Folder;
             ImGui::SameLine();
-            if (Button("Close")) PostQuitMessage(0);
+            if (Button(T("Close"))) PostQuitMessage(0);
             break;
     }
     ImGui::PopTextWrapPos();
     ImGui::SetCursorPos(ImVec2(58, size.y - 40));
-    ImGui::TextColored(kDim, "Not affiliated with Activision. Call of Duty is a trademark of Activision.");
+    ImGui::TextColored(kDim, "%s", T("Not affiliated with Activision. Call of Duty is a trademark of Activision."));
     ImGui::End();
 }
 
@@ -661,6 +1083,16 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
         g_target = (fs::path(pf).parent_path() / L"Games" / kProduct).wstring();
     CoTaskMemFree(pf);
     if (g_target.empty()) g_target = L"C:\\Games\\Finest Hour Remastered";
+    g_lang = SystemLanguage();
+    ReadPatch(g_patch);
+    {
+        // the updater: this exe under the update's name
+        wchar_t self[MAX_PATH];
+        GetModuleFileNameW(nullptr, self, MAX_PATH);
+        std::wstring name = fs::path(self).filename().wstring();
+        std::transform(name.begin(), name.end(), name.begin(), ::towlower);
+        g_update_mode = name.find(L"update") != std::wstring::npos;
+    }
     CheckDownloads();
 
     // unattended: --source <the game's folder or disc image> [--target <folder>] [--shortcuts] [--log <file>]; the
@@ -671,14 +1103,30 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
         std::wstring log;
         bool unattended = false;
         g_shortcut_desktop = g_shortcut_menu = false;
+        bool update = false;
         for (int i = 1; i < argc; i++) {
             std::wstring a = argv[i];
-            if (a == L"--source" && i + 1 < argc) g_source = argv[++i], unattended = true;
+            if (a == L"--update" && i + 1 < argc) g_target = argv[++i], update = true;
+            else if (a == L"--source" && i + 1 < argc) g_source = argv[++i], unattended = true;
             else if (a == L"--target" && i + 1 < argc) g_target = argv[++i];
             else if (a == L"--log" && i + 1 < argc) log = argv[++i];
             else if (a == L"--shortcuts") g_shortcut_desktop = g_shortcut_menu = true;
         }
         LocalFree(argv);
+        // unattended update: --update <the installation's folder> [--log <file>] (0 updated, 1 failed)
+        if (update) {
+            g_update_mode = true;
+            Update();
+            int code = g_page == Page::Done ? 0 : 1;
+            if (!log.empty())
+                if (FILE* f = _wfopen(log.c_str(), L"w")) {
+                    std::fprintf(f, "update %s to %s\ndiffering files %zu\n", Narrow(g_target).c_str(), g_patch.version.c_str(), g_differ);
+                    for (const std::string& l : g_log) std::fprintf(f, "%s\n", l.c_str());
+                    std::fprintf(f, "exit %d\n", code);
+                    std::fclose(f);
+                }
+            return code;
+        }
         if (unattended) {
             g_source_is_image = fs::is_regular_file(g_source);
             CheckSource();
@@ -707,7 +1155,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
     float dpi = GetDpiForSystem() / 96.0f;
     int ww = int(1040 * dpi), wh = int(640 * dpi);
     int sx = (GetSystemMetrics(SM_CXSCREEN) - ww) / 2, sy = (GetSystemMetrics(SM_CYSCREEN) - wh) / 2;
-    g_hwnd = CreateWindowExW(WS_EX_APPWINDOW, wc.lpszClassName, L"Finest Hour Remastered Setup", WS_POPUP | WS_MINIMIZEBOX,
+    g_hwnd = CreateWindowExW(WS_EX_APPWINDOW, wc.lpszClassName, g_update_mode ? L"Finest Hour Remastered Update" : L"Finest Hour Remastered Setup", WS_POPUP | WS_MINIMIZEBOX,
                              sx, sy, ww, wh, nullptr, nullptr, inst, nullptr);
 
     DXGI_SWAP_CHAIN_DESC sd{};

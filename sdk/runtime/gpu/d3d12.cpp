@@ -5045,9 +5045,8 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
         static const auto t0 = std::chrono::steady_clock::now();
         c.tess2[0] = 0.1f + std::fmod(std::chrono::duration<float>(std::chrono::steady_clock::now() - t0).count(), 500.0f);
     }
-    // falling water (the pipes' and the sewer's waterfall sheets, water_flowing: drawn still and nearly black, their
-    // texture's streaks lit only by the dark prelit colours): the sheet's texture runs down it and the water catches
-    // the light (Water)
+    // falling water (the pipes' and the sewer's waterfall sheets, water_flowing: nearly black, their texture's streaks
+    // lit only by the dark prelit colours): the sheet's texture runs down it and the water catches the light (Water)
     if (app::Get().water && !flat) {
         static const uint64_t kFlowing[] = {0x3d399e0f1b26898bull, 0xdf5acfa8682d9ea1ull, 0xe15b8faaa2324069ull};
         for (uint64_t id : kFlowing)
@@ -5058,7 +5057,9 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
                     return e ? float(std::atof(e)) : 0.9f;
                 }();
                 c.flow[0] = 0.1f + std::fmod(std::chrono::duration<float>(std::chrono::steady_clock::now() - t0).count(), 600.0f);
-                c.flow[1] = speed, c.flow[2] = 2.6f, c.flow[3] = 1.15f;
+                // the game's own flow when its sector draws the material's animation (src/game/matfx.cpp: the
+                // texture transform set), else ours along u
+                c.flow[1] = s.tss[0][kTssTextureTransformFlags] ? 0.0f : speed, c.flow[2] = 2.6f, c.flow[3] = 1.15f;
                 // a falling sheet, not a pool: no flat water's ripples and up facing normal, little reflection and
                 // sheen (on its upright face they came out white)
                 c.mrefl[0] = 0.12f, c.mrefl[2] = 0;

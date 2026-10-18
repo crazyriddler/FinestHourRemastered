@@ -1050,10 +1050,39 @@ void LogDrawStack(X86Context& ctx, const char* what) {
          code[4], code[5], code[6], code[7], code[8], code[9]);
 }
 
+// tests (gpu::g_stack_tex, "drawstack <name>"): a draw of one of those textures, its callers and its stages' texture
+// transforms, each distinct caller once
+void LogTexDrawStack(X86Context& ctx) {
+    if (!gpu::g_stack_tex[0].load(std::memory_order_relaxed)) return;
+    int stage = -1;
+    for (int i = 0; i < 4 && stage < 0; i++)
+        for (auto& t : gpu::g_stack_tex)
+            if (g_state.textures[size_t(i)] && t.load(std::memory_order_relaxed) == g_state.textures[size_t(i)]) stage = i;
+    if (stage < 0) return;
+    static std::unordered_set<uint64_t> seen;
+    uint32_t code[8] = {}, n = 0;
+    for (uint32_t i = 0; i < 160 && n < 8; i++) {
+        uint32_t v = R32(ctx.esp + i * 4);
+        if (v >= X86CodeBase && v < X86CodeEnd) code[n++] = v;
+    }
+    uint64_t key = uint64_t(stage);
+    for (uint32_t c : code) key = key * 1000003 ^ c;
+    if (!seen.insert(key).second) return;
+    LOGR("drawstack: stage %d vs %08X from %08X %08X %08X %08X %08X %08X %08X %08X", stage, g_state.vs_handle, code[0], code[1],
+         code[2], code[3], code[4], code[5], code[6], code[7]);
+    for (int i = 0; i < 2; i++) {
+        const auto& m = g_state.transforms[size_t(16 + i)];
+        LOGR("drawstack:   stage %d tex %08X ttff %u tci %X  m %.3f %.3f %.3f %.3f / %.3f %.3f %.3f %.3f / %.3f %.3f %.3f %.3f", i,
+             g_state.textures[size_t(i)], g_state.tss[size_t(i)][gpu::kTssTextureTransformFlags],
+             g_state.tss[size_t(i)][gpu::kTssTexCoordIndex], m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9], m[10], m[11]);
+    }
+}
+
 HLE_STDCALL(D3DDevice_DrawVertices, 3) {
     if (gpu::g_log_draws > 0) LogDrawStack(ctx, "D3DDevice_DrawVertices");
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     SyncDeferred();
+    LogTexDrawStack(ctx);
     if (g_backend) g_backend->Draw(g_state, a[0], a[1], a[2], nullptr);
     return 0;
 }
@@ -1062,6 +1091,7 @@ HLE_STDCALL(D3DDevice_DrawIndexedVertices, 3) {
     if (gpu::g_log_draws > 0) LogDrawStack(ctx, "D3DDevice_DrawIndexedVertices");
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     SyncDeferred();
+    LogTexDrawStack(ctx);
     const uint8_t* indices = a[2] ? static_cast<const uint8_t*>(HostPtr(a[2])) : nullptr;
     if (g_backend) g_backend->Draw(g_state, a[0], 0, a[1], indices);
     return 0;

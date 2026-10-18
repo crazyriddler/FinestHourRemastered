@@ -16,6 +16,9 @@ The version installed is in `version.txt` beside the game. Unattended:
 1 failed).
 
 ## Changes since 1.0
+- The world's animated textures now move, as their artists made them: the light caustics on the sewer walls, the
+  falling water, the Volga and the rivers, glowing coals, fans and more. The game always ran these animations, but
+  RenderWare drew those surfaces without them: their sectors never had the material effects turned on.
 - Level 4 (the sewers): the white disc under the pipe's splash and the white layer over the waterfall are gone; a
   texture stage that reads no texture now reads black, as on the console.
 - The installer and the updater speak English, French, Italian and Spanish (the system's language), and a new

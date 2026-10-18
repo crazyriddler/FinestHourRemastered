@@ -137,6 +137,9 @@ struct Draw2D {
 };
 inline std::atomic<bool (*)(const Draw2D&, float& scale, float& offset)> g_layout_2d{nullptr};
 inline std::atomic<int> g_log_draws{0};
+// tests (control line "drawstack <texture name>"): guest addresses whose draws (a stage's D3D texture one of them)
+// log their callers and the stages' texture transforms, each distinct caller once
+inline std::array<std::atomic<uint32_t>, 16> g_stack_tex{};
 // The 4:3 screens on a wide display: the picture inside an old television (the pack's ui/tv_frame.dds), set by the
 // game each frame. TvScreen gives the screen's opening in window pixels while the frame shows, false otherwise.
 inline std::atomic<bool> g_tv_frame{false};

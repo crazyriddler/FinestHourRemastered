@@ -497,6 +497,26 @@ void Command(const std::string& line) {
             }
             LOGR("%s: %d found", by_name ? "texfind" : "refs", found);
         }
+        // tests: the callers of the draws of a texture ("drawstack <name>", "drawstack off"): each RwTexture of that
+        // name, the words of its raster (its D3D texture among them) watched by the draws (gpu::g_stack_tex)
+        if (line.rfind("drawstack ", 0) == 0) {
+            std::string name = line.substr(10);
+            for (auto& t : gpu::g_stack_tex) t = 0;
+            size_t n = 0;
+            for (uint32_t a = 0x10000; name != "off" && a + 0x40 < 0x4000000 && n < gpu::g_stack_tex.size(); a += 4) {
+                if (!mem::IsCommitted(a) || !mem::IsCommitted(a + 0x3C)) { a = (a | 0xFFF) - 3; continue; }
+                const char* s = static_cast<const char*>(kernel::HostPtr(a + 0x10));
+                if (name.size() >= 32 || std::strncmp(s, name.c_str(), 32) != 0 || s[name.size()] != 0) continue;
+                uint32_t raster = kernel::R32(a);
+                if (!mem::IsCommitted(raster) || !mem::IsCommitted(raster + 0x5C)) continue;
+                for (uint32_t o = 0; o < 0x60 && n < gpu::g_stack_tex.size(); o += 4) {
+                    uint32_t v = kernel::R32(raster + o);
+                    if (v >= 0x10000 && v < 0x4000000 && v != raster && mem::IsCommitted(v)) gpu::g_stack_tex[n++] = v;
+                }
+                LOGR("drawstack: texture %08X raster %08X", a, raster);
+            }
+            LOGR("drawstack: %zu addresses watched", n);
+        }
         // tests: a texture's materials (what points at each texture of that name), with the 0x60 bytes after each
         if (line.rfind("texmats ", 0) == 0) {
             std::string name = line.substr(8);

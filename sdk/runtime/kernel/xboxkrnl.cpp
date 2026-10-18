@@ -341,7 +341,15 @@ KERNEL_EXPORT(184, NtAllocateVirtualMemory, 5) {
 
 KERNEL_EXPORT(199, NtFreeVirtualMemory, 3) {
     uint32_t base = R32(a[0]), size = R32(a[1]);
-    uint32_t st = mem::FreeVirtual(base, size, a[2]);
+    // the guest code on the caller's stack (its return address, then the next code addresses up it): kept with the
+    // freed pages, for the log should the game touch them later
+    uint32_t callers[4] = {};
+    for (uint32_t at = ctx.esp, n = 0; n < 4 && at < ctx.esp + 0x200; at += 4) {
+        if (!mem::IsCommitted(at)) break;  // (the stack's top: nothing above it to read)
+        uint32_t v = R32(at);
+        if (v >= 0x11000 && v < 0x2E0000) callers[n++] = v;
+    }
+    uint32_t st = mem::FreeVirtual(base, size, a[2], callers);
     if (st == 0) {
         W32(a[0], base);
         W32(a[1], size);

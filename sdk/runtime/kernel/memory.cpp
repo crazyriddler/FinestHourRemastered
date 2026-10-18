@@ -1,6 +1,7 @@
 #include "kernel/memory.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <map>
 #include <mutex>
@@ -84,6 +85,18 @@ static std::vector<uint8_t> g_committed(0x100000, 0);
 // without faulting there (a stale read, say: a matrix compared in a freed block), so the port goes on as well, with a
 // zeroed page; zeroed again when the game commits it
 static std::vector<uint8_t> g_touched(0x100000, 0);
+// who freed a user page (for the log when the game touches it afterwards): an index into the last frees, 1 based
+struct FreeRecord {
+    double at;              // seconds since the start
+    uint32_t base, size;
+    uint32_t callers[4];
+};
+static std::vector<FreeRecord> g_frees;
+static std::vector<uint32_t> g_freed_by(0x100000, 0);
+static double Seconds() {
+    static const auto t0 = std::chrono::steady_clock::now();
+    return std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+}
 
 #ifdef _WIN32
 static LONG CALLBACK UserPageFault(EXCEPTION_POINTERS* e) {
@@ -99,6 +112,11 @@ static LONG CALLBACK UserPageFault(EXCEPTION_POINTERS* e) {
         g_touched[page >> 12] = 1;
         LOGW("memory: %s of the uncommitted page %08X (guest %08X): a zeroed page given",
              r->ExceptionInformation[0] ? "write" : "read", page, uint32_t(va));
+        if (uint32_t i = g_freed_by[page >> 12]; i && i <= g_frees.size()) {
+            const FreeRecord& f = g_frees[i - 1];
+            LOGW("memory:   freed at %.1f s (%08X+%X), from guest %08X %08X %08X %08X", f.at, f.base, f.size, f.callers[0],
+                 f.callers[1], f.callers[2], f.callers[3]);
+        }
     }
     return EXCEPTION_CONTINUE_EXECUTION;
 }
@@ -322,13 +340,21 @@ uint32_t AllocateVirtual(uint32_t& base, uint32_t& size, uint32_t type, uint32_t
     return 0;
 }
 
-uint32_t FreeVirtual(uint32_t& base, uint32_t& size, uint32_t type) {
+uint32_t FreeVirtual(uint32_t& base, uint32_t& size, uint32_t type, const uint32_t* callers) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     uint32_t start;
     Reservation* r = FindReservation(base, &start);
     if (!r) return 0xC000009F;  // STATUS_MEMORY_NOT_ALLOCATED
+    // the pages' freeing remembered (the last 64k frees)
+    auto note = [&](uint32_t from, uint32_t to) {
+        if (!callers) return;
+        if (g_frees.size() >= 65536) g_frees.clear();
+        g_frees.push_back({Seconds(), from, to - from, {callers[0], callers[1], callers[2], callers[3]}});
+        for (uint64_t p = from; p < to; p += kPage) g_freed_by[size_t(p >> 12)] = uint32_t(g_frees.size());
+    };
     if (type & kMemRelease) {
         uint32_t sz = r->size;
+        note(start, start + sz);
         Decommit(start, sz);
         g_reserved.erase(start);
         g_user.Release(start, sz);
@@ -338,6 +364,7 @@ uint32_t FreeVirtual(uint32_t& base, uint32_t& size, uint32_t type) {
     }
     uint32_t first = base & ~(kPage - 1);
     uint32_t end = size ? (base + size + kPage - 1) & ~(kPage - 1) : start + r->size;
+    note(first, end);
     Decommit(first, end - first);
     for (uint32_t p = first; p < end; p += kPage) r->commit[(p - start) / kPage] = 0;
     base = first;

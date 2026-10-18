@@ -147,8 +147,14 @@ void Watchdog() {
         }
         if (told || now == 0 || std::chrono::steady_clock::now() - since < std::chrono::seconds(10)) continue;
         told = true;
-        LOGR("watchdog: no frame shown for 10 s (after %llu), the threads:", (unsigned long long)now);
-        LogHostStacks();
+        // the exe's base (its addresses below map to the guest's functions through it), and three looks at the
+        // threads a second and a half apart: a thread caught in a loop shows the loop's functions in each
+        LOGR("watchdog: no frame shown for 10 s (after %llu), the exe at %p, the threads:", (unsigned long long)now,
+             static_cast<void*>(GetModuleHandleW(nullptr)));
+        for (int look = 0; look < 3; look++) {
+            if (look) Sleep(1500), LOGR("watchdog: look %d", look + 1);
+            LogHostStacks();
+        }
         for (auto& t : kernel::Threads())
             if (t->ctx) {
                 LOGR("watchdog: guest thread %X", t->id);

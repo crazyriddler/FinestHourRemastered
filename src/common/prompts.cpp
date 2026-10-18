@@ -72,6 +72,36 @@ constexpr Picture kPictures[] = {
     {0x496a780a5dd7b91f, -1, L"Q E H"},                    // d-pad: next weapon, next grenade, health pack
 };
 
+// In the game (not the menus) the hints show the menus' pictures too: there each one stands for what its button does
+// in the game (B crouches, not back; A strikes, not accept; left and right lean while aiming)
+struct InGame {
+    uint64_t id;
+    int action;           // -1: label
+    int action2;          // a second action's key after the first (left and right: both leans)
+};
+constexpr InGame kInGame[] = {
+    {0x7ff3c37aa2dfa043, pc_input::kHealth, -1},        // 0000 up
+    {0xb8a2eda6d5db1e43, pc_input::kCenterTurret, -1},  // 0001 down
+    {0xf522a4076adc53cd, pc_input::kLeanLeft, -1},      // 0002 left
+    {0xc2df373f5900b69b, pc_input::kLeanRight, -1},     // 0003 right
+    {0xe2c19c648cf52d2a, pc_input::kMelee, -1},         // 0008 A
+    {0xcb5c4437250b2de4, pc_input::kCrouch, -1},        // 0009 B
+    {0xd98dea4a7c2b90bf, pc_input::kLeanLeft, pc_input::kLeanRight},  // 1002 left and right
+};
+// and on the controller, as the game's own set (the layout's buttons)
+struct PadInGame {
+    uint64_t id;
+    uint64_t game;  // the game's picture standing for it (kPadPictures)
+};
+constexpr PadInGame kPadInGame[] = {
+    {0xe2c19c648cf52d2a, 0x60972f78dfe1777b},  // A
+    {0xcb5c4437250b2de4, 0x16d39373e1498958},  // B
+    {0x73e7f60cc2f7343b, 0x7a2ef7b0f903497f},  // X
+    {0x36d63aca31cc1372, 0x615b94f7842ef99e},  // Y
+    {0x5f8470b1a90c0359, 0x808ac0fcf5c0754c},  // black
+    {0xaa7dcb7cc6cd8b8a, 0xe1947eef9b029bd8},  // white
+};
+
 std::atomic<int> g_device{-1};  // 0 controller, 1 keyboard, -1 not known yet
 
 std::wstring Label(int key) {
@@ -295,13 +325,18 @@ bool KeyboardShown() {
 void Update() {
     const Settings& set = Get();
     bool keys = KeyboardShown();
+    // in the game, or a menu (the front end, the pause screen, a movie)
+    const bool game = !cod::InMenu();
     // what the pictures depend on: the device, then each picture's key, or the controller's kind and layout
     static std::string last = "-";
     const input::Kind kind = keys ? input::kNoController : input::ControllerKind(0);
     std::string sig(1, keys ? 'k' : 'p');
+    sig += game ? 'g' : 'm';
     if (!keys) sig += std::to_string(int(kind)) + std::to_string(set.pad_layout);
-    if (keys)
+    if (keys) {
         for (const Picture& p : kPictures) sig += std::to_string(p.action >= 0 ? KeyOf(p.action) : 0) + ",";
+        for (const InGame& g : kInGame) sig += std::to_string(KeyOf(g.action)) + "," + std::to_string(g.action2 >= 0 ? KeyOf(g.action2) : 0) + ",";
+    }
     if (sig == last) return;
     last = sig;
     std::vector<gpu::TextureOverride> out;
@@ -310,13 +345,18 @@ void Update() {
         for (const Picture& p : kPictures) {
             std::wstring text = p.label ? p.label : L"";
             std::string icon = LabelIcon(text);
-            if (p.action >= 0) {
-                int key = KeyOf(p.action);
+            int action = p.action, action2 = -1;
+            if (game)
+                for (const InGame& g : kInGame)
+                    if (g.id == p.id) action = g.action, action2 = g.action2;
+            if (action >= 0) {
+                int key = KeyOf(action);
                 if (!key) continue;  // nothing bound: the controller's picture stays
                 text = Label(key);
                 char n[16];
                 std::snprintf(n, sizeof(n), "kb_%02x", key);
                 icon = n;
+                if (action2 >= 0 && KeyOf(action2)) text += L" " + Label(KeyOf(action2)), icon.clear();  // two keys
             }
             gpu::TextureOverride o;
             o.id = p.id;
@@ -331,7 +371,13 @@ void Update() {
             gpu::TextureOverride o;
             o.id = p.id;
             o.w = o.h = kSize;
-            PadButton b = set.pad_layout == 0 ? p.modern : p.classic;
+            const PadPicture* src = &p;
+            if (game)
+                for (const PadInGame& g : kPadInGame)
+                    if (g.id == p.id)
+                        for (const PadPicture& q : kPadPictures)
+                            if (q.id == g.game) src = &q;
+            PadButton b = set.pad_layout == 0 ? src->modern : src->classic;
             o.rgba = Icon(PadIcon(b, kind), kSize);
             if (o.rgba.empty()) o.rgba = PadCap(b, kind, kSize);
             if (!o.rgba.empty()) out.push_back(std::move(o));

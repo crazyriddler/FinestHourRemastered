@@ -1259,6 +1259,7 @@ private:
   private:
     uint64_t draw_tex0_ = 0;       // the draw's stage 0 texture's content id
     uint64_t game_moon_frame_ = ~0ull;  // the last frame the game drew its own moon sprite (SkyConstants)
+    int game_moon_level_ = -1000;        // the level that has shown its own: none of ours there, wherever one looks
     bool recolor_ = false;         // g_recolor_2d asked for the draw: its colour element's new RGB
     uint32_t recolor_argb_ = 0;
     VertexElement recolor_elem_{};
@@ -4167,6 +4168,12 @@ void D3D12Backend::UploadConstants(const State& s, const DrawShaders& sh, const 
         // characters (lit per pixel by their program): the remastered colour alone. The generated relief of faces, hair
         // and cloth reads their painted shading as shape and doubles it, and they need no highlights
         if (draw_character_) c0[3] = 0, c1[3] = 0, c2[1] = 0;
+        // the sewers' water (level 4, under the streets): no sun's highlight. The sun is above the street; its shadow
+        // misses the thin water along the walls' foot, which lit up as a flat grey band (its ripples and reflection
+        // stay)
+        constexpr uint64_t kSewerWater = 0x24d88cb7fa7d9e46ull;  // water_sewer
+        for (int st = 0; st < 4; st++)
+            if (stages.id[st] == kSewerWater) c1[3] = 0;
         // the weapon in hand (drawn after the world's depth is cleared), its wood and metal (not the hands' skin): a
         // soft relief and a metal sheen where its texture says metal (Weapon Materials)
         if (draw_character_ && occlusion_done_ && set.weapon_materials && m.pbr && !m.skin) {
@@ -4692,7 +4699,12 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
         constexpr uint64_t kMoonSprite = 0x33469bfa695c087dull;  // 2_1moon1_png
         // and a sky box with its sun painted away from the level's light (level 17's)
         constexpr uint64_t kPaintedSun = 0x5a9f421798167e0aull;  // TsarTsarsine_UP
-        if (draw_tex0_ == kMoonSprite || draw_tex0_ == kPaintedSun) game_moon_frame_ = frame_;
+        if (draw_tex0_ == kMoonSprite || draw_tex0_ == kPaintedSun) {
+            game_moon_frame_ = frame_;
+            // the game draws its own only while it is in view: ours would show (elsewhere, at the level's light)
+            // whenever it is out of it
+            if (game_moon_level_ != g_level.load()) game_moon_level_ = g_level.load(), LOGI("sky: level %d has its own moon or sun", game_moon_level_);
+        }
     }
     // (any stage's texture: a material can be on a stage after the first)
     if (g_hidden_tex[0].load())
@@ -5045,16 +5057,17 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
                     return e ? float(std::atof(e)) : 0.9f;
                 }();
                 c.flow[0] = 0.1f + std::fmod(std::chrono::duration<float>(std::chrono::steady_clock::now() - t0).count(), 600.0f);
-                c.flow[1] = speed, c.flow[2] = 3.2f, c.flow[3] = 1.15f;
+                c.flow[1] = speed, c.flow[2] = 2.6f, c.flow[3] = 1.15f;
                 // a falling sheet, not a pool: no flat water's ripples and up facing normal, little reflection and
                 // sheen (on its upright face they came out white)
                 c.mrefl[0] = 0.12f, c.mrefl[2] = 0;
                 c.mtl[1][3] *= 0.25f;
             }
-        // the sewer waterfall's body under its streaks: untextured, blended and lit pale blue by the tunnel's lamp
-        // (the same on the console, as near white as the streaks were): the sewer's murky olive, as dark as its walls
+        // the sewer waterfall's second pass over its streaks: untextured, blended and lit pale blue by the tunnel's
+        // lamp; drawn nearly opaque it hid the streaks and read as a flat wall. On the console the sheet shows its
+        // streaks all down it, dark grey: this pass faint over them
         if (draw_tex0_ == 0 && k.blend && k.zwrite && (a.index_count ? a.index_count : a.draw_count) == 243) {
-            c.flow[0] = 0.1f, c.flow[1] = 0, c.flow[2] = 1.5f, c.flow[3] = 1.0f;
+            c.flow[0] = 0.1f, c.flow[1] = 0, c.flow[2] = 0.85f, c.flow[3] = 0.3f;
             c.mrefl[0] = 0.12f, c.mrefl[2] = 0;
             c.mtl[1][3] *= 0.25f;
         }
@@ -8708,7 +8721,7 @@ void D3D12Backend::ScenePost() {
             float strength = 0.55f * std::clamp(1.6f - edge, 0.0f, 1.0f) * std::clamp(v[2] * 3, 0.0f, 1.0f) *
                              std::min(light_.direct * 2, 1.0f);
             // (no flare nor shafts from where no moon is drawn: the level's own moon stands elsewhere in its sky)
-            if (game_moon_frame_ != ~0ull && frame_ - game_moon_frame_ <= 1) strength = 0;
+            if (game_moon_level_ == g_level.load() || (game_moon_frame_ != ~0ull && frame_ - game_moon_frame_ <= 1)) strength = 0;
             pr[4] = nx * 0.5f + 0.5f, pr[5] = 0.5f - ny * 0.5f, pr[6] = strength, pr[7] = float(w) / float(h);
             rays = strength > 0.01f && set.sun_shafts;
             sun_screen_[0] = pr[4], sun_screen_[1] = pr[5], sun_screen_[2] = strength;
@@ -8782,8 +8795,8 @@ bool D3D12Backend::SkyConstants() {
     static const auto t0 = std::chrono::steady_clock::now();
     float t = std::chrono::duration<float>(std::chrono::steady_clock::now() - t0).count();
     float n = std::sqrt(light_.dir[0] * light_.dir[0] + light_.dir[1] * light_.dir[1] + light_.dir[2] * light_.dir[2]);
-    // (none where the level's sky has its own: the moon sprite drawn this frame or the last)
-    bool own = game_moon_frame_ != ~0ull && frame_ - game_moon_frame_ <= 1;
+    // (none where the level's sky has its own: the moon sprite drawn since the level began)
+    bool own = game_moon_level_ == g_level.load() || (game_moon_frame_ != ~0ull && frame_ - game_moon_frame_ <= 1);
     bool sun = set.sun_moon && n > 0.5f && light_.direct > 0 && !own;
     float sw[3] = {light_.dir[0] / std::max(n, 1e-6f), light_.dir[1] / std::max(n, 1e-6f), light_.dir[2] / std::max(n, 1e-6f)};
     // a light from about the horizon or under it (some levels' models are lit nearly level): the sun just over

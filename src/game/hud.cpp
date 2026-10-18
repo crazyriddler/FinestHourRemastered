@@ -125,8 +125,19 @@ bool Layout(const gpu::Draw2D& d_in, float& scale, float& offset) {
     // narrowed with it, but draws it in the screen's pixels. Its centre goes where the line's narrowing undone puts
     // it (the line placed as its side places text), its own width kept
     if ((d.tag & kInText) && (d.tag & 0xFF) == kHud && !g_paused && !g_front_end && d.widen > 1.0f && d.bounded) {
-        float cs = (d.x0 + d.x1) * 0.5f, ct = cs * d.widen;
-        int side = Side(ct, ct, w);
+        float cs = (d.x0 + d.x1) * 0.5f, ct = cs * d.widen, half = (d.x1 - d.x0) * 0.5f;
+        // it is one of its row's boxes (its true place), which keeps the line's pieces of text together: a short
+        // line's pieces either side of it would otherwise go each to its own side
+        if (d.frame != g_frame) NewFrame(d.frame);
+        if (g_seen.size() < 512) g_seen.push_back({ct - half, d.y0, ct + half, d.y1});
+        int side = 2;
+        float cy = (d.y0 + d.y1) * 0.5f;
+        for (const Box& r : g_rows)
+            if (ct >= r.x0 - 2 && ct <= r.x1 + 2 && cy >= r.y0 - 2 && cy <= r.y1 + 2) {
+                side = Side(r.x0, r.x1, w);
+                break;
+            }
+        if (side == 2) side = Side(ct, ct, w);
         float line = side < 0 ? 0 : side > 0 ? w * (1 - k) : centre;
         scale = k;
         offset = line + cs * (1 - k);

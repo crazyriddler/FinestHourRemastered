@@ -32,6 +32,8 @@ def main():
     ap.add_argument("--at", type=float, default=34)
     ap.add_argument("--skip", default="", help="classes left out of the search (materials.txt), e.g. ground,stone")
     ap.add_argument("--each", action="store_true", help="each texture hidden alone, a shot each")
+    ap.add_argument("--checkpoint", default="", help='"N s1 s2 s3 s4": restarted there first (as fx_view.py)')
+    ap.add_argument("--pos", default="", help='"x y z": the camera there, not at the eye of the player')
     a = ap.parse_args()
     skip = set(c for c in a.skip.split(",") if c)
     classes = {}
@@ -76,6 +78,17 @@ def main():
     send("cmd level %d" % a.level)
     while time.time() - t0 < a.at:
         time.sleep(0.05)
+    if a.checkpoint:
+        while time.time() - t0 < 58:
+            time.sleep(0.05)
+        send("cmd checkpoint " + a.checkpoint)
+        time.sleep(0.5)
+        for name, wait in (("START", 1.5), ("DOWN", 1.0), ("A", 1.5), ("DOWN", 1.0), ("A", 0)):
+            send("pad %s 150" % name)
+            time.sleep(wait)
+        for _ in range(34):  # god as soon as the restart takes it
+            send("cmd god on")
+            time.sleep(0.5)
     send("cmd god on")
     send("cmd whereami")
     time.sleep(0.8)
@@ -84,8 +97,12 @@ def main():
         drive.kill_build_exe()
         sys.exit("no camera")
     x, y, z = map(float, found[-1])
+    if a.pos:
+        x, y, z = map(float, a.pos.split())
     send("cmd freecam at %.1f %.1f %.1f %.2f %.2f" % (x, y, z, a.yaw, a.pitch))
-    time.sleep(1.5)
+    send("cmd fx auto_exposure 0")  # (the eye's adaptation would change the region's brightness between the shots)
+    send("cmd hud 0")
+    time.sleep(3)
     send("cmd texview 1")
     time.sleep(0.6)
     send("cmd texview 0")

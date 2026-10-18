@@ -403,6 +403,10 @@ std::vector<Page> BuildPages() {
     controls.items.push_back(Toggle("Keyboard & Mouse", &c.keyboard_mouse));
     controls.items.push_back(Slider("Mouse Sensitivity", &c.mouse_sensitivity, 10, 400, 10, "%d%%"));
     controls.items.push_back(Toggle("Invert Mouse", &c.invert_mouse));
+    controls.items.push_back(Toggle("Toggle Aim", &c.toggle_aim,
+                                    "Aim with a click of the mouse's aim button and stop with the next, or by reloading or "
+                                    "throwing a grenade (iron sights and scopes); keys and the controller's trigger still aim while "
+                                    "held."));
     controls.items.push_back(Choice("Button Prompts", {"Automatic", "Controller", "Keyboard"},
                                     [&c] { return int(std::min<uint32_t>(c.button_prompts, 2)); },
                                     [&c](int i) { c.button_prompts = uint32_t(i); },

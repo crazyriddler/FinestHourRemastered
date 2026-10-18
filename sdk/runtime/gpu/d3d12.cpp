@@ -2418,7 +2418,7 @@ uint32_t FillInputLayout(const PsoKey& k, D3D12_INPUT_ELEMENT_DESC el[16]);
 //                  a new build makes them all again at its first start
 //   psos2.bin      the draws' pipelines: a PsoKey and its shaders' recipe ids (psos.bin before: the key alone)
 //   shadows2.bin   the casters' and the veil's: a ShadowKey, the same (shadows.bin before)
-//   passes.bin     the full screen passes' sources and targets, this build's alone
+//   passes.bin     the full screen passes' sources and targets (kept across builds: each known by its source)
 //   pipelines.bin  the driver's own (an ID3D12PipelineLibrary)
 // The pack can carry the lists made by playing every level (remaster/shadercache/). At start every shader and
 // pipeline in them is made, on every core, showing how far it is (app::Progress) when that is more than reading the
@@ -2793,13 +2793,15 @@ void D3D12Backend::LoadShaderCache() {
     };
     std::vector<PassRecord> passes;
     {
+        // a pass is known by its own source, target and blend (PassKey): another build's are kept, those whose source
+        // this one still has made ready, the others never asked for
         bool ours = false;
         ReadTagged(CacheDir() / "passes.bin", [&](uint32_t tag, const uint8_t* b, size_t n) {
             if (tag == kBuildTag && n == 8) {
                 uint64_t id;
                 std::memcpy(&id, b, 8);
                 ours = id == BuildId();
-            } else if (tag == kPassTag && ours && n >= sizeof(PassHead)) {
+            } else if (tag == kPassTag && n >= sizeof(PassHead)) {
                 PassRecord p;
                 std::memcpy(&p.head, b, sizeof(PassHead));
                 if (sizeof(PassHead) + p.head.entry > n) return;
@@ -2810,10 +2812,16 @@ void D3D12Backend::LoadShaderCache() {
             }
         });
         if (!ours) {
-            // another build's: this one's from here
+            // another build's (or none): this build's from here, its passes kept
             Rewrite(CacheDir() / "passes.bin", [&](std::ofstream& out) {
                 uint64_t id = BuildId();
                 WriteTagged(out, kBuildTag, &id, 8);
+                for (const PassRecord& p : passes) {
+                    std::string rec(reinterpret_cast<const char*>(&p.head), sizeof(p.head));
+                    rec += p.entry;
+                    rec += p.text;
+                    WriteTagged(out, kPassTag, rec.data(), rec.size());
+                }
             });
         }
     }

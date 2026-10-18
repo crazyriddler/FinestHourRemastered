@@ -35,6 +35,9 @@ The version installed is in `version.txt` beside the game. Unattended:
   the Xbox, not on a laptop or a handheld). It now rests while there is nothing to load: at a 60 FPS cap the game
   went from about 140% of a core to about 40%.
 - The main menu's Quit Game row makes the menu's move sound like the other rows.
+- New Toggle Aim option (PC Settings, Controls; off by default): a click of the mouse's aim button aims, the next one
+  stops, and reloading or throwing a grenade stops it too, as in Call of Duty up to Black Ops II. Iron sights and
+  scopes alike; keys and the controller's trigger still aim while held.
 - Level 4 (the sewers): the white disc under the pipe's splash and the white layer over the waterfall are gone; a
   texture stage that reads no texture now reads black, as on the console.
 - The installer and the updater speak English, French, Italian and Spanish (the system's language), and a new

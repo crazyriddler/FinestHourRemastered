@@ -137,6 +137,8 @@ game's own look and textures. The render scale is never part of a preset: it sta
 
 ### Controls
 - **Keyboard and mouse** with raw input, sensitivity, invert and every action rebindable; mouse support in the menus.
+- **Toggle Aim** (off by default): a click of the mouse's aim button aims and the next one stops, as do reloading
+  and throwing a grenade, as in Call of Duty up to Black Ops II.
 - **Controllers**: Xbox, PlayStation and Switch, hot plugging and rumble, a modern layout or the original's, dead
   zone, sensitivity and look acceleration settings.
 - **Button Prompts** follow the device in hand: keys, Xbox, PlayStation or Switch buttons.

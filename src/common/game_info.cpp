@@ -689,6 +689,7 @@ const app::GameInfo app::kGame = {
             {"keyboard_mouse", &cod::Get().keyboard_mouse, nullptr},
             {"mouse_sensitivity", nullptr, &cod::Get().mouse_sensitivity},
             {"invert_mouse", &cod::Get().invert_mouse, nullptr},
+            {"toggle_aim", &cod::Get().toggle_aim, nullptr},
             {"button_prompts", nullptr, &cod::Get().button_prompts},
             {"pad_layout", nullptr, &cod::Get().pad_layout},
             {"stick_deadzone", nullptr, &cod::Get().stick_deadzone},

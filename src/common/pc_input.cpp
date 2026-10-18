@@ -332,6 +332,31 @@ void StartRebind(int action, int slot) {
     g_rebind = action;
 }
 
+// Aiming (the game's left trigger: iron sights and scopes alike). Toggle Aim: a click of a mouse button bound to aim
+// starts aiming and the next one stops, as do reloading and throwing a grenade; keys bound to it still aim while held.
+// Not kept through the menus, the pause screen or a load.
+bool Aiming() {
+    static bool latched = false, was = false;
+    bool mouse = false, keys = false;
+    for (int s = 0; s < 2; s++) {
+        int k = g_keys.key[kAim][s];
+        if (!k || !Down(k) || (g_menu && MouseKey(k))) continue;
+        (MouseKey(k) ? mouse : keys) = true;
+    }
+    if (!cod::Get().toggle_aim || g_menu || !g_in_game) {
+        latched = false, was = mouse;
+        return mouse || keys;
+    }
+    if (mouse && !was) latched = !latched;
+    was = mouse;
+    // as Call of Duty's toggle aim was up to Black Ops II: reloading or throwing a grenade lets go of it
+    static bool reload_was = false, grenade_was = false;
+    const bool reload = Pressed(kReload), grenade = Pressed(kGrenade);
+    if ((reload && !reload_was) || (grenade && !grenade_was)) latched = false;
+    reload_was = reload, grenade_was = grenade;
+    return latched || keys;
+}
+
 void Pad(int port, input::Pad& pad) {
     if (port != 0 || !cod::Get().keyboard_mouse) return;
     Keys();
@@ -369,7 +394,8 @@ void Pad(int port, input::Pad& pad) {
     analog(kJump, 3);
     analog(kUse, 4);
     analog(kReload, 5);
-    analog(kAim, 6);
+    const bool aiming = Aiming();
+    if (aiming) pad.analog[6] = 255;
     analog(kFire, 7);
     auto button = [&](Action a, uint16_t bit) {
         if (Pressed(a)) pad.buttons |= bit;
@@ -381,7 +407,7 @@ void Pad(int port, input::Pad& pad) {
     button(kDpadRight, 0x8);
     // the game leans with left and right while aiming, and otherwise switches weapons and grenades with them: the
     // lean keys lean (aiming), the switches switch (not aiming)
-    if (Pressed(kAim)) {
+    if (aiming) {
         button(kLeanLeft, 0x4);
         button(kLeanRight, 0x8);
     } else {

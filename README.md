@@ -3,7 +3,7 @@
 **A native PC port of Call of Duty: Finest Hour (original Xbox, 2004) with a modern, remastered renderer.**
 By **crazyriddler**.
 
-![Finest Hour Remastered](docs/media/hero.jpg)
+![Finest Hour Remastered](docs/media/banner.jpg)
 
 The game's code is statically recompiled from x86 to C++ and runs natively on Windows: no emulator. Direct3D 8,
 DirectSound and the Xbox kernel are reimplemented on Direct3D 12, XAudio2 and Win32, and the renderer adds per-pixel

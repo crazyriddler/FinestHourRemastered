@@ -27,6 +27,9 @@ def main():
     ap.add_argument("--abs", action="store_true")
     ap.add_argument("--at", type=float, default=34)
     ap.add_argument("--tag", default="perfab")
+    ap.add_argument("--paired", action="store_true",
+                    help="everything on measured again just before each case: the case's cost against it (a scene that "
+                         "changes as it plays drifts less between the two)")
     a = ap.parse_args()
     control = os.path.join(WORK, a.tag + ".control.txt")
     open(control, "w").close()
@@ -60,26 +63,41 @@ def main():
     send("cmd freecam at %.1f %.1f %.1f %.2f %.2f" % (x, y, z, (0 if a.abs else yaw0) + a.yaw, a.pitch))
     time.sleep(2.0)
     cases = ["all"] + [c for c in a.cases.split(",") if c] + ["all again"]
+    if a.paired:
+        cases = ["all"] + [x for c in a.cases.split(",") if c for x in ("all before " + c, c)] + ["all again"]
+
+    def turn(f, off):
+        # "name=value": the effect set to that value, 1 again after (shadows=2: the shadows' quality)
+        name, _, value = f.partition("=")
+        send("cmd fx %s %s" % (name, (value or "0") if off else "1"))
+
     for i, case in enumerate(cases):
         fx = [] if case.startswith("all") else case.split("+")
         for f in fx:
-            send("cmd fx %s 0" % f)
+            turn(f, True)
         time.sleep(0.6)
         send("cmd perf start")
         time.sleep(a.secs)
         send("cmd perf stop C%d" % i)
         time.sleep(0.8)
         for f in fx:
-            send("cmd fx %s 1" % f)
+            turn(f, False)
         time.sleep(0.3)
     drive.kill_build_exe()
     log = read_log()
+    before = None
     for i, case in enumerate(cases):
         fr = re.findall(r"perf \[C%d\]: \d+ frames in [\d.]+ s: average ([\d.]+) fps.*median ([\d.]+) ms" % i, log)
         gpu = re.findall(r"perf \[C%d\]: GPU average: ([\d.]+) ms:(.*)" % i, log)
         steps = gpu[-1][1].strip()[:240] if gpu else ""
-        print("%-28s %s fps (median %s ms), GPU %s ms | %s" % (case, fr[-1][0] if fr else "?", fr[-1][1] if fr else "?",
-                                                              gpu[-1][0] if gpu else "?", steps), flush=True)
+        if a.paired and case.startswith("all before"):
+            before = float(gpu[-1][0]) if gpu else None
+            continue
+        delta = ""
+        if a.paired and before is not None and gpu and not case.startswith("all"):
+            delta = " saves %+.2f ms" % (before - float(gpu[-1][0]))
+        print("%-28s %s fps (median %s ms), GPU %s ms%s | %s" % (case, fr[-1][0] if fr else "?", fr[-1][1] if fr else "?",
+                                                                gpu[-1][0] if gpu else "?", delta, steps), flush=True)
 
 
 if __name__ == "__main__":

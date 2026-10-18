@@ -172,6 +172,19 @@ Menu Read() {
     return m;
 }
 
+// the console's 640 by 480 on the window: a widened screen's 4:3 middle at the window's height; else the frame as
+// it is shown (d3d12.cpp's BlitFrame), 4:3 (or 16:9 when the console reports a wide display) in the window's middle,
+// bars beside it on a wider window (a 4:3 resolution on a wide screen)
+void Frame(float W, float H, float& sx, float& sy, float& left, float& top) {
+    if (cod::Get().widescreen && gpu::g_screen_widen.load() > 1.0f) {
+        sx = sy = H / 480.0f, left = (W - 640 * sx) / 2, top = 0;
+        return;
+    }
+    float aspect = app::Widescreen() ? 16.0f / 9.0f : 4.0f / 3.0f;
+    float vw = std::min(W, H * aspect), vh = vw / aspect;
+    sx = vw / 640.0f, sy = vh / 480.0f, left = (W - vw) / 2, top = (H - vh) / 2;
+}
+
 // the mouse in the console's 640 by 480 of a menu, from the window's client area
 bool MousePos(float& x, float& y, float& scale, float& left, float& top) {
     HWND w = static_cast<HWND>(app::Window());
@@ -180,11 +193,9 @@ bool MousePos(float& x, float& y, float& scale, float& left, float& top) {
     if (ImGui::GetTime() < g_test_until && w) {
         RECT r;
         GetClientRect(w, &r);
-        float W = float(r.right), H = float(r.bottom);
-        bool wide = cod::Get().widescreen && gpu::g_screen_widen.load() > 1.0f;
-        scale = in_tv ? (tv[3] - tv[1]) / 480.0f : H / 480.0f;
-        left = in_tv ? tv[0] : wide ? (W - 640 * scale) / 2 : 0;
-        top = in_tv ? tv[1] : 0;
+        float W = float(r.right), H = float(r.bottom), sx;
+        Frame(W, H, sx, scale, left, top);
+        if (in_tv) scale = (tv[3] - tv[1]) / 480.0f, left = tv[0], top = tv[1];
         x = g_test_x, y = g_test_y;
         return true;
     }
@@ -193,10 +204,8 @@ bool MousePos(float& x, float& y, float& scale, float& left, float& top) {
     if (!w || !GetCursorPos(&p) || !ScreenToClient(w, &p) || !GetClientRect(w, &r)) return false;
     float W = float(r.right), H = float(r.bottom);
     if (W <= 0 || H <= 0) return false;
-    bool wide = cod::Get().widescreen && gpu::g_screen_widen.load() > 1.0f;
-    float sx = wide ? H / 480.0f : W / 640.0f, sy = H / 480.0f;
-    left = wide ? (W - 640 * sx) / 2 : 0;
-    top = 0;
+    float sx, sy;
+    Frame(W, H, sx, sy, left, top);
     if (in_tv) sx = sy = (tv[3] - tv[1]) / 480.0f, left = tv[0], top = tv[1];
     x = (float(p.x) - left) / sx;
     y = (float(p.y) - top) / sy;
@@ -249,12 +258,8 @@ bool Mapping(float& scale, float& left, float& top) {
     RECT r;
     if (!w || !GetClientRect(w, &r) || r.right <= 0 || r.bottom <= 0) return false;
     float W = float(r.right), H = float(r.bottom);
-    float tv[4];
-    bool wide = cod::Get().widescreen && gpu::g_screen_widen.load() > 1.0f;
-    scale = H / 480.0f;
-    left = wide ? (W - 640 * scale) / 2 : 0;
-    top = 0;
-    if (!wide) scale = W / 640.0f;  // a 4:3 window: the menu fills it (its height's scale is the same)
+    float tv[4], sx;
+    Frame(W, H, sx, scale, left, top);
     if (gpu::TvScreen(tv)) scale = (tv[3] - tv[1]) / 480.0f, left = tv[0], top = tv[1];
     return true;
 }

@@ -9,7 +9,8 @@ struct Settings {
     bool skip_intros = true;   // publisher and studio logos and the opening movie
     bool developer = false;    // the testers' keys: F9 marks a place (a screenshot and where, in logs/marks), F3 the threads
     // display
-    bool widescreen = true;    // the screen at the output's aspect (Hor+), 2D kept in proportion
+    bool widescreen = true;    // the screen at the output's aspect (Hor+), 2D kept in proportion: set each frame from the output
+                               // (wider than 4:3), not a setting
     bool tv_frame = true;      // the 4:3 menus and movies inside an old television on a wide screen
     uint32_t fov = 0;          // horizontal field of view at 4:3 in degrees, 0 the game's
     bool fps_counter = false;

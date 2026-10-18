@@ -137,6 +137,95 @@ Item Slider(const char* label, uint32_t* v, int lo, int hi, int step, const char
     return it;
 }
 
+// --- graphics presets ------------------------------------------------------------------------------------------------
+// Each sets every setting of the Graphics and Effects pages (never the display's: resolution, render scale, frame
+// rate). Very High is everything on; each step down drops what costs the GPU most for what it shows (measured at
+// 2560x1440 on levels 1 and 7, tools/perf_ab.py --paired): High the shadows' Ultra step (~0.9 ms), smooth models
+// (~0.5), the volumetric fog (~0.3), the bounce light and the flashes' shadows; Medium the shadows' High step, the
+// occlusion and contact shadows, the reflections, the floating dust, the soft shadows, SMAA and the lesser touches;
+// Low the shadows down to Low, the clouds with the sun and moon (their sky pass, ~1.8 ms), per-pixel lighting
+// (up to ~1.3), the surface materials, the 4x MSAA and temporal anti-aliasing (~0.8, SMAA stays), the dynamic
+// lights (~0.6) and the water (~0.5); Original everything off: the game as it was, its own textures included.
+enum Preset { kVeryHigh, kHigh, kMedium, kLow, kOriginal, kCustom };
+
+using SBool = bool app::Settings::*;
+using SUint = uint32_t app::Settings::*;
+constexpr SBool kPresetFlags[] = {
+    &app::Settings::smaa, &app::Settings::taa, &app::Settings::bloom, &app::Settings::ao, &app::Settings::contact_shadows,
+    &app::Settings::dynamic_lights, &app::Settings::light_halos, &app::Settings::soft_particles, &app::Settings::heat_haze,
+    &app::Settings::sun_shafts, &app::Settings::aim_dof, &app::Settings::explosion_flash, &app::Settings::damage_shake,
+    &app::Settings::flash_shadows, &app::Settings::character_detail, &app::Settings::weapon_materials,
+    &app::Settings::sharp_distance, &app::Settings::lens_flare, &app::Settings::water, &app::Settings::water_interaction,
+    &app::Settings::snow_tracks, &app::Settings::shockwaves, &app::Settings::animated_fire, &app::Settings::barrel_heat,
+    &app::Settings::wind, &app::Settings::ambient_particles, &app::Settings::lit_smoke, &app::Settings::character_light,
+    &app::Settings::bounce_light, &app::Settings::soft_shadows, &app::Settings::volumetric_fog, &app::Settings::cloud_shadows,
+    &app::Settings::auto_exposure, &app::Settings::color_grade, &app::Settings::film_grain, &app::Settings::hit_reactions,
+    &app::Settings::smooth_models, &app::Settings::reflections, &app::Settings::sun_moon, &app::Settings::clouds,
+    &app::Settings::remaster, &app::Settings::materials, &app::Settings::parallax, &app::Settings::detail,
+    &app::Settings::pixel_lighting, &app::Settings::height_blend};
+constexpr SUint kPresetValues[] = {&app::Settings::aniso, &app::Settings::sharpening, &app::Settings::shadow_quality,
+                                   &app::Settings::specular};
+
+// a preset's values (the settings' own defaults are Very High)
+app::Settings PresetValues(int p) {
+    app::Settings v;
+    v.aniso = 16, v.sharpening = 0, v.shadow_quality = 4, v.specular = 100;
+    for (SBool f : kPresetFlags) v.*f = true;
+    if (p >= kHigh) {
+        v.shadow_quality = 3;
+        v.smooth_models = v.volumetric_fog = v.bounce_light = v.flash_shadows = false;
+    }
+    if (p >= kMedium) {
+        v.shadow_quality = 2, v.aniso = 8;
+        v.smaa = v.ao = v.contact_shadows = v.reflections = v.ambient_particles = v.soft_shadows = false;
+        v.water_interaction = v.light_halos = v.sun_shafts = v.cloud_shadows = v.lit_smoke = false;
+        v.character_detail = v.sharp_distance = false;
+    }
+    if (p >= kLow) {
+        v.shadow_quality = 1, v.aniso = 4;
+        v.taa = false, v.smaa = true;  // (the cheap anti-aliasing kept)
+        v.clouds = v.sun_moon = v.lens_flare = v.pixel_lighting = v.materials = v.parallax = v.detail = false;
+        v.height_blend = v.weapon_materials = v.dynamic_lights = v.water = v.soft_particles = v.heat_haze = false;
+        v.shockwaves = v.aim_dof = v.snow_tracks = false;
+    }
+    if (p >= kOriginal) {
+        for (SBool f : kPresetFlags) v.*f = false;
+        v.shadow_quality = 0, v.aniso = 0;
+    }
+    return v;
+}
+
+}  // namespace
+
+namespace cod::overlay {
+
+int CurrentPreset() {
+    const app::Settings& s = app::Get();
+    for (int p = kVeryHigh; p <= kOriginal; p++) {
+        app::Settings v = PresetValues(p);
+        bool same = true;
+        for (SBool f : kPresetFlags) same = same && s.*f == v.*f;
+        for (SUint f : kPresetValues) same = same && s.*f == v.*f;
+        if (same) return p;
+    }
+    return kCustom;
+}
+
+void ApplyPreset(int p) {
+    if (p < kVeryHigh || p > kOriginal) return;
+    app::Settings& s = app::Get();
+    app::Settings v = PresetValues(p);
+    for (SBool f : kPresetFlags) s.*f = v.*f;
+    for (SUint f : kPresetValues) s.*f = v.*f;
+}
+
+}  // namespace cod::overlay
+
+namespace {
+
+using cod::overlay::ApplyPreset;
+using cod::overlay::CurrentPreset;
+
 std::vector<Page> BuildPages() {
     app::Settings& s = app::Get();
     cod::Settings& c = cod::Get();
@@ -180,8 +269,6 @@ std::vector<Page> BuildPages() {
                                        "The game runs on real time at any frame rate."));
     }
     display.items.push_back(Toggle("V-Sync", &s.vsync));
-    display.items.push_back(Toggle("Widescreen", &c.widescreen,
-                                   "The game at your screen's shape with more to the sides; menus stay in the middle."));
     display.items.push_back(Toggle("Television Frame", &c.tv_frame,
                                    "On a wide screen, the menus and movies play in a 1940s television."));
     // (no field of view setting for now: a wider one broke the first person view; the game's always)
@@ -190,6 +277,28 @@ std::vector<Page> BuildPages() {
     pages.push_back(std::move(display));
 
     Page graphics{"GRAPHICS", {}};
+    {
+        // the preset: Custom when the settings are none of them (stepping goes through the five, not Custom)
+        Item it{"Graphics Preset",
+                [] {
+                    static const char* names[] = {"Very High", "High", "Medium", "Low", "Original", "Custom"};
+                    return std::string(names[CurrentPreset()]);
+                },
+                [](int d) {
+                    int p = CurrentPreset();
+                    p = p == kCustom ? (d > 0 ? kVeryHigh : kOriginal) : (p + d + 5) % 5;
+                    ApplyPreset(p);
+                    Saved();
+                },
+                nullptr,
+                "Every graphics setting at once. Changing any of them makes it Custom."};
+        it.activate = [] {
+            int p = CurrentPreset();
+            ApplyPreset(p == kCustom ? kVeryHigh : (p + 1) % 5);
+            Saved();
+        };
+        graphics.items.push_back(std::move(it));
+    }
     {
         static const uint32_t an[] = {0, 2, 4, 8, 16};
         graphics.items.push_back(Choice("Anisotropic Filter", {"Game", "2x", "4x", "8x", "16x"},

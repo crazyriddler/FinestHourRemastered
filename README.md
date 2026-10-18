@@ -69,10 +69,17 @@ Choose **PC Settings** in the main menu (or press **F10** at any time) for every
 - **Display Mode**: fullscreen, borderless or windowed, any **Resolution**.
 - **Render Scale**: 25% to 200% of the output (supersampling above 100%).
 - **Max Frame Rate**: 30 to 360 FPS or unlimited, **V-Sync**. The game runs in real time at any frame rate.
-- **Widescreen**: any aspect ratio, Hor+. The HUD keeps its proportions at the screen's edges.
+- **Widescreen** follows the resolution: wider than 4:3 is Hor+ (the HUD keeps its proportions at the screen's
+  edges), 4:3 plays the game's own 4:3 screen.
 - **Television Frame**: on a wide screen the 4:3 menus, briefings and movies play inside a 1940s television, through
   a curved CRT tube with scan lines.
 - **Brightness**, **Field of View**, **FPS Counter**, **Anisotropic Filtering** up to 16x, **Sharpening**.
+
+### Graphics presets
+**Very High** (everything on), **High**, **Medium**, **Low** and **Original** set every graphics setting at once; any
+change of your own makes it **Custom**. Each step down drops what costs the GPU most for what it shows (measured at
+2560x1440: about 10.6, 8.4, 6.3, 2.3 and 1.6 ms of GPU time on the first level). Original turns everything off: the
+game's own look and textures. The render scale is never part of a preset: it stays at your 100%.
 
 ### Lighting and shadows
 - **Per-Pixel Lighting**: the game's lighting, computed by its own vertex programs, evaluated again at every pixel:

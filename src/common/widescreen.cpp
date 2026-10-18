@@ -31,7 +31,8 @@ float Aspect() {
     return std::max(float(m.width) / float(m.height), 4.0f / 3.0f);
 }
 
-float Widen() { return Get().widescreen ? Aspect() / (4.0f / 3.0f) : 1.0f; }
+// the screen widened whenever the output is wider than 4:3 (no setting: at 4:3 the game's own 4:3 screen)
+float Widen() { return Aspect() / (4.0f / 3.0f); }
 
 float FovScale(float x) {
     float widest = g_widest.load();

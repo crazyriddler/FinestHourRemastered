@@ -350,8 +350,10 @@ void Command(const std::string& line) {
         char name[40] = {};
         int on = 0;
         if (std::sscanf(line.c_str(), "fx %39s %d", name, &on) == 2) {
-            if (std::string(name) == "shadows") app::Get().shadow_quality = on ? 4 : 0, LOGR("fx: shadows %d", on);
+            if (std::string(name) == "shadows") app::Get().shadow_quality = on == 1 ? 4 : std::clamp(on, 0, 4), LOGR("fx: shadows %d", on);
             else if (std::string(name) == "remaster") app::Get().remaster = on != 0, LOGR("fx: remaster %d", on);
+            // (a preset by its number plus one: 1 Very High, as "fx <name> 1" puts an effect back, 5 Original)
+            else if (std::string(name) == "preset") cod::overlay::ApplyPreset(on - 1), LOGR("fx: preset %d", on - 1);
             else if (std::string(name) == "specular") app::Get().specular = uint32_t(std::max(on, 0)), LOGR("fx: specular %d", on);
             else if (bool* e = Effect(name)) *e = on != 0, LOGR("fx: %s %d", name, on);
             else LOGR("fx: no effect %s", name);
@@ -524,6 +526,8 @@ void Ui(double fps) {
         if (cod::wide::CameraAngles(yaw, pitch)) LOGR("camtrace %.4f %.4f", yaw, pitch);
     }
     pc_input::SetCapture(!cod::wide::FrontEnd());
+    // widescreen is the output's shape: wider than 4:3 (Hor+), or the game's own 4:3
+    cod::Get().widescreen = cod::wide::Widen() > 1.001f;
     // the television around the 4:3 screens: the front end, the loading screens and the movies, not the pause screen
     gpu::g_tv_frame = cod::Get().tv_frame && cod::Get().widescreen && (cod::wide::FrontEnd() || cod::InMovie());
     gpu::g_tv_movies = cod::Get().tv_frame && cod::Get().widescreen;
@@ -549,7 +553,6 @@ const app::GameInfo app::kGame = {
         {
             {"skip_intros", &cod::Get().skip_intros, nullptr},
             {"developer", &cod::Get().developer, nullptr},
-            {"widescreen", &cod::Get().widescreen, nullptr},
             {"tv_frame", &cod::Get().tv_frame, nullptr},
             {"fov", nullptr, &cod::Get().fov},
             {"fps_counter", &cod::Get().fps_counter, nullptr},

@@ -11,5 +11,8 @@ void Draw(double fps);   // render thread, each frame inside ImGui's
 // sections other files add
 void GraphicsExtra();
 void GeneralExtra();
+// graphics presets: 0 Very High, 1 High, 2 Medium, 3 Low, 4 Original, 5 Custom (none of them)
+int CurrentPreset();
+void ApplyPreset(int preset);
 
 }  // namespace cod::overlay

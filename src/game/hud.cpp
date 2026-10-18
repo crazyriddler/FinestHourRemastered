@@ -33,6 +33,7 @@ int g_depth = 0;  // Rt2d renders nest
 // joined where they overlap in height and lie close, decide by their whole extent.
 struct Box {
     float x0, y0, x1, y1;
+    bool line = false;  // a piece of a line of text, or a picture in one: a line's pieces go together, however wide
 };
 struct Placed {
     Box b;
@@ -55,22 +56,29 @@ bool SameRow(const Box& a, const Box& b) {
     return (y_overlap >= least_h * 0.5f && -x_overlap < kRowGap) || (x_overlap > 0 && -y_overlap < kColumnGap);
 }
 
+// a wide piece (a line of text) joins only the pieces of a line: a hint split around its button's picture ("Pull",
+// the picture, "to fire weapon.") stays one line, a long line does not take the HUD's pictures beside it along
+bool Joins(const Box& a, const Box& b) {
+    bool wide = a.x1 - a.x0 > kGroupWidth || b.x1 - b.x0 > kGroupWidth;
+    return !wide || (a.line && b.line);
+}
+
 void NewFrame(uint64_t frame) {
     g_frame = frame;
     g_placed.clear();
     // the rows: small boxes merged while any two touch
     g_rows.clear();
     for (const Box& b : g_seen)
-        if (b.x1 - b.x0 <= kGroupWidth) g_rows.push_back(b);
+        if (b.x1 - b.x0 <= kGroupWidth || b.line) g_rows.push_back(b);
     g_seen.clear();
     for (bool merged = true; merged;) {
         merged = false;
         for (size_t i = 0; i < g_rows.size() && !merged; i++)
             for (size_t j = i + 1; j < g_rows.size(); j++)
-                if (SameRow(g_rows[i], g_rows[j])) {
+                if (SameRow(g_rows[i], g_rows[j]) && Joins(g_rows[i], g_rows[j])) {
                     Box& a = g_rows[i];
                     const Box& b = g_rows[j];
-                    a = {std::min(a.x0, b.x0), std::min(a.y0, b.y0), std::max(a.x1, b.x1), std::max(a.y1, b.y1)};
+                    a = {std::min(a.x0, b.x0), std::min(a.y0, b.y0), std::max(a.x1, b.x1), std::max(a.y1, b.y1), a.line || b.line};
                     g_rows.erase(g_rows.begin() + std::ptrdiff_t(j));
                     merged = true;
                     break;
@@ -129,7 +137,7 @@ bool Layout(const gpu::Draw2D& d_in, float& scale, float& offset) {
         // it is one of its row's boxes (its true place), which keeps the line's pieces of text together: a short
         // line's pieces either side of it would otherwise go each to its own side
         if (d.frame != g_frame) NewFrame(d.frame);
-        if (g_seen.size() < 512) g_seen.push_back({ct - half, d.y0, ct + half, d.y1});
+        if (g_seen.size() < 512) g_seen.push_back({ct - half, d.y0, ct + half, d.y1, true});
         int side = 2;
         float cy = (d.y0 + d.y1) * 0.5f;
         for (const Box& r : g_rows)
@@ -154,7 +162,7 @@ bool Layout(const gpu::Draw2D& d_in, float& scale, float& offset) {
         return true;
     }
     if (d.frame != g_frame) NewFrame(d.frame);
-    Box b{d.x0, d.y0, d.x1, d.y1};
+    Box b{d.x0, d.y0, d.x1, d.y1, narrowed};
     // the crosshair's pieces, and what the game shows under it (a friend's name), stay in the middle on their own:
     // they spread as the player moves and would join the rows beside them
     float cx = (b.x0 + b.x1) * 0.5f, cy = (b.y0 + b.y1) * 0.5f;
@@ -169,7 +177,7 @@ bool Layout(const gpu::Draw2D& d_in, float& scale, float& offset) {
     if (side == 2) {
         float cx = (b.x0 + b.x1) * 0.5f, cy = (b.y0 + b.y1) * 0.5f;
         for (const Box& r : g_rows)
-            if (b.x1 - b.x0 <= kGroupWidth && cx >= r.x0 - 2 && cx <= r.x1 + 2 && cy >= r.y0 - 2 && cy <= r.y1 + 2) {
+            if ((b.x1 - b.x0 <= kGroupWidth || (b.line && r.line)) && cx >= r.x0 - 2 && cx <= r.x1 + 2 && cy >= r.y0 - 2 && cy <= r.y1 + 2) {
                 side = Side(r.x0, r.x1, w);
                 break;
             }

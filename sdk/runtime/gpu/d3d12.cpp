@@ -1260,6 +1260,7 @@ private:
     uint64_t draw_tex0_ = 0;       // the draw's stage 0 texture's content id
     uint64_t game_moon_frame_ = ~0ull;  // the last frame the game drew its own moon sprite (SkyConstants)
     int game_moon_level_ = -1000;        // the level that has shown its own: none of ours there, wherever one looks
+    bool OwnMoonLevel() const { return game_moon_level_ == g_level.load() || g_level.load() == 2; }
     bool recolor_ = false;         // g_recolor_2d asked for the draw: its colour element's new RGB
     uint32_t recolor_argb_ = 0;
     VertexElement recolor_elem_{};
@@ -8721,7 +8722,7 @@ void D3D12Backend::ScenePost() {
             float strength = 0.55f * std::clamp(1.6f - edge, 0.0f, 1.0f) * std::clamp(v[2] * 3, 0.0f, 1.0f) *
                              std::min(light_.direct * 2, 1.0f);
             // (no flare nor shafts from where no moon is drawn: the level's own moon stands elsewhere in its sky)
-            if (game_moon_level_ == g_level.load() || (game_moon_frame_ != ~0ull && frame_ - game_moon_frame_ <= 1)) strength = 0;
+            if (OwnMoonLevel() || (game_moon_frame_ != ~0ull && frame_ - game_moon_frame_ <= 1)) strength = 0;
             pr[4] = nx * 0.5f + 0.5f, pr[5] = 0.5f - ny * 0.5f, pr[6] = strength, pr[7] = float(w) / float(h);
             rays = strength > 0.01f && set.sun_shafts;
             sun_screen_[0] = pr[4], sun_screen_[1] = pr[5], sun_screen_[2] = strength;
@@ -8795,8 +8796,9 @@ bool D3D12Backend::SkyConstants() {
     static const auto t0 = std::chrono::steady_clock::now();
     float t = std::chrono::duration<float>(std::chrono::steady_clock::now() - t0).count();
     float n = std::sqrt(light_.dir[0] * light_.dir[0] + light_.dir[1] * light_.dir[1] + light_.dir[2] * light_.dir[2]);
-    // (none where the level's sky has its own: the moon sprite drawn since the level began)
-    bool own = game_moon_level_ == g_level.load() || (game_moon_frame_ != ~0ull && frame_ - game_moon_frame_ <= 1);
+    // (none where the level's sky has its own: the moon sprite drawn since the level began, or a level known to
+    // have one, level 2's, which it draws only while its own camera looks at it)
+    bool own = OwnMoonLevel() || (game_moon_frame_ != ~0ull && frame_ - game_moon_frame_ <= 1);
     bool sun = set.sun_moon && n > 0.5f && light_.direct > 0 && !own;
     float sw[3] = {light_.dir[0] / std::max(n, 1e-6f), light_.dir[1] / std::max(n, 1e-6f), light_.dir[2] / std::max(n, 1e-6f)};
     // a light from about the horizon or under it (some levels' models are lit nearly level): the sun just over

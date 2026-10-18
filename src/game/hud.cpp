@@ -119,14 +119,15 @@ bool Layout(const gpu::Draw2D& d_in, float& scale, float& offset) {
         d.x0 *= d.widen, d.x1 *= d.widen;
         scale = 1;
     }
-    // the pause screen's key and button pictures, beside its narrowed text: square (they arrive at their 4:3 width,
-    // the screen's units square), their right edge where the narrowed placement puts it, clear of their word
-    if ((d.tag & kBeside) && (d.tag & 0xFF) == kMenu && g_paused && !g_front_end && d.widen > 1.0f && d.bounded) {
+    // the pause screen's key and button pictures: the game places each in the leading spaces of its prompt's text,
+    // measured narrowed as the text is (the place's x + centre, as the text's, on a wider screen). Drawn at their 4:3
+    // size (k), no wider than tall, about the slot's centre a little towards their own word: the slot reaches into
+    // the end of the prompt before it (the pictures' own margins keep them clear, prompts.cpp)
+    if ((d.tag & kBeside) && (d.tag & 0xFF) == kMenu && g_paused && !g_front_end && d.widen >= 1.0f && d.bounded) {
+        constexpr float kShift = 3;
         float cx = (d.x0 + d.x1) * 0.5f;
-        float narrowed = k * k;
-        float right = d.x1 * narrowed + centre + cx * (1 - narrowed);
-        scale = std::min(1.0f, (d.y1 - d.y0) / std::max(d.x1 - d.x0, 1.0f));
-        offset = right - d.x1 * scale;
+        scale = k * std::min(1.0f, (d.y1 - d.y0) / std::max(d.x1 - d.x0, 1.0f));
+        offset = cx + kShift + centre - cx * scale;
         return true;
     }
     // a button's picture in a hint's line in the game: the game places it in the line's gap as it measured the line,

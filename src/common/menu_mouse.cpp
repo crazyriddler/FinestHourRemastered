@@ -627,6 +627,21 @@ void Filter(input::Pad& pad) {
         pad = input::Pad{};
         pad.connected = c;
     };
+    // the pause screen: the game's controls bind B to nothing there (its scripts; its prompts show B for continue and
+    // back) and START leaves it from every page, its question too. B leaves it as well, as Escape does on the keyboard;
+    // still held in the game after, it is not the game's (B crouches there) until let go
+    static bool b_left = false;
+    if (b_left && !cod::Paused()) {
+        if (back) pad.analog[1] = 0;
+        else b_left = false;
+    }
+    auto pause_back = [&] {
+        if (back && cod::Paused() && !cod::wide::FrontEnd() && !cod::InMovie()) {
+            pad.buttons |= 0x10;
+            pad.analog[1] = 0;
+            b_left = true;
+        }
+    };
     static const bool trace = std::getenv("XBE_MENU_TRACE") != nullptr;
     if (trace && any && edge[5]) LOGR("menu: poll main %d sel %d focus %d dialog %d swallow %d up %d down %d accept %d back %d", int(g_main), int(g_main_sel),
                                      int(g_quit_focus), int(g_dialog), int(g_swallow), up, down, accept, back);
@@ -660,10 +675,12 @@ void Filter(input::Pad& pad) {
             g_pc_focus = true;
             hold();
         }
+        pause_back();
         return;
     }
     if (!g_main) {
         g_swallow = false;
+        pause_back();
         return;
     }
     if (g_dialog) {

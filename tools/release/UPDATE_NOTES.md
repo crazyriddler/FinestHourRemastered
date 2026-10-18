@@ -19,6 +19,9 @@ The version installed is in `version.txt` beside the game. Unattended:
 - The world's animated textures now move, as their artists made them: the light caustics on the sewer walls, the
   falling water, the Volga and the rivers, glowing coals, fans and more. The game always ran these animations, but
   RenderWare drew those surfaces without them: their sectors never had the material effects turned on.
+- The pause screen: the key and button pictures are square on wide screens and no longer overlap the prompt before
+  them (at 4:3 too). On the controller, B now leaves the pause screen from any of its pages, as START does: the game
+  showed B for continue and back but never bound it there.
 - Level 4 (the sewers): the white disc under the pipe's splash and the white layer over the waterfall are gone; a
   texture stage that reads no texture now reads black, as on the console.
 - The installer and the updater speak English, French, Italian and Spanish (the system's language), and a new

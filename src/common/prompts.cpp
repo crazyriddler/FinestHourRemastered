@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <string>
@@ -306,6 +307,43 @@ std::string PadIcon(PadButton b, input::Kind kind) {
     return b < pNone ? std::string("pad_") + k + "_" + n[b] : std::string();
 }
 
+// The menus' set (0000 to 0015, 1001 to 1003: the first of kPictures): the console's pictures sit small in their
+// square, and the menus' rows leave them just that room (the pause screen's prompts, a picture between two of them).
+// The pack's fill theirs: drawn at kMenuFill of the square, about its centre.
+constexpr size_t kMenuPictures = 19;
+constexpr float kMenuFill = 0.8f;
+
+bool MenuPicture(uint64_t id) {
+    for (size_t i = 0; i < kMenuPictures; i++)
+        if (kPictures[i].id == id) return true;
+    return false;
+}
+
+// a picture's RGBA at fill of its size about its centre, the rest clear (bilinear, alpha premultiplied while filtered)
+std::vector<uint8_t> Inset(const std::vector<uint8_t>& src, uint32_t size, float fill) {
+    std::vector<uint8_t> out(src.size(), 0);
+    const float inner = float(size) * fill, start = (float(size) - inner) * 0.5f;
+    auto at = [&](int x, int y, int c) {
+        x = std::clamp(x, 0, int(size) - 1), y = std::clamp(y, 0, int(size) - 1);
+        const uint8_t* p = &src[(size_t(y) * size + size_t(x)) * 4];
+        return c == 3 ? float(p[3]) : float(p[c]) * float(p[3]) / 255.0f;
+    };
+    for (uint32_t y = 0; y < size; y++)
+        for (uint32_t x = 0; x < size; x++) {
+            float u = (float(x) + 0.5f - start) / fill - 0.5f, v = (float(y) + 0.5f - start) / fill - 0.5f;
+            if (u < -0.5f || v < -0.5f || u > float(size) - 0.5f || v > float(size) - 0.5f) continue;
+            int x0 = int(std::floor(u)), y0 = int(std::floor(v));
+            float fx = u - float(x0), fy = v - float(y0), px[4];
+            for (int c = 0; c < 4; c++)
+                px[c] = (at(x0, y0, c) * (1 - fx) + at(x0 + 1, y0, c) * fx) * (1 - fy) +
+                        (at(x0, y0 + 1, c) * (1 - fx) + at(x0 + 1, y0 + 1, c) * fx) * fy;
+            uint8_t* d = &out[(size_t(y) * size + x) * 4];
+            for (int c = 0; c < 3; c++) d[c] = uint8_t(std::clamp(px[3] > 0 ? px[c] * 255.0f / px[3] : 0.0f, 0.0f, 255.0f));
+            d[3] = uint8_t(std::clamp(px[3], 0.0f, 255.0f));
+        }
+    return out;
+}
+
 int KeyOf(int action) {
     const pc_input::Bindings& b = pc_input::Keys();
     return b.key[action][0] ? b.key[action][0] : b.key[action][1];
@@ -363,6 +401,7 @@ void Update() {
             o.w = o.h = kSize;
             if (!icon.empty()) o.rgba = Icon(icon, kSize);
             if (o.rgba.empty()) o.rgba = Cap(text, kSize);
+            if (MenuPicture(p.id)) o.rgba = Inset(o.rgba, kSize, kMenuFill);
             out.push_back(std::move(o));
         }
     } else if (kind != input::kNoController) {
@@ -380,6 +419,7 @@ void Update() {
             PadButton b = set.pad_layout == 0 ? src->modern : src->classic;
             o.rgba = Icon(PadIcon(b, kind), kSize);
             if (o.rgba.empty()) o.rgba = PadCap(b, kind, kSize);
+            if (!o.rgba.empty() && MenuPicture(p.id)) o.rgba = Inset(o.rgba, kSize, kMenuFill);
             if (!o.rgba.empty()) out.push_back(std::move(o));
         }
     }

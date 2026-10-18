@@ -87,13 +87,13 @@ Choose **PC Settings** in the main menu (or press **F10** at any time) for every
 ### Graphics presets
 **Very High** (everything on), **High**, **Medium**, **Low** and **Original** set every graphics setting at once; any
 change of your own makes it **Custom**. Each step down drops what costs the GPU most for what it shows (measured at
-2560x1440: about 10.6, 8.4, 6.3, 2.3 and 1.6 ms of GPU time on the first level). Original turns everything off: the
+2560x1440: about 9.2, 8.6, 6.2, 3.6 and 2.1 ms of GPU time on the first level). Original turns everything off: the
 game's own look and textures. The render scale is never part of a preset: it stays at your 100%.
 
 ### Lighting and shadows
 - **Per-Pixel Lighting**: the game's lighting, computed by its own vertex programs, evaluated again at every pixel:
   smooth light on characters and models, no facets.
-- **Real-time Shadows** (Off to Ultra): the level's sun or moon casts shadows from everything solid, characters,
+- **Real-time Shadows** (Off to High): the level's sun or moon casts shadows from everything solid, characters,
   vehicles, foliage and fences included, in up to four stable cascades. **Soft Shadows** with contact hardening.
 - **Dynamic Lights**: every muzzle flash, tracer, fire, explosion and spark lights the scene around it, in its own
   colour; machine-gun tracers light the ground along their flight. **Muzzle Flash Shadows**: the nearest shooters'

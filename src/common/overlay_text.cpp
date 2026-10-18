@@ -26,7 +26,6 @@ constexpr Row kRows[] = {
     {"Low", "Bas", "Bassa", "Bajo"},
     {"Medium", "Moyen", "Media", "Medio"},
     {"High", "Élevé", "Alta", "Alto"},
-    {"Ultra", "Ultra", "Ultra", "Ultra"},
     {"Very High", "Très élevé", "Molto alta", "Muy alto"},
     {"Original", "Original", "Originale", "Original"},
     {"Custom", "Personnalisé", "Personalizzata", "Personalizado"},

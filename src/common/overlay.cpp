@@ -23,6 +23,7 @@
 #include <imgui.h>
 
 #include "app/app.h"
+#include "core/log.h"
 #include "common/cod.h"
 #include "common/overlay.h"
 #include "common/widescreen.h"
@@ -169,10 +170,10 @@ constexpr SUint kPresetValues[] = {&app::Settings::aniso, &app::Settings::sharpe
 // a preset's values (the settings' own defaults are Very High)
 app::Settings PresetValues(int p) {
     app::Settings v;
-    v.aniso = 16, v.sharpening = 0, v.shadow_quality = 4, v.specular = 100;
+    v.aniso = 16, v.sharpening = 0, v.shadow_quality = 3, v.specular = 100;
     for (SBool f : kPresetFlags) v.*f = true;
     if (p >= kHigh) {
-        v.shadow_quality = 3;
+        v.shadow_quality = 2;
         v.smooth_models = v.volumetric_fog = v.bounce_light = v.flash_shadows = false;
     }
     if (p >= kMedium) {
@@ -209,6 +210,26 @@ int CurrentPreset() {
         if (same) return p;
     }
     return kCustom;
+}
+
+// Settings saved before the shadows' Ultra went (it cost much for little): a file on one of the presets then takes
+// that preset now (Very High's shadows High, High's and Medium's Medium), others keep theirs with Ultra shadows High
+void MigrateGraphics(uint32_t saved_shadows) {
+    constexpr uint32_t kOldShadows[] = {4, 3, 2, 1, 0};  // Very High to Original's then
+    const app::Settings& s = app::Get();
+    for (int p = kVeryHigh; p <= kOriginal; p++) {
+        app::Settings v = PresetValues(p);
+        bool same = saved_shadows == kOldShadows[p];
+        for (SBool f : kPresetFlags) same = same && s.*f == v.*f;
+        for (SUint f : kPresetValues) same = same && (f == &app::Settings::shadow_quality || s.*f == v.*f);
+        if (same) {
+            ApplyPreset(p);
+            LOGR("settings: from before the shadows' Ultra went: preset %d, shadows %u", p, app::Get().shadow_quality);
+            return;
+        }
+    }
+    app::Get().shadow_quality = std::min<uint32_t>(saved_shadows, 3);
+    LOGR("settings: from before the shadows' Ultra went: custom, shadows %u", app::Get().shadow_quality);
 }
 
 void ApplyPreset(int p) {
@@ -309,8 +330,8 @@ std::vector<Page> BuildPages() {
                                         },
                                         [&s](int i) { s.aniso = an[i]; }, "Textures stay sharp at a slant."));
     }
-    graphics.items.push_back(Choice("Shadows", {"Off", "Low", "Medium", "High", "Ultra"},
-                                    [&s] { return int(std::min<uint32_t>(s.shadow_quality, 4)); },
+    graphics.items.push_back(Choice("Shadows", {"Off", "Low", "Medium", "High"},
+                                    [&s] { return int(std::min<uint32_t>(s.shadow_quality, 3)); },
                                     [&s](int i) { s.shadow_quality = uint32_t(i); },
                                     "Real time shadows from the scene's main light: sharper and further with each step."));
     graphics.items.push_back(Toggle("Anti-Aliasing", &s.taa, "4x MSAA and temporal anti-aliasing: smooth edges, fences and foliage."));

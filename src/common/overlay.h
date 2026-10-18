@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 // the settings overlay (overlay.cpp)
 namespace cod::overlay {
 
@@ -14,5 +15,6 @@ void GeneralExtra();
 // graphics presets: 0 Very High, 1 High, 2 Medium, 3 Low, 4 Original, 5 Custom (none of them)
 int CurrentPreset();
 void ApplyPreset(int preset);
+void MigrateGraphics(uint32_t saved_shadows);  // settings saved before the shadows' Ultra went
 
 }  // namespace cod::overlay

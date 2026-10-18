@@ -31,6 +31,8 @@
 #include <mutex>
 #include <cstdlib>
 
+#include <toml++/toml.hpp>
+
 namespace cod {
 bool InMenu() { return wide::FrontEnd() || Paused() || InMovie(); }
 
@@ -351,7 +353,7 @@ void Command(const std::string& line) {
         char name[40] = {};
         int on = 0;
         if (std::sscanf(line.c_str(), "fx %39s %d", name, &on) == 2) {
-            if (std::string(name) == "shadows") app::Get().shadow_quality = on == 1 ? 4 : std::clamp(on, 0, 4), LOGR("fx: shadows %d", on);
+            if (std::string(name) == "shadows") app::Get().shadow_quality = on == 1 ? 3 : std::clamp(on, 0, 3), LOGR("fx: shadows %d", on);
             else if (std::string(name) == "remaster") app::Get().remaster = on != 0, LOGR("fx: remaster %d", on);
             // (a preset by its number plus one: 1 Very High, as "fx <name> 1" puts an effect back, 5 Original)
             else if (std::string(name) == "preset") cod::overlay::ApplyPreset(on - 1), LOGR("fx: preset %d", on - 1);
@@ -608,6 +610,26 @@ void Ui(double fps) {
 
 }  // namespace
 
+// The settings file's own version: 1, the shadows without Ultra (older files' graphics move to the presets as they
+// are now, overlay.cpp's MigrateGraphics)
+namespace {
+
+constexpr int64_t kGraphicsVersion = 1;
+
+void LoadSettings(const void* table) {
+    pc_input::Load(table);
+    const toml::table& t = *static_cast<const toml::table*>(table);
+    if (t["graphics_version"].value_or(int64_t(0)) < kGraphicsVersion)
+        cod::overlay::MigrateGraphics(uint32_t(t["shadow_quality"].value_or(int64_t(app::Get().shadow_quality))));
+}
+
+void SaveSettings(void* table) {
+    pc_input::Save(table);
+    static_cast<toml::table*>(table)->insert_or_assign("graphics_version", kGraphicsVersion);
+}
+
+}  // namespace
+
 // what the runtime asks of the game; strings must be set, hooks may stay null
 const app::GameInfo app::kGame = {
     .title = L"Finest Hour Remastered",
@@ -639,8 +661,8 @@ const app::GameInfo app::kGame = {
             {"invert_stick_y", &cod::Get().invert_stick_y, nullptr},
             {"look_acceleration", &cod::Get().look_acceleration, nullptr},
         },
-    .load = pc_input::Load,
-    .save = pc_input::Save,
+    .load = LoadSettings,
+    .save = SaveSettings,
     .init =
         [] {
             cod::wide::Update();

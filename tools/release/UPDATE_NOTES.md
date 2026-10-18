@@ -22,6 +22,9 @@ The version installed is in `version.txt` beside the game. Unattended:
 - The pause screen: the key and button pictures are square on wide screens and no longer overlap the prompt before
   them (at 4:3 too). On the controller, B now leaves the pause screen from any of its pages, as START does: the game
   showed B for continue and back but never bound it there.
+- Shadows go from Off to High: Ultra is gone (it cost a lot of GPU time for little difference). The presets now set
+  High shadows on Very High, Medium on High and Medium, Low on Low. Your settings move over by themselves: a preset
+  stays that preset with its new shadows, and Ultra shadows in your own settings become High.
 - Level 4 (the sewers): the white disc under the pipe's splash and the white layer over the waterfall are gone; a
   texture stage that reads no texture now reads black, as on the console.
 - The installer and the updater speak English, French, Italian and Spanish (the system's language), and a new

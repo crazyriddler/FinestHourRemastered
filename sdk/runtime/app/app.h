@@ -30,7 +30,7 @@ struct Settings {
     bool bloom = true;               // what is brighter than white glows
     bool ao = true;                  // screen space ambient occlusion
     bool contact_shadows = true;     // short screen space shadows from the main light
-    uint32_t shadow_quality = 4;     // the main light's shadow maps: 0 off, 1 low, 2 medium, 3 high, 4 ultra
+    uint32_t shadow_quality = 3;     // the main light's shadow maps: 0 off, 1 low, 2 medium, 3 high
     bool dynamic_lights = true;      // muzzle flashes, tracers, fire and explosions light what is around them
     bool light_halos = true;         // the air glows about those lights
     bool soft_particles = true;      // smoke, dust and fire fade where they meet the scene

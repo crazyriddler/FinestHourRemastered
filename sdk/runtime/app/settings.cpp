@@ -115,7 +115,7 @@ void Load() {
         s.normal_green = float(t["normal_green"].value_or(double(s.normal_green)));
     }
     s.sharpening = std::min<uint32_t>(t["sharpening"].value_or(s.sharpening), 10);
-    s.shadow_quality = std::min<uint32_t>(t["shadow_quality"].value_or(s.shadow_quality), 4);
+    s.shadow_quality = std::min<uint32_t>(t["shadow_quality"].value_or(s.shadow_quality), 3);
     s.brightness = std::clamp<uint32_t>(t["brightness"].value_or(s.brightness), 50, 200);
     s.join_ip = t["join_ip"].value_or(s.join_ip);
     for (const Option& o : kGame.options) {

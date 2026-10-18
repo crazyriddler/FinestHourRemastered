@@ -274,3 +274,10 @@ XPP_MemoryUnitType          = 0x2D25C8
 # argument locations in API order for functions a link time code generated library compiled with another
 # convention: a register (eax ebx ecx edx esi edi ebp) or "stack" for the next stack slot, which the callee pops
 [abi]
+
+# The game's job thread (sub_00068D90) waits for work by reading its queue (0x348168) in a tight loop: on the Xbox it
+# shared the one core by time slices, on a PC it keeps a core busy all game. The path taken with nothing queued sleeps
+# a moment before looking again (src/game/jobs.cpp)
+[[hook]]
+at = 0x691CF
+call = "cod_job_thread_idle"

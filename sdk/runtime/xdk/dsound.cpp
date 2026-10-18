@@ -11,6 +11,7 @@
 
 #include "audio/audio.h"
 #include "xbe/xbe.h"
+#include "xdk/dsound.h"
 #include "xdk/hle.h"
 #include "xdk/layout.h"
 
@@ -590,6 +591,16 @@ HLE_STDCALL(IDirectSound_GetOutputLevels, 3) {
 HLE_STDCALL(DirectSoundCreateBuffer, 2) { return NewBuffer(a[0], a[1]); }
 HLE_STDCALL(IDirectSound_CreateSoundBuffer, 4) { return NewBuffer(a[1], a[2]); }
 
+// A title's sound played again (xdk/dsound.h): the next one played after RememberNextSound, its buffer, region, rate
+// and volume
+struct Remembered {
+    uint32_t obj = 0, start = 0, len = 0, freq = 0;
+    float volume = 1;
+};
+static std::atomic<double> g_remember_until{0};
+static Remembered g_remembered;  // (g_lock)
+static double SteadyNow() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
+
 #define BUFFER(name, nargs)                                 \
     static uint32_t buf_##name(Voice& v, const Args& a);    \
     HLE_STDCALL(IDirectSoundBuffer_##name, nargs) {         \
@@ -624,6 +635,10 @@ BUFFER(SetBufferData, 3) {
     return 0;
 }
 BUFFER(Play, 4) {
+    if (g_remember_until.load() && SteadyNow() < g_remember_until.load()) {
+        g_remembered = {v.obj, v.play_start, v.play_len, v.freq, v.volume};
+        g_remember_until = 0;
+    }
     v.playing = true;
     v.looping = a[3] & 1;
     if (a[3] & 2) v.pos = 0;
@@ -903,3 +918,29 @@ STREAM(SetPosition, 5) {
 }
 STREAM(SetVelocity, 5) { return 0; }
 STREAM(SetI3DL2Source, 3) { return 0; }
+
+namespace xdk::dsound {
+
+void RememberNextSound() { g_remember_until = SteadyNow() + 0.25; }
+
+void ReplayRemembered() {
+    std::lock_guard<std::recursive_mutex> lock(g_lock);
+    const Remembered r = g_remembered;
+    auto it = g_voices.find(r.obj);
+    if (!r.len || it == g_voices.end()) return;
+    Voice& v = it->second;
+    if (r.start > v.bytes || r.len > v.bytes - r.start) return;
+    v.play_start = r.start;
+    v.play_len = v.loop_len = r.len;
+    v.loop_start = 0;
+    v.pos = 0;
+    v.block = -1;
+    v.freq = r.freq;
+    v.volume = r.volume;
+    v.looping = false;
+    v.paused = false;
+    v.sync = false;
+    v.playing = true;
+}
+
+}  // namespace xdk::dsound

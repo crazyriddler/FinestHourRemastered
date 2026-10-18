@@ -7226,7 +7226,8 @@ void D3D12Backend::DrawSplashes(Target& rt) {
     cb[20] = inv[4], cb[21] = inv[5], cb[22] = inv[6], cb[23] = cam_max_z_;
     float glow = std::clamp(0.05f + light_.ambient * 0.15f + light_.direct * 0.08f, 0.05f, 0.16f);
     cb[24] = cam_proj_[10], cb[25] = cam_proj_[14], cb[26] = glow, cb[27] = world_depth_saved_ ? 1.0f : 0.0f;
-    if (std::getenv("XBE_SPLASH_RED")) cb[27] = 10;  // tests: the squares red
+    static const bool red = std::getenv("XBE_SPLASH_RED") != nullptr;
+    if (red) cb[27] = 10;  // tests: the squares red
     for (size_t i = 0; i < count; i++) {
         const Splash& s = splashes_[i];
         float* o = cb.data() + 28 + i * 8;

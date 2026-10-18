@@ -31,6 +31,10 @@ The version installed is in `version.txt` beside the game. Unattended:
 - The updater no longer stops at "Cannot write d3dcompiler_47.dll": files already up to date are left alone, and a
   game still running from the folder (even without its window) is closed first.
 - A frozen game's log now tells more of where it stopped, for reports.
+- Much less CPU in play: the game's background loading thread kept a whole core busy waiting for work (harmless on
+  the Xbox, not on a laptop or a handheld). It now rests while there is nothing to load: at a 60 FPS cap the game
+  went from about 140% of a core to about 40%.
+- The main menu's Quit Game row makes the menu's move sound like the other rows.
 - Level 4 (the sewers): the white disc under the pipe's splash and the white layer over the waterfall are gone; a
   texture stage that reads no texture now reads black, as on the console.
 - The installer and the updater speak English, French, Italian and Spanish (the system's language), and a new

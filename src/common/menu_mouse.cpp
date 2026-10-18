@@ -32,6 +32,7 @@
 #include "common/overlay.h"
 #include "common/overlay_text.h"
 #include "gpu/backend.h"
+#include "xdk/dsound.h"
 
 namespace cod::menu_mouse {
 namespace {
@@ -297,7 +298,17 @@ bool g_left_was = false;
 
 }  // namespace
 
+// The Quit row taking the selection or giving it back sounds as the game's rows do: the game's move sound, as it last
+// played it (the row is the port's: the game has nothing to play for it)
+void QuitSound() {
+    static bool was = false;
+    const bool now = g_main && g_quit_focus;
+    if (now != was && g_main && !g_dialog) xdk::dsound::ReplayRemembered();
+    was = now;
+}
+
 void Update() {
+    QuitSound();
     const bool menu = (cod::wide::FrontEnd() || cod::Paused()) && !cod::InMovie();
     HWND w = static_cast<HWND>(app::Window());
     bool testing = ImGui::GetTime() < g_test_until;
@@ -457,6 +468,7 @@ void Update() {
         (m.selected != g_pressed_from || now - g_last_press > 0.25)) {
         if (g_target != m.selected) {
             input::PressButtons(g_target > m.selected ? 0x2 : 0x1, 40);
+            if (g_main) xdk::dsound::RememberNextSound();
             g_pressed_from = m.selected;
             g_last_press = now;
         } else {
@@ -709,7 +721,10 @@ void Filter(input::Pad& pad) {
     if (edge[1] && g_main_sel == 3) {
         g_quit_focus = true;
         hold();
+        return;
     }
+    // a move of the game's own: its sound, for the Quit row's (QuitSound)
+    if (edge[0] || edge[1]) xdk::dsound::RememberNextSound();
 }
 
 void TestMouse(float x, float y, bool click) {

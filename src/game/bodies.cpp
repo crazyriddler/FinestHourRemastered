@@ -152,7 +152,8 @@ Body* BodyOf(uint32_t h) {
     if (it != g_bodies.end()) return &it->second;
     if (!Soldier(h)) return nullptr;
     static int surveyed = 0;
-    if (std::getenv("XBE_TREE_SURVEY") && surveyed++ < 1) {
+    static const bool survey = std::getenv("XBE_TREE_SURVEY") != nullptr;
+    if (survey && surveyed++ < 1) {
         uint32_t pf = R32(h + 0x14);
         LOGR("tree: hierarchy %08X parent frame %08X its root %08X", h, pf, pf ? R32(pf + 0xA0) : 0);
         if (pf) TreeSurvey(R32(pf + 0xA0), 0);

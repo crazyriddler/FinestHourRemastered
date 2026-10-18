@@ -28,6 +28,9 @@ The version installed is in `version.txt` beside the game. Unattended:
 - New HUD options (PC Settings, Display): Hit Markers, Compass, Stance and Crosshair can each be hidden, with the
   original or the remastered graphics (a tank's sight always stays).
 - PC Settings opened from the pause screen on a wide screen are inside the television, as from the main menu.
+- The updater no longer stops at "Cannot write d3dcompiler_47.dll": files already up to date are left alone, and a
+  game still running from the folder (even without its window) is closed first.
+- A frozen game's log now tells more of where it stopped, for reports.
 - Level 4 (the sewers): the white disc under the pipe's splash and the white layer over the waterfall are gone; a
   texture stage that reads no texture now reads black, as on the console.
 - The installer and the updater speak English, French, Italian and Spanish (the system's language), and a new

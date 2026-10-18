@@ -147,20 +147,22 @@ void Watchdog() {
         }
         if (told || now == 0 || std::chrono::steady_clock::now() - since < std::chrono::seconds(10)) continue;
         told = true;
-        // the exe's base (its addresses below map to the guest's functions through it), and three looks at the
-        // threads a second and a half apart: a thread caught in a loop shows the loop's functions in each
+        // the exe's base (its addresses below map to the guest's functions through it); the guest threads' own
+        // stacks first (the game's return addresses), then four looks at the host threads 0.3 s apart: a thread
+        // caught in a loop shows the loop's functions in each, written before a player closes the game
         LOGR("watchdog: no frame shown for 10 s (after %llu), the exe at %p, the threads:", (unsigned long long)now,
              static_cast<void*>(GetModuleHandleW(nullptr)));
-        for (int look = 0; look < 3; look++) {
-            if (look) Sleep(1500), LOGR("watchdog: look %d", look + 1);
-            LogHostStacks();
-        }
         for (auto& t : kernel::Threads())
             if (t->ctx) {
                 LOGR("watchdog: guest thread %X", t->id);
                 kernel::LogGuestStack(*t->ctx, 24);
             }
         logx::Flush();
+        for (int look = 0; look < 4; look++) {
+            if (look) Sleep(300), LOGR("watchdog: look %d", look + 1);
+            LogHostStacks();
+            logx::Flush();
+        }
     }
 }
 

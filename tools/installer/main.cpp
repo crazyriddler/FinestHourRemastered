@@ -16,6 +16,7 @@
 #include <shlobj.h>
 #include <shobjidl.h>
 #include <shellapi.h>
+#include <tlhelp32.h>
 #include <wincodec.h>
 #include <wrl/client.h>
 
@@ -197,6 +198,12 @@ constexpr Row kStrings[] = {
      "Questo programma non contiene un aggiornamento: scaricalo di nuovo.",
      "Este programa no lleva ninguna actualización dentro: vuelve a descargarlo."},
     {"Cannot write ", "Impossible d'écrire ", "Impossibile scrivere ", "No se puede escribir "},
+    {"Closing Finest Hour Remastered...", "Fermeture de Finest Hour Remastered...", "Chiusura di Finest Hour Remastered...",
+     "Cerrando Finest Hour Remastered..."},
+    {"Finest Hour Remastered is running from this folder: close it, then try again.",
+     "Finest Hour Remastered est ouvert depuis ce dossier : fermez-le, puis réessayez.",
+     "Finest Hour Remastered è aperto da questa cartella: chiudilo, poi riprova.",
+     "Finest Hour Remastered está abierto desde esta carpeta: ciérralo y vuelve a intentarlo."},
     {"The folder cannot be made: ", "Impossible de créer le dossier : ", "Impossibile creare la cartella: ",
      "No se puede crear la carpeta: "},
 };
@@ -568,8 +575,52 @@ std::string InstalledVersion(const fs::path& dir) {
 
 // the update written into an installation: its files, an earlier version's left overs gone, version.txt. check: the
 // base files it leaves alone compared by size first (g_differ: those not as the release's)
+// the game running from the folder (its exe of today or the first release's): its files are in use. close: ended
+// (a game left running without its window, or the player's: the update was asked for), true while one still runs
+bool GameRunningIn(const fs::path& folder, bool close = false) {
+    std::error_code ec;
+    const fs::path want = fs::weakly_canonical(folder, ec);
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) return false;
+    bool found = false;
+    PROCESSENTRY32W pe{sizeof(pe)};
+    for (BOOL ok = Process32FirstW(snap, &pe); ok && !found; ok = Process32NextW(snap, &pe)) {
+        if (_wcsicmp(pe.szExeFile, kExe) != 0 && _wcsicmp(pe.szExeFile, L"FinestHourRemastered.exe") != 0) continue;
+        HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID);
+        if (!h) continue;
+        wchar_t path[MAX_PATH * 2];
+        DWORD n = DWORD(std::size(path));
+        if (QueryFullProcessImageNameW(h, 0, path, &n)) {
+            fs::path dir = fs::weakly_canonical(fs::path(path).parent_path(), ec);
+            found = _wcsicmp(dir.c_str(), want.c_str()) == 0;
+        }
+        CloseHandle(h);
+        if (found && close) {
+            if (HANDLE k = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pe.th32ProcessID)) {
+                Log(T("Closing Finest Hour Remastered..."));
+                if (TerminateProcess(k, 0) && WaitForSingleObject(k, 10000) == WAIT_OBJECT_0) found = false;
+                CloseHandle(k);
+            }
+        }
+    }
+    CloseHandle(snap);
+    return found;
+}
+
+// a file's SHA-1 as the update lists it, empty when it cannot be read
+std::string FileSha1(const fs::path& p) {
+    std::ifstream f(p, std::ios::binary);
+    if (!f) return {};
+    std::vector<uint8_t> data((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    return Sha1(data);
+}
+
 bool ApplyPatch(const fs::path& target, bool check, const std::function<bool(uint64_t)>& step, std::string& err) {
     std::error_code ec;
+    if (GameRunningIn(target, true)) {
+        err = T("Finest Hour Remastered is running from this folder: close it, then try again.");
+        return false;
+    }
     if (check) {
         Log(T("Checking the installed files..."));
         g_differ = 0;
@@ -581,6 +632,14 @@ bool ApplyPatch(const fs::path& target, bool check, const std::function<bool(uin
     for (const PatchFile& pf : g_patch.files) {
         fs::path to = target / fs::path(Widen(pf.path));
         fs::create_directories(to.parent_path(), ec);
+        // the same file already there (the runtime's DLL, the documents): left as it is
+        if (fs::file_size(to, ec) == pf.size && !ec && FileSha1(to) == pf.sha1) {
+            if (!step(pf.size)) {
+                err = T("Cancelled.");
+                return false;
+            }
+            continue;
+        }
         // written beside, then put in place: a file in use or a full disk leaves the old one whole
         fs::path tmp = to;
         tmp += L".new";
@@ -591,10 +650,17 @@ bool ApplyPatch(const fs::path& target, bool check, const std::function<bool(uin
         }
         bool ok = std::fwrite(g_patch.data.data() + pf.at, 1, size_t(pf.size), o) == pf.size;
         ok = std::fclose(o) == 0 && ok;
-        if (ok) fs::rename(tmp, to, ec), ok = !ec;
+        // put in place: a read-only file made writable, a file a scanner holds for a moment tried again
+        std::error_code rec;
+        for (int attempt = 0; ok && attempt < 6; attempt++) {
+            if (attempt) SetFileAttributesW(to.c_str(), FILE_ATTRIBUTE_NORMAL), Sleep(500);
+            fs::rename(tmp, to, rec);
+            if (!rec) break;
+        }
+        if (ok && rec) ok = false;
         if (!ok) {
             fs::remove(tmp, ec);
-            err = T("Cannot write ") + pf.path;
+            err = T("Cannot write ") + pf.path + (rec ? " (" + rec.message() + ")" : std::string());
             return false;
         }
         if (!step(pf.size)) {

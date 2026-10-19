@@ -31,6 +31,7 @@ import tarfile
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BUILD = os.path.join(ROOT, "out", "build", "release")
 PACK = os.path.join(ROOT, "work", "remaster", "pack")
+BAKE = os.path.join(ROOT, "work", "bake", "out")  # the levels' baked lighting (tools/bake): bake/lvNN.bake, lvNN.refl
 OUT = os.path.join(os.path.dirname(ROOT), "release")
 EXE = "CODFH.exe"  # its own name: the game starts itself again under it (a title launch)
 PART = 1900 * 1024 * 1024
@@ -55,10 +56,9 @@ keyboard_mouse = true
 language = 1
 mouse_sensitivity = 100
 pad_layout = 0
-render_percent = 100
-shadow_quality = 4
 sharpening = 0
 skip_intros = false
+graphics_version = 3
 """
 
 
@@ -87,13 +87,17 @@ def defaults_from_user():
         if l.startswith("["):  # the key bindings: the defaults (the file's names are the author's keyboard's)
             break
         k = l.split("=")[0].strip()
-        if k in ("width", "height", "join_ip", "keys_version", "developer"):
+        # (and settings the game no longer has: the render scale, the old anti-aliasing switches)
+        # (and the graphics: the game's own defaults, Very High as this version has it, graphics_version below)
+        if k in ("width", "height", "join_ip", "keys_version", "developer", "render_percent", "taa", "smaa", "shadow_quality",
+                 "graphics_version"):
             continue
         if k == "language":
             l = "language = 1"
         if k == "skip_intros":
             l = "skip_intros = false"  # (the publishers' logos and the opening movie shown, as the game first starts)
         lines.append(l)
+    lines.append("graphics_version = 3")
     return "\n".join(lines) + "\n"
 
 
@@ -108,6 +112,8 @@ def stage_list(cache_all):
         sys.exit("the Windows SDK's d3dcompiler_47.dll is needed: " + sdk)
     items.append((sdk, "d3dcompiler_47.dll"))
     items += [(s, os.path.join("remaster", r)) for s, r in files_of(PACK, PACK_PARTS)]
+    if os.path.isdir(BAKE):
+        items += [(os.path.join(BAKE, n), os.path.join("bake", n)) for n in sorted(os.listdir(BAKE)) if n.endswith((".bake", ".refl"))]
     cache = os.path.join(BUILD, "shadercache")
     names = sorted(os.listdir(cache)) if cache_all else CACHE_ANY
     items += [(s, os.path.join("shadercache", r)) for s, r in files_of(cache, names)]

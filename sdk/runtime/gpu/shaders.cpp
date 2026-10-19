@@ -17,12 +17,17 @@ namespace gpu {
 namespace {
 
 std::string F(const char* fmt, ...) {
-    char buf[1024];
+    // (as long as it comes out: a fixed buffer cut a long block short)
     va_list ap;
     va_start(ap, fmt);
-    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_list again;
+    va_copy(again, ap);
+    int n = vsnprintf(nullptr, 0, fmt, ap);
     va_end(ap);
-    return buf;
+    std::string out(size_t(n > 0 ? n : 0), '\0');
+    if (n > 0) vsnprintf(out.data(), size_t(n) + 1, fmt, again);
+    va_end(again);
+    return out;
 }
 
 const char* kCommonHead = R"(
@@ -297,7 +302,6 @@ const char* kVsEpilogue = R"(
     q.w = p.w;
     o.pos = q;
     o.cpos = q;
-    o.pos.xy += jitter.xy * q.w;
     if (jitter.w > 0) o.pos.z = o.pos.w * jitter.w;  // a sky piece's own depth (d3d12.cpp sky_phase_)
     o.d0 = saturate(oD0);
     o.d1 = saturate(oD1);
@@ -557,15 +561,6 @@ float2 flowuv(float2 u) {
 }
 void alphatest(inout float a) {
     int f = (int)misc.y;
-    // multisampled (jitter.z, d3d12.cpp kA2cKey): past the reference by under a pixel's change, partly covered; the
-    // alpha out is the coverage (alpha to coverage), a cut out's edge smooth
-    if (jitter.z > 0 && (f == 4 || f == 6)) {
-        float d = a * 255 - misc.x;
-        float cv = saturate(d / max(fwidth(d), 1e-3) + 0.5);
-        if (cv <= 0) discard;
-        a = cv;
-        return;
-    }
     int v = (int)round(a * 255), r = (int)misc.x;
     bool ok = f == 0 ? false : f == 1 ? v < r : f == 2 ? v == r : f == 3 ? v <= r : f == 4 ? v > r : f == 5 ? v != r : f == 6 ? v >= r : true;
     if (!ok) discard;
@@ -1198,7 +1193,6 @@ float4 Screen(float3 P) {
     float3 p = h.xyz * (1.0 / w) + c[(int)tess2.x].xyz;
     p.x = p.x * layout2d.x + layout2d.y;
     float4 q = float4(p.x * 2 / surf.x - 1, 1 - p.y * 2 / surf.y, p.z * surf.z, 1);
-    q.xy += jitter.xy;
     q.xyz *= w;
     q.w = w;
     return q;
@@ -1272,7 +1266,6 @@ VOut ds(PnPatch pt, float3 uvw : SV_DomainLocation, const OutputPatch<VOut, 3> v
         float4 q = Screen(P);
         o.pos = q;
         o.cpos = q;
-        o.cpos.xy -= jitter.xy * q.w;
         o.pv = float4(P, 2);
     }
     return o;
@@ -1705,12 +1698,16 @@ std::string MaterialSetup(int i, const std::string& uv) {
     s += F("if (mtl[2].y > 0 && mtl[0].w > 0 && mFade > 0) {\n"
            "    float3 vt = float3(dot(mV, mT), dot(mV, mB), dot(mV, mN0));\n"
            "    float fade = mFade;\n"
-           "    float steps = lerp(10, 40, 1 - saturate(vt.z));\n"
            "    float uvw = sqrt((dot(mU1, mU1) + dot(mU2, mU2)) / max(dot(mDx, mDx) + dot(mDy, mDy), 1e-12));\n"
            "    float depth = min(mtl[2].y * mtl[3].z * uvw, mtl[2].y);\n"
-           "    float2 duv = -vt.xy / max(vt.z, 0.45) * depth * fade * lerp(0.35, 1, saturate(vt.z * 1.6)) / steps;\n"
+           "    float2 shift = -vt.xy / max(vt.z, 0.45) * depth * fade * lerp(0.35, 1, saturate(vt.z * 1.6));\n"
+           // the walk's steps by how far it moves on the screen: a step each two thirds of a pixel (the last two's
+           // heights interpolated), 10 to 40 at most by the angle as before; under half a pixel, none (it moves nothing)
+           "    float pixels = length(shift) / max(sqrt(0.5 * (dot(mU1, mU1) + dot(mU2, mU2))), 1e-8);\n"
+           "    float steps = pixels < 0.5 ? 0 : min(lerp(10, 40, 1 - saturate(vt.z)), max(4, ceil(pixels * 1.5)));\n"
+           "    float2 duv = shift / max(steps, 1);\n"
            "    float2 hU1 = mU1 * 3, hU2 = mU2 * 3;\n"
-           "    float layer = 1 / steps, d = 0, pd = 0;\n"
+           "    float layer = 1 / max(steps, 1), d = 0, pd = 0;\n"
            "    float2 cur = mUv, prev = mUv;\n"
            "    float hd = 1 - mmat.SampleGrad(smp%d, cur, hU1, hU2).g, phd = hd;\n"
            "    [loop] for (int k = 0; k < 40; k++) {\n"
@@ -1853,7 +1850,7 @@ std::string MaterialShade(int i) {
         "        if (mtl[3].x == 4) outc.rgb = float3(1 - outc.a, abs(ha - outc.a) * 4 * saturate(mAlpha * 20 - 19), 0);\n"
         "        outc.a = lerp(outc.a, ha, mtl[3].w * saturate(fogin.a) * saturate(mAlpha * 20 - 19));\n"
         "    }\n"
-        // the reflection buffer (d3d12.cpp's kSceneSsr): the normal (octahedral), the view depth, reflectivity and
+        // the reflection buffer (scene_shaders.h kSceneReflHlsl): the normal (octahedral), the view depth, reflectivity and
         // roughness (whole and fraction), metal by its sign. Metal is its bare parts: grey and smooth
         "    {\n"
         "        float rough = saturate(mMat.r);\n"
@@ -1917,21 +1914,23 @@ std::string PixelHlsl(const PixelKey& k) {
         // (the alpha kept as the vertices gave it, and what is see-through by it lit by them: a propeller's disc went
         // white and opaque)
         // (where the vertices' normals turn fast across the screen or stand far off the face's own, a flat wall's noisy normals that the vertex
-        // lighting averaged away, striped and chevroned per pixel: the vertex lighting kept there)
+        // lighting averaged away, striped and chevroned per pixel: the vertex lighting kept there. Not on a character
+        // (mrefl.z over a quarter): its normals are sound, and the face's own normal, a triangle's, cut that choice
+        // along the triangles' edges, a straight line over a face)
         s += F("    if (%sdot(i.pn.xyz, i.pn.xyz) > 1e-12) {\n"
                "        float3 pnn = normalize(i.pn.xyz);\n"
                "        float3 geo = cross(ddx(i.pv.xyz), ddy(i.pv.xyz));\n"
                "        float agree = dot(geo, geo) > 1e-20 ? abs(dot(pnn, normalize(geo))) : 1;\n"
                "        float turn = length(fwidth(pnn));\n"
-               "        float keep = max(max(smoothstep(0.03, 0.09, turn), smoothstep(0.7, 0.4, agree)), smoothstep(0.97, 0.85, v0.a));\n"
+               "        float keep = max(mrefl.z > 0.25 ? 0 : max(smoothstep(0.03, 0.09, turn), smoothstep(0.7, 0.4, agree)), smoothstep(0.97, 0.85, v0.a));\n"
                "        v0.rgb = lerp(saturate(PixelLit(pnn, i.pv.xyz)).rgb, v0.rgb, keep);\n"
                "    }\n",
                k.two_sided ? "front && " : "");
-    // a character (skinned, mrefl.z on): its shade a little warmer (the skin's and cloth's scattering), in proportion
-    // to the light it has (an amount added in the dark made a night's faint ripples of light red stripes on faces;
-    // a rim from the program's normal and the eye striped heads the same way, gone)
+    // a character (skinned, mrefl.z 1: Character Lighting on): its shade a little warmer (the skin's and cloth's
+    // scattering), in proportion to the light it has (an amount added in the dark made a night's faint ripples of
+    // light red stripes on faces; a rim from the program's normal and the eye striped heads the same way, gone)
     if (!lit.empty())
-        s += "    if (mrefl.z > 0 && i.pv.w == 2 && dot(i.pn.xyz, i.pn.xyz) > 1e-12) {\n"
+        s += "    if (mrefl.z > 0.75 && i.pv.w == 2 && dot(i.pn.xyz, i.pn.xyz) > 1e-12) {\n"
              "        float l = dot(v0.rgb, float3(0.2126, 0.7152, 0.0722));\n"
              "        float wrap = 1 - smoothstep(0.05, 0.5, l);\n"
              "        v0.rgb *= 1 + float3(0.22, 0.07, 0.02) * wrap;\n"

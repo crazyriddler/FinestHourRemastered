@@ -65,8 +65,8 @@ float4 smaa_blend(V i) : SV_Target { return SMAANeighborhoodBlendingPS(i.uv, i.o
 // Contrast adaptive sharpening, after AMD FidelityFX CAS (MIT): each pixel takes its four neighbours with a negative
 // weight that is largest where the 3x3 neighbourhood has the most room left before it would clip, so flat areas and
 // soft gradients sharpen while edges already at full contrast do not ring. p0.x strength 0..1; p1.zw the size.
-// The scene's brightness for the eye's exposure (d3d12.cpp Exposure): the log average luminance of a 16 by 12 grid,
-// the middle weighing more, into one pixel
+// The scene's brightness for the eye's exposure (d3d12.cpp Exposure): a 16 by 12 grid of the scene's points, each its
+// own pixel: the log luminance times its weight (the middle weighing more), the weight; averaged as it is read back
 inline constexpr char kMeterHlsl[] = R"(
 cbuffer P : register(b1) { float4 p0; float4 p1; };
 Texture2D src : register(t0);
@@ -78,18 +78,12 @@ O vs(uint id : SV_VertexID) {
     o.uv = t;
     return o;
 }
-float4 meter(O i) : SV_Target {
-    float sum = 0, w = 0;
-    for (int y = 0; y < 12; y++)
-        for (int x = 0; x < 16; x++) {
-            float2 uv = float2((x + 0.5) / 16, (y + 0.5) / 12);
-            float3 c = src.Load(int3(uv * p1.zw, 0)).rgb;
-            float l = dot(c, float3(0.2126, 0.7152, 0.0722));
-            float k = 1 + 2 * saturate(1 - length((uv - 0.5) * 2));
-            sum += log2(max(l, 1e-3)) * k;
-            w += k;
-        }
-    return float4(sum / w, 0, 0, 1);
+float2 meter(O i) : SV_Target {
+    float2 uv = floor(i.p.xy) / float2(16, 12) + float2(0.5 / 16, 0.5 / 12);
+    float3 c = src.Load(int3(uv * p1.zw, 0)).rgb;
+    float l = dot(c, float3(0.2126, 0.7152, 0.0722));
+    float k = 1 + 2 * saturate(1 - length((uv - 0.5) * 2));
+    return float2(log2(max(l, 1e-3)) * k, k);
 }
 )";
 

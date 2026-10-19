@@ -56,12 +56,12 @@ void Load() {
         if (mode == kModes[i]) s.display_mode = DisplayMode(i);
     s.width = t["width"].value_or(s.width);
     s.height = t["height"].value_or(s.height);
-    s.render_percent = t["render_percent"].value_or(s.render_percent);
     s.fps_cap = t["fps_cap"].value_or(s.fps_cap);
     s.vsync = t["vsync"].value_or(s.vsync);
     s.aniso = t["anisotropic_filtering"].value_or(s.aniso);
-    s.smaa = t["smaa"].value_or(s.smaa);
-    s.taa = t["taa"].value_or(s.taa);
+    // (files before the choice: "taa", 4x MSAA with the temporal anti-aliasing then, SMAA with 4x MSAA now; or none)
+    if (t.contains("anti_aliasing")) s.anti_aliasing = std::min<uint32_t>(t["anti_aliasing"].value_or(s.anti_aliasing), 3);
+    else if (t.contains("taa")) s.anti_aliasing = t["taa"].value_or(true) ? 3 : 0;
     s.language = t["language"].value_or(s.language);
     // the remaster's look, on unless the player turned a part of it off (PC settings, Graphics and Effects)
     s.remaster = t["remaster"].value_or(s.remaster);
@@ -82,6 +82,7 @@ void Load() {
     s.volumetric_fog = t["volumetric_fog"].value_or(s.volumetric_fog);
     s.soft_shadows = t["soft_shadows"].value_or(s.soft_shadows);
     s.bounce_light = t["bounce_light"].value_or(s.bounce_light);
+    s.baked_lighting = t["baked_lighting"].value_or(s.baked_lighting);
     s.character_light = t["character_light"].value_or(s.character_light);
     s.lit_smoke = t["lit_smoke"].value_or(s.lit_smoke);
     s.ambient_particles = t["ambient_particles"].value_or(s.ambient_particles);
@@ -132,12 +133,10 @@ toml::table Table() {
     toml::table t{{"display_mode", kModes[uint32_t(s.display_mode)]},
                   {"width", int64_t(s.width)},
                   {"height", int64_t(s.height)},
-                  {"render_percent", int64_t(s.render_percent)},
                   {"fps_cap", int64_t(s.fps_cap)},
                   {"vsync", s.vsync},
                   {"anisotropic_filtering", int64_t(s.aniso)},
-                  {"smaa", s.smaa},
-                  {"taa", s.taa},
+                  {"anti_aliasing", int64_t(s.anti_aliasing)},
                   {"language", int64_t(s.language)},
                   {"sharpening", int64_t(s.sharpening)},
                   {"shadow_quality", int64_t(s.shadow_quality)},
@@ -165,6 +164,7 @@ toml::table Table() {
                   {"volumetric_fog", s.volumetric_fog},
                   {"soft_shadows", s.soft_shadows},
                   {"bounce_light", s.bounce_light},
+                  {"baked_lighting", s.baked_lighting},
                   {"character_light", s.character_light},
                   {"lit_smoke", s.lit_smoke},
                   {"ambient_particles", s.ambient_particles},
@@ -242,8 +242,9 @@ bool Widescreen() {
     return wide;
 }
 
+// the 3D drawn at the screen's own resolution
 float RenderScale(uint32_t guest_height) {
-    float h = Output().height * (Get().render_percent / 100.0f);
+    float h = float(Output().height);
     return guest_height ? std::max(h / guest_height, 0.1f) : 1.0f;
 }
 

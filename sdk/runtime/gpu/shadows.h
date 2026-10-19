@@ -102,7 +102,7 @@ struct Quality {
     float softness;    // filter radius in texels
     int taps;
 };
-// 0 off, 1 low to 4 ultra; world units per metre
+// 0 off, 1 low to 3 high; world units per metre
 Quality QualityFor(uint32_t level, float units);
 
 // the slices' spheres and light matrices; one cascade can be left as it was (alternate frames)

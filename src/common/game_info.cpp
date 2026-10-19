@@ -4,6 +4,8 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#include <fstream>
+#include <array>
 #include <windows.h>
 
 #include "app/app.h"
@@ -68,6 +70,8 @@ extern std::atomic<bool> g_test;  // damage.cpp: the pain effect started, for te
 
 namespace {
 
+std::vector<std::array<float, 4>> Actors(bool near_mode, int max);
+
 // tests: where the game keeps a value. memsnap takes a copy of guest memory; memseq <pattern> lists the 32-bit words
 // whose values over the copies follow the pattern (memseq abcbc: three values, the same letters the same value)
 std::vector<std::vector<uint8_t>> g_snaps;
@@ -94,6 +98,7 @@ bool* Effect(const std::string& name) {
         {"volumetric_fog", &app::Settings::volumetric_fog},
         {"soft_shadows", &app::Settings::soft_shadows},
         {"bounce_light", &app::Settings::bounce_light},
+        {"baked_lighting", &app::Settings::baked_lighting},
         {"character_light", &app::Settings::character_light},
         {"lit_smoke", &app::Settings::lit_smoke},
         {"ambient_particles", &app::Settings::ambient_particles},
@@ -119,8 +124,6 @@ bool* Effect(const std::string& name) {
         {"detail", &app::Settings::detail},
         {"pixel_lighting", &app::Settings::pixel_lighting},
         {"height_blend", &app::Settings::height_blend},
-        {"smaa", &app::Settings::smaa},
-        {"taa", &app::Settings::taa},
         {"motion_blur", &app::Settings::motion_blur},
     };
     for (const auto& [n, member] : kEffects)
@@ -361,6 +364,8 @@ void Command(const std::string& line) {
             // (a preset by its number plus one: 1 Very High, as "fx <name> 1" puts an effect back, 5 Original)
             else if (std::string(name) == "preset") cod::overlay::ApplyPreset(on - 1), LOGR("fx: preset %d", on - 1);
             else if (std::string(name) == "specular") app::Get().specular = uint32_t(std::max(on, 0)), LOGR("fx: specular %d", on);
+            // (0 off, 1 SMAA, 2 SMAA with 2x MSAA, 3 with 4x)
+            else if (std::string(name) == "aa") app::Get().anti_aliasing = uint32_t(std::clamp(on, 0, 3)), LOGR("fx: aa %d", on);
             else if (bool* e = Effect(name)) *e = on != 0, LOGR("fx: %s %d", name, on);
             else LOGR("fx: no effect %s", name);
         }
@@ -385,32 +390,9 @@ void Command(const std::string& line) {
         // tests: the entities of the player's own kind (its vtable): soldiers, allies and enemies; each one's place
         // (+0x5C, as the player's)
         if ((line == "actors" || line == "actors near") && cod::PlayerEntity()) {
-            const bool near_mode = line == "actors near";  // any object (a vtable in the image's data) placed near
-            uint32_t player = cod::PlayerEntity(), vt = kernel::R32(player);
-            uint8_t* base = static_cast<uint8_t*>(kernel::HostPtr(0));
-            float me[3];
-            for (int i = 0; i < 3; i++) { uint32_t v = kernel::R32(player + 0x5C + uint32_t(i) * 4); std::memcpy(&me[i], &v, 4); }
-            int found = 0;
-            for (uint32_t va = 0x10000; va < 0x4000000 && found < 64;) {
-                MEMORY_BASIC_INFORMATION mi{};
-                if (!VirtualQuery(base + va, &mi, sizeof(mi))) break;
-                uint32_t end = uint32_t(std::min<uint64_t>(0x4000000, uint64_t(static_cast<uint8_t*>(mi.BaseAddress) - base) + mi.RegionSize));
-                bool rw = mi.State == MEM_COMMIT && (mi.Protect & (PAGE_READWRITE | PAGE_EXECUTE_READWRITE));
-                for (uint32_t a = va; rw && a + 0x70 <= end && found < 64; a += 16) {
-                    uint32_t avt = kernel::R32(a);
-                    // (the player's kind, the soldiers' (0x2E7000, allies and enemies), or near: anything placed)
-                    if (avt != vt && avt != 0x2E7000 && !(near_mode && avt >= 0x2D0000 && avt < 0x340000)) continue;
-                    float pos[3];
-                    for (int i = 0; i < 3; i++) { uint32_t v = kernel::R32(a + 0x5C + uint32_t(i) * 4); std::memcpy(&pos[i], &v, 4); }
-                    if (!(std::fabs(pos[0]) < 1e6f && std::fabs(pos[1]) < 1e6f && std::fabs(pos[2]) < 1e6f)) continue;
-                    float d = std::sqrt((pos[0] - me[0]) * (pos[0] - me[0]) + (pos[2] - me[2]) * (pos[2] - me[2]));
-                    if (near_mode && (d > 1500 || std::fabs(pos[1] - me[1]) > 400)) continue;
-                    LOGR("actors: %08X vt %08X%s at %.1f %.1f %.1f, %.0f away", a, avt, a == player ? " (player)" : "", pos[0], pos[1], pos[2], d);
-                    found++;
-                }
-                va = end;
-            }
-            LOGR("actors: %d", found);
+            auto actors = Actors(line == "actors near", 64);
+            for (const auto& a : actors) LOGR("actors:%s at %.1f %.1f %.1f", a[3] > 0 ? " (player)" : "", a[0], a[1], a[2]);
+            LOGR("actors: %zu", actors.size());
         }
         if (line == "perf start") gpu::g_frame_stats = 1;
         if (line.rfind("perf stop", 0) == 0) {
@@ -621,8 +603,57 @@ void HudPieces() {
     gpu::g_game_hidden_tex[n].store(0, std::memory_order_relaxed);
 }
 
+// The soldiers' places (the player's kind and the soldiers', allies and enemies; with near: anything placed within
+// 15 m), found in memory by their vtables: at most max
+std::vector<std::array<float, 4>> Actors(bool near_mode, int max) {
+    std::vector<std::array<float, 4>> out;
+    uint32_t player = cod::PlayerEntity();
+    if (!player) return out;
+    uint32_t vt = kernel::R32(player);
+    uint8_t* base = static_cast<uint8_t*>(kernel::HostPtr(0));
+    float me[3];
+    for (int i = 0; i < 3; i++) { uint32_t v = kernel::R32(player + 0x5C + uint32_t(i) * 4); std::memcpy(&me[i], &v, 4); }
+    for (uint32_t va = 0x10000; va < 0x4000000 && int(out.size()) < max;) {
+        MEMORY_BASIC_INFORMATION mi{};
+        if (!VirtualQuery(base + va, &mi, sizeof(mi))) break;
+        uint32_t end = uint32_t(std::min<uint64_t>(0x4000000, uint64_t(static_cast<uint8_t*>(mi.BaseAddress) - base) + mi.RegionSize));
+        bool rw = mi.State == MEM_COMMIT && (mi.Protect & (PAGE_READWRITE | PAGE_EXECUTE_READWRITE));
+        for (uint32_t a = va; rw && a + 0x70 <= end && int(out.size()) < max; a += 16) {
+            uint32_t avt = kernel::R32(a);
+            if (avt != vt && avt != 0x2E7000 && !(near_mode && avt >= 0x2D0000 && avt < 0x340000)) continue;
+            float pos[3];
+            for (int i = 0; i < 3; i++) { uint32_t v = kernel::R32(a + 0x5C + uint32_t(i) * 4); std::memcpy(&pos[i], &v, 4); }
+            if (!(std::fabs(pos[0]) < 1e6f && std::fabs(pos[1]) < 1e6f && std::fabs(pos[2]) < 1e6f)) continue;
+            float d = std::sqrt((pos[0] - me[0]) * (pos[0] - me[0]) + (pos[2] - me[2]) * (pos[2] - me[2]));
+            if (near_mode && (d > 1500 || std::fabs(pos[1] - me[1]) > 400)) continue;
+            out.push_back({pos[0], pos[1], pos[2], float(a == player ? 1 : 0) + float(avt) * 0});
+            (void)d;
+        }
+        va = end;
+    }
+    return out;
+}
+
+// the lighting bake's capture (XBE_BAKE_CAPTURE, d3d12.cpp CaptureGeometry): every two seconds the soldiers' places,
+// where the level is played (its finest cells about them), to <folder>/lvNN.act
+void BakeActors() {
+    static const char* dir = std::getenv("XBE_BAKE_CAPTURE");
+    if (!dir || !*dir || gpu::g_level.load() < 0) return;
+    static auto last = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    if (now - last < std::chrono::seconds(2)) return;
+    last = now;
+    auto actors = Actors(false, 256);
+    if (actors.empty()) return;
+    char name[32];
+    std::snprintf(name, sizeof(name), "lv%02d.act", gpu::g_level.load());
+    std::ofstream out(std::filesystem::path(dir) / name, std::ios::binary | std::ios::app);
+    for (const auto& a : actors) out.write(reinterpret_cast<const char*>(a.data()), 12);
+}
+
 void Ui(double fps) {
     g_fps = fps;
+    BakeActors();
     cod::ragdoll::NewFrame();
     cod::wide::Update();
     cod::wide::UpdateMaterialFrame();
@@ -648,16 +679,20 @@ void Ui(double fps) {
 }  // namespace
 
 // The settings file's own version: 1, the shadows without Ultra (older files' graphics move to the presets as they
-// are now, overlay.cpp's MigrateGraphics)
+// are now, overlay.cpp's MigrateGraphics); 2, Baked Lighting (MigrateBaked); 3, the presets reworked with the
+// reflections' probes and the anti-aliasing's choice (MigratePresets)
 namespace {
 
-constexpr int64_t kGraphicsVersion = 1;
+constexpr int64_t kGraphicsVersion = 3;
 
 void LoadSettings(const void* table) {
     pc_input::Load(table);
     const toml::table& t = *static_cast<const toml::table*>(table);
-    if (t["graphics_version"].value_or(int64_t(0)) < kGraphicsVersion)
-        cod::overlay::MigrateGraphics(uint32_t(t["shadow_quality"].value_or(int64_t(app::Get().shadow_quality))));
+    const int64_t version = t["graphics_version"].value_or(int64_t(0));
+    // (a file older still that was on a preset has today's already)
+    if (version < 1 && cod::overlay::MigrateGraphics(uint32_t(t["shadow_quality"].value_or(int64_t(app::Get().shadow_quality))))) return;
+    if (version < 2 && !t.contains("baked_lighting")) cod::overlay::MigrateBaked();
+    if (version < 3) cod::overlay::MigratePresets();
 }
 
 void SaveSettings(void* table) {

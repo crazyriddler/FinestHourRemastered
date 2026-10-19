@@ -76,7 +76,6 @@ Choose **PC Settings** in the main menu (or press **F10** at any time) for every
 
 ### Display
 - **Display Mode**: fullscreen, borderless or windowed, any **Resolution**.
-- **Render Scale**: 25% to 200% of the output (supersampling above 100%).
 - **Max Frame Rate**: 30 to 360 FPS or unlimited, **V-Sync**. The game runs in real time at any frame rate.
 - **Widescreen** follows the resolution: wider than 4:3 is Hor+ (the HUD keeps its proportions at the screen's
   edges), 4:3 plays the game's own 4:3 screen.
@@ -89,18 +88,25 @@ Choose **PC Settings** in the main menu (or press **F10** at any time) for every
 **Very High** (everything on), **High**, **Medium**, **Low** and **Original** set every graphics setting at once; any
 change of your own makes it **Custom**. Each step down drops what costs the GPU most for what it shows (measured at
 2560x1440: about 9.2, 8.6, 6.2, 3.6 and 2.1 ms of GPU time on the first level). Original turns everything off: the
-game's own look and textures. The render scale is never part of a preset: it stays at your 100%.
+game's own look and textures.
 
 ### Lighting and shadows
+- **Baked Lighting**: every level's world is ray traced ahead of time (offline, with Embree): its ambient
+  occlusion, the sky's reach and the sun's or moon's shadows with real penumbrae, for every surface the game draws and
+  for the air over its floors. In the game they are looked up by each pixel's place in the world: steady as the view
+  moves, with what is off the screen or behind something taken into account, shadows as far as the eye sees, and
+  lighter on the GPU than computing them every frame. The game's own painted light is kept: the bake only shades it.
+- **Shadows** (Off to High): real-time shadow maps in up to three stable cascades; with Baked Lighting they cast what
+  moves alone (soldiers, vehicles, what swings and falls, fences and foliage with their holes). **Soft Shadows** with
+  contact hardening.
 - **Per-Pixel Lighting**: the game's lighting, computed by its own vertex programs, evaluated again at every pixel:
   smooth light on characters and models, no facets.
-- **Real-time Shadows** (Off to High): the level's sun or moon casts shadows from everything solid, characters,
-  vehicles, foliage and fences included, in up to four stable cascades. **Soft Shadows** with contact hardening.
 - **Dynamic Lights**: every muzzle flash, tracer, fire, explosion and spark lights the scene around it, in its own
   colour; machine-gun tracers light the ground along their flight. **Muzzle Flash Shadows**: the nearest shooters'
   flashes cast shadows.
 - **Light Halos** around flashes and fires, **Lit Smoke** glowing with the fire inside it.
-- **Ambient Occlusion** and **Contact Shadows**; **Bounce Light**: one bounce of indirect light.
+- **Ambient Occlusion** (baked with Baked Lighting, from the depth for what moves) and **Contact Shadows**;
+  **Bounce Light**: one bounce of indirect light.
 - **Character Lighting**: a warmer shade on skin and cloth.
 - **HDR rendering** with **Bloom**, **Eye Adaptation** (gentle, around the game's own exposure) and filmic tone mapping.
 
@@ -124,7 +130,7 @@ game's own look and textures. The render scale is never part of a preset: it sta
 - **Height Blending**: ground layers meet along their stones and cracks.
 - **Character Detail**: skin pores and uniform weave up close. **Weapon Materials**: relief and metal sheen on the
   weapon in hand. **Smooth Models**: characters and weapons tessellated into rounded shapes.
-- **Reflections**: screen-space reflections on metal, glass, varnished wood, stone and water.
+- **Reflections** on metal, glass, varnished wood, stone and water.
 
 ### Water, snow and effects
 - **Water**: rivers, puddles and sewers ripple and reflect; **Water Interaction**: rounds, shells and bodies stir
@@ -133,7 +139,7 @@ game's own look and textures. The render scale is never part of a preset: it sta
 - **Soft Particles**, **Animated Fire**, **Shockwaves** (an explosion's shock ripples through the air),
   **Explosion Flash**, **Barrel Heat** (the barrel shimmers and smokes after a burst).
 - **Hit Reactions**: soldiers flinch where bullets hit them. **Damage Shake**.
-- **Anti-Aliasing**: 4x MSAA with temporal anti-aliasing, **Motion Blur**, **Aim Depth of Field**.
+- **Anti-Aliasing**: SMAA with 2x or 4x MSAA, **Motion Blur**, **Aim Depth of Field**.
 
 ### Controls
 - **Keyboard and mouse** with raw input, sensitivity, invert and every action rebindable; mouse support in the menus.
@@ -192,6 +198,22 @@ out byte for byte the release's, wherever the repository is.
 
 For development, `cmake --preset release -DXBE_SYMBOLS=ON` adds a PDB beside the exe, with which crash dumps, the
 stall watchdog and the sampling profiler name functions (the exe is then no longer the release's, byte for byte).
+
+## The lighting bake
+
+`tools\bake` makes the levels' baked lighting and reflections (`bake\lvNN.bake`, `bake\lvNN.refl` beside the game):
+
+1. Capture: `XBE_BAKE_CAPTURE=<folder>` makes the game write the static world it draws, in world space (each draw
+   once, what stays still for 90 frames), with where the eye goes, where the soldiers are and the level's sun.
+   `python tools\bake\bake_tour.py [levels]` visits every place a world tour found (`tools\world_tour.py`) and looks
+   all round with it set (`work\bake\cap` is the bake's folder).
+2. `tools\bake\build.cmd` builds `bake.exe` (Embree 4 from its [releases](https://github.com/RenderKit/embree/releases),
+   unpacked in `..\tools\embree`); `python tools\bake\bake_all.py` bakes every captured level into `work\bake\out`
+   (seconds a level on a desktop CPU), where the releases take them from.
+3. The colours: `python tools\bake\bake_tour.py --colour [levels]` tours again with the bake loaded and
+   `XBE_BAKE_COLOR=<folder>` set: the game sums the colour each baked cell is drawn in, and the sky's, into
+   `work\bake\col\lvNN.col`. `bake_all.py` again then adds the bounced light to `lvNN.bake` and bakes the
+   reflections' probes (`lvNN.refl`).
 
 ## The remaster pack
 

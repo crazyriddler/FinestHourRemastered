@@ -15,6 +15,8 @@ void GeneralExtra();
 // graphics presets: 0 Very High, 1 High, 2 Medium, 3 Low, 4 Original, 5 Custom (none of them)
 int CurrentPreset();
 void ApplyPreset(int preset);
-void MigrateGraphics(uint32_t saved_shadows);  // settings saved before the shadows' Ultra went
+bool MigrateGraphics(uint32_t saved_shadows);  // settings saved before the shadows' Ultra went (true: a preset)
+void MigrateBaked();  // settings saved before Baked Lighting: on, unless on Original
+void MigratePresets();  // settings saved before version 3: a preset then, the same preset now
 
 }  // namespace cod::overlay

@@ -172,6 +172,11 @@ bool Tracker::Sun(float dir[3]) const {
 }
 
 Quality QualityFor(uint32_t level, float units) {
+    // (each step a step lower than before the lighting bake: High the old Medium, Medium the old Low, Low lower still)
+    if (level >= 1 && level <= 3) {
+        if (level == 1) return {2, 768, 30 * units, 1.0f, 4};
+        level -= 1;
+    }
     switch (level) {
         case 1: return {2, 1024, 35 * units, 1.2f, 4};
         case 2: return {3, 1536, 55 * units, 1.5f, 8};

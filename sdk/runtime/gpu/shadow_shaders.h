@@ -20,9 +20,6 @@ cbuffer P : register(b1) {
     row_major float4x4 cas[4];  // view to the cascades' light clip
     float4 p9;   // the haze (FogPass): density per unit, the ground's height (view space, along p10), the sun's light
     float4 p10;  // the world's up in view space
-    // the lighting bake (the mask's): view space to the world, rows (x y z, the eye); bk[0].w the table bound
-    // (t4), bk[1].w XBE_BAKE
-    float4 bk[4];
 };
 Texture2D<float> depth : register(t0);
 Texture2D<float> atlas : register(t1);
@@ -93,11 +90,7 @@ float Cascade(int c, float3 P, float3 N, float ndl, float2 rot, float ch) {
             return 1;  // nothing in the way
         }
     }
-    // a character (faces, hands): the edge of what shades it (a window's frame, a wall) a broad soft fall across it,
-    // 15 cm wide at the least whatever the cascade's texels (t: one's width in the world), never a line over a face;
-    // all the disc's taps
     int n = (int)p5.w;
-    if (ch > 0.5) r = max(r, min(15 / max(t, 1e-3), 40) / p5.y), n = 16;
     float s = 0;
     [loop] for (int k = 0; k < n; k++) {
         float2 o = kDisc[k];
@@ -145,36 +138,11 @@ float4 fog(O i) : SV_Target {
     }
     return float4(p9.zzz * sun * phase * p1.w, 1 - trans);
 }
-Texture2D<uint2> bakelk : register(t4);
-// the bake's lookups at half size (bakelook, t4: occlusion, the surface's sun, the surface found, the air's sun) for the
-// pixel at px of depth d: the four texels about it, each from the pixel at (2x + 1, 2y + 1), those at its depth
-// (within 3%) by their share; none: (1, 1, 0, 1)
-float4 BakeUp(float2 px, float d) {
-    float z0 = ViewZ(d);
-    float2 h = (px - 1.5) * 0.5;  // (texel x's centre is pixel 2x + 1's)
-    float2 b = floor(h), t = h - b;
-    float4 sum = 0, nearest = float4(1, 1, 0, 1);
-    float wsum = 0, best = 0.2 * z0;  // (a ground seen flat: its rows apart in depth; the nearest in depth then)
-    [unroll] for (int k = 0; k < 4; k++) {
-        int2 o = int2(k & 1, k >> 1);
-        int2 q = int2(b) + o;
-        float dz = abs(ViewZ(depth.Load(int3(q * 2 + 1, 0))) - z0);
-        float4 v = BakeLook(bakelk.Load(int3(q, 0)));
-        if (dz < best) best = dz, nearest = v;
-        if (dz > 0.03 * z0 + 2) continue;
-        float2 tw = o ? t : 1 - t;
-        float w = tw.x * tw.y + 1e-3;
-        sum += v * w;
-        wsum += w;
-    }
-    return wsum > 0 ? sum / wsum : nearest;
-}
 float4 mask(O i) : SV_Target {
     float d = D(i.uv);
     if (d >= 0.99999) return float4(1, 1, 0, 0);  // the sky
     float3 P = ViewPos(i.uv, d);
-    // (past the cascades' reach no shadows, but where the bake has them: the static world's, as far as it goes)
-    if (P.z <= 0 || (P.z >= p3.w && bk[0].w <= 0)) return float4(1, 1, 1, 0);
+    if (P.z <= 0 || P.z >= p3.w) return float4(1, 1, 1, 0);
     // the normal from the nearer of each pair of neighbours, so edges keep their own side
     float2 px = p2.zw;
     float3 l = ViewPos(i.uv - float2(px.x, 0), D(i.uv - float2(px.x, 0))), r = ViewPos(i.uv + float2(px.x, 0), D(i.uv + float2(px.x, 0)));
@@ -192,8 +160,8 @@ float4 mask(O i) : SV_Target {
     float direct = p3.x * (ch > 0.5 ? 0.55 : saturate(ndl));
     float share = direct / (p3.y + direct + 0.02) * p1.w;
     // the game's look keeps its shade open (its baked light has the sky's and the bounce's in it): a shadow takes
-    // at most under half of what is there, a character (lit for its place by the game) under a fifth
-    share = min(share * 0.6, ch > 0.5 ? 0.18 : 0.45);
+    // at most under half of what is there, a character (lit for its place by the game) a quarter
+    share = min(share * 0.6, ch > 0.5 ? 0.25 : 0.45);
     // what glows (lamps, fire, the sky's light through a window) is not the light's to take
     float lum = dot(scene.Load(int3(i.pos.xy, 0)).rgb, float3(0.2126, 0.7152, 0.0722));
     share *= saturate((1.15 - lum) / 0.45);
@@ -207,20 +175,8 @@ float4 mask(O i) : SV_Target {
         float2 uv = float2(lc.x * 0.5 + 0.5, 0.5 - lc.y * 0.5) * tile[c].xy + tile[c].zw;
         return float4(lc.z, atlas.SampleLevel(pnt, uv, 0), saturate((lc.z - atlas.SampleLevel(pnt, uv, 0)) * 20 + 0.5), 1);
     }
-    // the baked sun (tools/bake): the static world's shadow on what the bake has, in the air over the floors on what
-    // moves; the cascades then for what moves alone (it casts there), not where the static world shades already
-    float bsun = 1;
-    bool found = false;
-    if (bk[0].w > 0 && (share > 0.002 || bk[1].w > 4.5)) {
-        float4 B = BakeUp(i.pos.xy, d);
-        found = B.b > 0.5 && ch < 0.5, bsun = B.g;
-        // (the air: what moves, near enough for the cascades to have it too; 1 where the bake has none)
-        if (!found && P.z < p3.w && B.a < 1) found = true, bsun = B.a;
-        // (XBE_BAKE=6: where neither has it, red)
-        if (!found && bk[1].w > 5.5) return float4(0, 1, 1, 1);
-    }
     float s = 1;
-    if (share > 0.002 && (ndl > -0.05 || ch > 0.5) && P.z < p3.w && !(found && bsun < 0.004)) {
+    if (share > 0.002 && (ndl > -0.05 || ch > 0.5)) {
         float a = frac(52.9829189 * frac(dot(i.pos.xy, float2(0.06711056, 0.00583715)))) * 6.2831853;
         float2 rot = float2(cos(a), sin(a));
         float nl = saturate(ndl);
@@ -231,8 +187,6 @@ float4 mask(O i) : SV_Target {
         if (b > 0 && c + 1 < count) s = lerp(s, Cascade(c + 1, P, N, nl, rot, ch), b);
         s = lerp(s, 1, saturate((P.z - p3.z) / max(p3.w - p3.z, 1e-3)));
     }
-    // (XBE_BAKE=5: the baked sun alone)
-    if (found) s = bk[1].w > 4.5 ? bsun : min(s, bsun);
     return float4(1 - share * (1 - s), s, (c + 0.5) / 4, share);
 }
 )";

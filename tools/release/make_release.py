@@ -31,7 +31,6 @@ import tarfile
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BUILD = os.path.join(ROOT, "out", "build", "release")
 PACK = os.path.join(ROOT, "work", "remaster", "pack")
-BAKE = os.path.join(ROOT, "work", "bake", "out")  # the levels' baked lighting (tools/bake): bake/lvNN.bake, lvNN.refl
 OUT = os.path.join(os.path.dirname(ROOT), "release")
 EXE = "CODFH.exe"  # its own name: the game starts itself again under it (a title launch)
 PART = 1900 * 1024 * 1024
@@ -56,9 +55,10 @@ keyboard_mouse = true
 language = 1
 mouse_sensitivity = 100
 pad_layout = 0
+render_percent = 100
+shadow_quality = 4
 sharpening = 0
 skip_intros = false
-graphics_version = 3
 """
 
 
@@ -87,17 +87,13 @@ def defaults_from_user():
         if l.startswith("["):  # the key bindings: the defaults (the file's names are the author's keyboard's)
             break
         k = l.split("=")[0].strip()
-        # (and settings the game no longer has: the render scale, the old anti-aliasing switches)
-        # (and the graphics: the game's own defaults, Very High as this version has it, graphics_version below)
-        if k in ("width", "height", "join_ip", "keys_version", "developer", "render_percent", "taa", "smaa", "shadow_quality",
-                 "graphics_version"):
+        if k in ("width", "height", "join_ip", "keys_version", "developer"):
             continue
         if k == "language":
             l = "language = 1"
         if k == "skip_intros":
             l = "skip_intros = false"  # (the publishers' logos and the opening movie shown, as the game first starts)
         lines.append(l)
-    lines.append("graphics_version = 3")
     return "\n".join(lines) + "\n"
 
 
@@ -112,8 +108,6 @@ def stage_list(cache_all):
         sys.exit("the Windows SDK's d3dcompiler_47.dll is needed: " + sdk)
     items.append((sdk, "d3dcompiler_47.dll"))
     items += [(s, os.path.join("remaster", r)) for s, r in files_of(PACK, PACK_PARTS)]
-    if os.path.isdir(BAKE):
-        items += [(os.path.join(BAKE, n), os.path.join("bake", n)) for n in sorted(os.listdir(BAKE)) if n.endswith((".bake", ".refl"))]
     cache = os.path.join(BUILD, "shadercache")
     names = sorted(os.listdir(cache)) if cache_all else CACHE_ANY
     items += [(s, os.path.join("shadercache", r)) for s, r in files_of(cache, names)]
@@ -199,9 +193,28 @@ def lzms(data, compress):
     return out.raw[:size.value]
 
 
-def build_patch(items, version):
-    """the update over the base payload: (packed bytes, unpacked size, what it holds)"""
+def patch_files(exe):
+    """an update's files, read from its exe (write_installer's tail): {path: sha1}"""
+    with open(exe, "rb") as f:
+        data = f.read()
+    if data[-8:] != b"FHRPATCH":
+        sys.exit("%s: no update inside" % exe)
+    packed, _ = struct.unpack("<QQ", data[-24:-8])
+    raw = lzms(data[-24 - packed:-24], False)
+    out = {}
+    for line in raw[:raw.index(b"\nend\n") + 5].decode("utf-8").splitlines():
+        if line.startswith("file "):
+            _, sha, path = line[5:].split(" ", 2)
+            out[path] = sha
+    return out
+
+
+def build_patch(items, version, undo=None):
+    """the update over the base payload: (packed bytes, unpacked size, what it holds). undo: a withdrawn update's
+    files ({path: sha1}): the ones it added that this version has not are deleted, the ones it changed are written as
+    this version has them (the base's own too), so an installation it updated goes back as an earlier one comes up"""
     base = base_manifest()
+    undo = undo or {}
     head, data, files = ["FHRU 1", "version " + version], [], []
     staged = {}
     for s, r in items:
@@ -211,7 +224,7 @@ def build_patch(items, version):
         if r in KEEP:
             continue
         sha = sha1_of(s)
-        if r in ALWAYS or r.startswith("shadercache/") or r not in base or base[r][0] != sha:
+        if r in ALWAYS or r.startswith("shadercache/") or r not in base or base[r][0] != sha or (r in undo and undo[r] != sha):
             size = os.path.getsize(s)
             head.append("file %d %s %s" % (size, sha, r))
             files.append(r)
@@ -219,6 +232,9 @@ def build_patch(items, version):
                 data.append(f.read())
     for r in DELETE:
         head.append("delete " + r)
+    for r in undo:
+        if r not in staged and r not in KEEP and r not in base:
+            head.append("delete " + r)
     for r, (sha, size) in base.items():
         if r in KEEP or r in files:
             continue
@@ -239,13 +255,13 @@ def write_installer(setup, packed, raw_size, to):
         o.write(struct.pack("<QQ", len(packed), raw_size) + b"FHRPATCH")
 
 
-def github(version, rebase=False):
+def github(version, rebase=False, undo=None):
     if not rebase:
         # the base stays as published: the installer and the updater, each with the latest update inside
         base = os.path.join(OUT, "github")
         os.makedirs(base, exist_ok=True)
         items = stage_list(cache_all=False)
-        packed, raw_size, files = build_patch(items, version)
+        packed, raw_size, files = build_patch(items, version, patch_files(undo) if undo else None)
         setup = os.path.join(BUILD, "tools", "installer", "FinestHourRemasteredSetup.exe")
         write_installer(setup, packed, raw_size, os.path.join(base, "FinestHourRemasteredSetup.exe"))
         upd = os.path.join(OUT, "update")
@@ -328,6 +344,7 @@ def main():
     ap.add_argument("--version", default=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
                     help="the update's name, shown by the installer and the updater")
     ap.add_argument("--rebase", action="store_true", help="a new base payload (its parts written again)")
+    ap.add_argument("--undo", help="a withdrawn update's exe: its files undone (patch_files, build_patch)")
     a = ap.parse_args()
     if a.only == "source":
         source()
@@ -337,7 +354,7 @@ def main():
     if a.only in (None, "portable"):
         portable(a.game)
     if a.only in (None, "github"):
-        github(a.version, a.rebase)
+        github(a.version, a.rebase, a.undo)
     if a.only is None:
         source()
 

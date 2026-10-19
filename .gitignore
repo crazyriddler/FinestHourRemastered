@@ -35,6 +35,3 @@ shadercache/
 # remaster tool caches
 tools/remaster/__pycache__/
 dist/
-tools/bake/*.exe
-tools/bake/*.dll
-__pycache__/

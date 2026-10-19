@@ -15,9 +15,6 @@ cbuffer P : register(b1) {
     float4 sky[6];
     // d3d12.cpp Grade: exposure, saturation, on; the gain; the lift; the grain
     float4 grade[4];
-    // the occlusion pass's (d3d12.cpp SceneOcclusion): this frame's view space (ViewPos) to the world, rows (x y z,
-    // the eye); w of the first: the bake's table bound (t3)
-    float4 bakecam[4];
 };
 SamplerState lin : register(s0);
 SamplerState pnt : register(s1);
@@ -78,251 +75,6 @@ float3 ViewPos(float2 uv, float d) {
 }
 )";
 
-// The lighting bake's lookups (the occlusion pass, the shadows' mask), after "StructuredBuffer<uint2> bake" is declared
-inline constexpr char kBakeHlsl[] = R"(
-// The lighting bake's table (tools/bake/bake.cpp, d3d12.cpp BakeLoad): uint2 slots, a fingerprint of the key (x y z
-// of a cell, its facing and size) and the value
-static const float BAKE_CELL[4] = {25, 50, 100, 400};
-uint BakeHash(uint a, uint b) {
-    uint h = (a * 0x9E3779B1u) ^ ((b + 0x7F4A7C15u) * 0x85EBCA77u);
-    h ^= h >> 15;
-    h *= 0x2C1B3C6Du;
-    h ^= h >> 12;
-    h *= 0x297A2D39u;
-    h ^= h >> 15;
-    return h;
-}
-// the high half of a 32 by 32 bit product (the slot: tools/bake/bake.cpp Slot)
-uint MulHi(uint a, uint b) {
-    uint a0 = a & 0xFFFF, a1 = a >> 16, b0 = b & 0xFFFF, b1 = b >> 16;
-    uint p00 = a0 * b0, p01 = a0 * b1, p10 = a1 * b0, p11 = a1 * b1;
-    uint mid = (p00 >> 16) + (p01 & 0xFFFF) + (p10 & 0xFFFF);
-    return p11 + (p01 >> 16) + (p10 >> 16) + (mid >> 16);
-}
-// a cell's value (32 bits): occlusion (6 bits), the sun (6), the sky (4), the normal (octahedral, 5 + 5), its place
-// along it from the cell's centre (6, signed, of half a cell); the slot's x a fingerprint of the key. at: its slot
-// (the light bounced onto it, BakeBounce). The buffer's head (d3d12.cpp BakeRead): 5 slots
-bool BakeFind(int3 c, uint facing, uint size, uint n, out uint v, out uint at) {
-    v = 0, at = 0;
-    const uint m = (1u << 19) - 1;
-    uint y = uint(c.y) & m;
-    uint klo = (uint(c.x) & m) | (y << 19);
-    uint khi = (y >> 13) | ((uint(c.z) & m) << 6) | (facing << 25) | (size << 28) | 0x80000000u;
-    uint fp = BakeHash(khi, klo) | 1;
-    uint slot = MulHi(BakeHash(klo, khi), n);
-    [loop] for (int k = 0; k < 32; k++) {
-        uint2 e = bake[5 + slot];
-        if (e.x == 0) return false;
-        if (e.x == fp) {
-            v = e.y, at = slot;
-            return true;
-        }
-        slot = slot + 1 < n ? slot + 1 : 0;
-    }
-    return false;
-}
-// the buffer's head (d3d12.cpp BakeRead): the table's size; the size map's voxel counts, corner and voxel size; where
-// the bounced light starts (0: none, a bake of version 5)
-uint BakeTableSize() { return bake[0].x; }
-bool BakeHasBounce() { return bake[4].x != 0; }
-// the light bounced onto the cell in slot at (tools/bake --colours: 10 bits a channel, the square root of half of it),
-// two slots to an element
-float3 BakeBounce(uint at) {
-    uint2 e = bake[bake[4].x + at / 2];
-    uint q = (at & 1) ? e.y : e.x;
-    float3 v = float3(q & 1023, (q >> 10) & 1023, (q >> 20) & 1023) / 1023;
-    return v * v * 2;
-}
-// the half size lookups (bakelook) packed: x occlusion, the surface's sun, the air's sun (8 bits each), found (bit
-// 24); y the bounced light (as BakeBounce's)
-uint2 BakePack(float occlusion, float sun, float found, float air, float3 bounce) {
-    uint3 q = uint3(round(sqrt(saturate(bounce * 0.5)) * 1023));
-    return uint2(uint(round(saturate(occlusion) * 255)) | (uint(round(saturate(sun) * 255)) << 8) | (uint(round(saturate(air) * 255)) << 16) |
-                 (found > 0.5 ? 1u << 24 : 0), q.x | (q.y << 10) | (q.z << 20));
-}
-// (occlusion, sun, found, air)
-float4 BakeLook(uint2 v) {
-    return float4(float(v.x & 255) / 255, float((v.x >> 8) & 255) / 255, float((v.x >> 24) & 1), float((v.x >> 16) & 255) / 255);
-}
-float3 BakeLookBounce(uint2 v) {
-    float3 q = float3(v.y & 1023, (v.y >> 10) & 1023, (v.y >> 20) & 1023) / 1023;
-    return q * q * 2;
-}
-// the cells' size the bake used at W (its map of 8 m voxels, 2 bits each after the table)
-uint BakeSizeAt(float3 W) {
-    uint3 dims = uint3(bake[0].y, bake[1].x, bake[1].y);
-    float3 lo = asfloat(uint3(bake[2].x, bake[2].y, bake[3].x));
-    float vox = asfloat(bake[3].y);
-    if (dims.x == 0) return 0;
-    int3 v = clamp(int3(floor((W - lo) / vox)), 0, int3(dims) - 1);
-    uint i = (uint(v.z) * dims.y + uint(v.y)) * dims.x + uint(v.x);
-    uint2 e = bake[5 + BakeTableSize() + i / 16];
-    uint k = (i % 16) * 2;
-    return ((k < 32 ? e.x >> k : e.y >> (k - 32)) & 3);
-}
-float3 BakeNormal(uint v) {
-    float2 o = float2((v >> 16) & 31, (v >> 21) & 31) / 31 * 2 - 1;
-    float3 n = float3(o, 1 - abs(o.x) - abs(o.y));
-    if (n.z < 0) n.xy = (1 - abs(n.yx)) * (n.xy >= 0 ? 1 : -1);
-    return normalize(n);
-}
-float BakeAlong(uint v) {
-    int a = int((v >> 26) & 63);
-    return float(a >= 32 ? a - 64 : a) / 31;
-}
-uint Facing(float3 n) {
-    float3 a = abs(n);
-    if (a.x >= a.y && a.x >= a.z) return n.x > 0 ? 0 : 1;
-    if (a.y >= a.z) return n.y > 0 ? 2 : 3;
-    return n.z > 0 ? 4 : 5;
-}
-// the baked occlusion and sun at a world place W with the normal N: the cells about it of the same surface (facing
-// it, on its plane) weighed as their centres' trilinear share, the finest size that has them; false where none (what
-// moves, what the bake never saw)
-// footprint: a pixel's size there (world units): a cell under one and a half pixels wide is read alone, the one W is
-// in (its neighbours' share would not show), not four
-// (the surface's own frame: across it the axis it faces, along it the two others)
-float3 ToFrame(float3 g, uint axis) { return axis == 0 ? g.xyz : axis == 1 ? g.yxz : g.zxy; }
-int3 FromFrame(int3 f, uint axis) { return axis == 0 ? f.xyz : axis == 1 ? f.yxz : f.yzx; }
-bool Baked(float3 W, float3 N, float footprint, out float occlusion, out float sun, out float3 bounce) {
-    occlusion = 1, sun = 1, bounce = 0;
-    bool hb = BakeHasBounce();
-    uint n = BakeTableSize();
-    uint facing = Facing(N);
-    uint axis = facing >> 1;
-    // bilinear over the cells along the surface's plane; across it the layer W is in, else the next one towards the
-    // nearer edge (a surface along the cells' boundary has its cells in either: a ground at their edge)
-    uint first = BakeSizeAt(W);
-    [loop] for (uint size = first; size < min(first + 2, 4); size++) {
-        float cs = BAKE_CELL[size];
-        float3 g = ToFrame(W / cs, axis);
-        int la = int(floor(g.x));
-        int alt = la + (frac(g.x) < 0.5 ? -1 : 1);
-        // (a cell under one and a half pixels: the one W is in alone)
-        bool one = cs < footprint * 1.5;
-        float2 f = g.yz - 0.5;
-        float2 b = floor(f), t = f - b;
-        int2 inside = int2(floor(g.yz)) - int2(b);
-        float sum = 0, ssum = 0, wsum = 0;
-        float3 bsum = 0;
-        [loop] for (int k = 0; k < (one ? 1 : 4); k++) {
-            int2 o = one ? inside : int2(k & 1, k >> 1);
-            float2 tw = o ? t : 1 - t;
-            float w = one ? 1 : tw.x * tw.y;
-            if (w < 1e-4) continue;
-            int2 cu = int2(b) + o;
-            int3 c = FromFrame(int3(la, cu), axis);
-            uint v, at;
-            if (!BakeFind(c, facing, size, n, v, at)) {
-                c = FromFrame(int3(alt, cu), axis);
-                if (!BakeFind(c, facing, size, n, v, at)) continue;
-            }
-            float3 sn = BakeNormal(v);
-            if (dot(sn, N) < 0.6) continue;
-            float3 centre = (float3(c) + 0.5) * cs;
-            float along = BakeAlong(v) * cs * 0.5;
-            if (abs(dot(W - centre, sn) - along) > cs * 0.6) continue;
-            sum += w * float(v & 63) / 63;
-            ssum += w * float((v >> 6) & 63) / 63;
-            if (hb) bsum += w * BakeBounce(at);
-            wsum += w;
-        }
-        if (wsum > 0.2) {
-            occlusion = sum / wsum, sun = ssum / wsum, bounce = bsum / wsum;
-            return true;
-        }
-    }
-    return false;
-}
-// the sun's reach in the air at W (the bake's half metre cells over the floors, facing 6): for what moves
-bool BakedAir(float3 W, out float sun) {
-    sun = 1;
-    uint n = BakeTableSize();
-    float cs = BAKE_CELL[1];
-    float3 f = W / cs - 0.5;
-    float3 b = floor(f), t = f - b;
-    float ssum = 0, wsum = 0;
-    [loop] for (int k = 0; k < 8; k++) {
-        int3 o = int3(k & 1, (k >> 1) & 1, k >> 2);
-        float3 tw = o ? t : 1 - t;
-        float w = tw.x * tw.y * tw.z;
-        uint v, at;
-        if (w < 1e-4 || !BakeFind(int3(b) + o, 6, 1, n, v, at)) continue;
-        ssum += w * float((v >> 6) & 63) / 63;
-        wsum += w;
-    }
-    if (wsum < 0.2) return false;
-    sun = ssum / wsum;
-    return true;
-}
-)";
-
-// The bake's colour capture (d3d12.cpp BakeColourCapture, XBE_BAKE_COLOR), after kBakeHlsl: for a pixel of each
-// 4 x 4 (bakecam[2].w, [3].w: which), its cell's slot + 1 (0: none) and its colour before the reflections (10 bits
-// a channel, the square root of a quarter of it), whether it reflects (the top 2 bits). The cell the pixel is in, on
-// its plane (what stands in front of it, a soldier, a crate pushed there, left out). t0 the world's depth, t1 the
-// scene, t5 the reflection buffer.
-inline constexpr char kBakeColourHlsl[] = R"(
-Texture2D<float> cdepth : register(t0);
-Texture2D cscene : register(t1);
-Texture2D cgb : register(t5);
-float3 CPos(int2 q) {
-    float2 uv = (q + 0.5) * p[2].zw;
-    return ViewPos(uv, cdepth.Load(int3(q, 0)));
-}
-uint2 bakecolour(O i) : SV_Target {
-    int2 px = int2(floor(i.pos.xy)) * 4 + int2(bakecam[2].w, bakecam[3].w);
-    float d = cdepth.Load(int3(px, 0));
-    if (d >= 0.99999) {
-        // the sky: its colour by the way it is seen (16 ways round, 8 up from a little under the horizon), the bin
-        // with the top bit (the slots never reach it)
-        if (Veiled(d) || FarWater(d)) return 0;
-        float2 uv = (px + 0.5) * p[2].zw;
-        float3 v = float3((uv.x * 2 - 1) * p[0].x, (1 - uv.y * 2) * p[0].y, 1);
-        float3 R = normalize(v.x * bakecam[0].xyz + v.y * bakecam[1].xyz + v.z * bakecam[2].xyz);
-        uint az = uint(clamp(floor((atan2(R.z, R.x) / 6.2831853 + 0.5) * 16), 0, 15));
-        uint el = uint(clamp(floor((R.y + 0.2) / 1.2 * 8), 0, 7));
-        float3 sc = cscene.Load(int3(px, 0)).rgb;
-        if (any(isnan(sc)) || any(sc > 16)) return 0;
-        uint3 sq = uint3(round(sqrt(saturate(sc / 4)) * 1023));
-        return uint2(0x80000000u | (el * 16 + az), sq.x | (sq.y << 10) | (sq.z << 20));
-    }
-    float3 P = CPos(px);
-    float3 l = CPos(px - int2(1, 0)), r = CPos(px + int2(1, 0)), u = CPos(px - int2(0, 1)), dn = CPos(px + int2(0, 1));
-    float3 dx = abs(r.z - P.z) < abs(P.z - l.z) ? r - P : P - l;
-    float3 dy = abs(dn.z - P.z) < abs(P.z - u.z) ? dn - P : P - u;
-    float3 N = normalize(cross(dy, dx));
-    if (dot(N, P) > 0) N = -N;
-    float3 W = P.x * bakecam[0].xyz + P.y * bakecam[1].xyz + P.z * bakecam[2].xyz + bakecam[3].xyz;
-    float3 Nw = normalize(N.x * bakecam[0].xyz + N.y * bakecam[1].xyz + N.z * bakecam[2].xyz);
-    uint n = BakeTableSize();
-    uint facing = Facing(Nw), axis = facing >> 1;
-    uint size = BakeSizeAt(W);
-    float cs = BAKE_CELL[size];
-    float3 g = ToFrame(W / cs, axis);
-    int la = int(floor(g.x));
-    int alt = la + (frac(g.x) < 0.5 ? -1 : 1);
-    int3 c = FromFrame(int3(la, int2(floor(g.yz))), axis);
-    uint slot, v;
-    if (!BakeFind(c, facing, size, n, v, slot)) {
-        c = FromFrame(int3(alt, int2(floor(g.yz))), axis);
-        if (!BakeFind(c, facing, size, n, v, slot)) return 0;
-    }
-    float3 sn = BakeNormal(v);
-    if (dot(sn, Nw) < 0.8) return 0;
-    float3 centre = (float3(c) + 0.5) * cs;
-    if (abs(dot(W - centre, sn) - BakeAlong(v) * cs * 0.5) > max(cs * 0.3, 6)) return 0;
-    float3 col = cscene.Load(int3(px, 0)).rgb;
-    if (any(isnan(col)) || any(col > 16)) return 0;
-    uint3 q = uint3(round(sqrt(saturate(col / 4)) * 1023));
-    // reflective: its buffer its own (its depth agrees) and reflecting
-    float4 gb = cgb.Load(int3(px, 0));
-    float z = ViewZ(d);
-    bool refl = gb.w != 0 && abs(z - gb.z) <= max(3, z * 0.01) && floor(abs(gb.w)) / 63 >= 0.01;
-    return uint2(slot + 1, q.x | (q.y << 10) | (q.z << 20) | (refl ? 1u << 30 : 0));
-}
-)";
-
 // t0 depth: occlusion in r, the contact shadow folded in; t2 the guard band (d3d12.cpp DrawGuard): the depth past the
 // screen's edges, the view widened by 1 / GUARD (0 where there is none)
 inline constexpr char kSceneAo[] = R"(
@@ -342,58 +94,6 @@ bool DG(float2 uv, out float d) {
     d = guard.SampleLevel(pnt, g, 0);
     return d > 0;
 }
-Texture2D<uint2> bakelk : register(t4);
-// the bake's lookups at half size (bakelook, t4, BakePack: occlusion, the surface's sun, the surface found, the air's sun) for the
-// pixel at px of depth d: the four texels about it, each from the pixel at (2x + 1, 2y + 1), those at its depth
-// (within 3%) by their share; none: (1, 1, 0, 1)
-float4 BakeUp(float2 px, float d) {
-    float z0 = ViewZ(d);
-    float2 h = (px - 1.5) * 0.5;  // (texel x's centre is pixel 2x + 1's)
-    float2 b = floor(h), t = h - b;
-    float4 sum = 0, nearest = float4(1, 1, 0, 1);
-    float wsum = 0, best = 0.2 * z0;  // (a ground seen flat: its rows apart in depth; the nearest in depth then)
-    [unroll] for (int k = 0; k < 4; k++) {
-        int2 o = int2(k & 1, k >> 1);
-        int2 q = int2(b) + o;
-        float dz = abs(ViewZ(depth.Load(int3(q * 2 + 1, 0))) - z0);
-        float4 v = BakeLook(bakelk.Load(int3(q, 0)));
-        if (dz < best) best = dz, nearest = v;
-        if (dz > 0.03 * z0 + 2) continue;
-        float2 tw = o ? t : 1 - t;
-        float w = tw.x * tw.y + 1e-3;
-        sum += v * w;
-        wsum += w;
-    }
-    return wsum > 0 ? sum / wsum : nearest;
-}
-// the bake's lookups once a frame, at half size (bakelook, BakePack): the occlusion, the surface's sun, whether the
-// bake has the surface, the sun in the air there (for what moves; 1 where none), the light bounced onto it
-uint2 bakelook(O i) : SV_Target {
-    // (at the centre of the pixel the texel stands for, 2x + 1, 2y + 1: between two rows the depth's point samples
-    // rounded the same way for a pixel and its neighbour, a row's normal undefined, its lookups lost)
-    i.uv = (floor(i.pos.xy) * 2 + 1.5) * p[2].zw;
-    float d = D(i.uv);
-    if (d >= 0.99999 || bakecam[0].w <= 0) return BakePack(1, 1, 0, 1, 0);
-    float3 P = ViewPos(i.uv, d);
-    float2 px = p[2].zw;
-    float3 l = ViewPos(i.uv - float2(px.x, 0), D(i.uv - float2(px.x, 0))), r = ViewPos(i.uv + float2(px.x, 0), D(i.uv + float2(px.x, 0)));
-    float3 u = ViewPos(i.uv - float2(0, px.y), D(i.uv - float2(0, px.y))), dn = ViewPos(i.uv + float2(0, px.y), D(i.uv + float2(0, px.y)));
-    float3 dx = abs(r.z - P.z) < abs(P.z - l.z) ? r - P : P - l;
-    float3 dy = abs(dn.z - P.z) < abs(P.z - u.z) ? dn - P : P - u;
-    float3 N = normalize(cross(dy, dx));
-    if (dot(N, P) > 0) N = -N;
-    float3 W = P.x * bakecam[0].xyz + P.y * bakecam[1].xyz + P.z * bakecam[2].xyz + bakecam[3].xyz;
-    float3 Nw = normalize(N.x * bakecam[0].xyz + N.y * bakecam[1].xyz + N.z * bakecam[2].xyz);
-    float occlusion, sun, air;
-    float3 bounce;
-    // the air's sun always, the surface found or not: what moves takes it (the mask's), and a soldier's face against a
-    // wall can lie on the wall's cells (found there, the air not read: half his face in the sun, the rest in the
-    // room's shade, cut along the cells' edge)
-    if (!BakedAir(W, air)) air = 1;
-    // (a pixel here is two of the screen's: the footprint twice)
-    if (Baked(W, Nw, 4 * p[0].y * P.z * p[2].w, occlusion, sun, bounce)) return BakePack(occlusion, sun, 1, air, bounce);
-    return BakePack(1, 1, 0, air, 0);
-}
 float4 ao(O i) : SV_Target {
     float d = D(i.uv);
     if (d >= 0.99999) return 1;  // the sky
@@ -406,35 +106,15 @@ float4 ao(O i) : SV_Target {
     float3 dy = abs(dn.z - P.z) < abs(P.z - u.z) ? dn - P : P - u;
     float3 N = normalize(cross(dy, dx));
     if (dot(N, P) > 0) N = -N;
-    // the baked occlusion where the bake has the surface: the world's, traced through the whole level (what is off
-    // the screen or behind something too), steady as the view moves. Over it only what moves (a soldier by a wall, a
-    // crate pushed), from the depth near by: the darker of the two, not both
-    // (XBE_BAKE=8: what the half size lookups found, 9: what a full size lookup finds)
-    if (bakecam[0].w > 0 && bakecam[1].w > 7.5) {
-        if (bakecam[1].w < 8.5) return BakeUp(i.pos.xy, d).b;
-        float3 W = P.x * bakecam[0].xyz + P.y * bakecam[1].xyz + P.z * bakecam[2].xyz + bakecam[3].xyz;
-        float3 Nw = normalize(N.x * bakecam[0].xyz + N.y * bakecam[1].xyz + N.z * bakecam[2].xyz);
-        float bo, bs;
-        float3 bb;
-        return Baked(W, Nw, 2 * p[0].y * P.z * p[2].w, bo, bs, bb) ? 1 : 0;
-    }
-    float baked = 1;
-    bool have = false;
-    if (bakecam[0].w > 0) {
-        float4 B = BakeUp(i.pos.xy, d);
-        have = B.b > 0.5, baked = B.r;
-    }
-    // (Ambient Occlusion and Contact Shadows off: the baked occlusion alone, Baked Lighting's)
-    if (p[3].y <= 0 && p[3].z <= 0) return have ? baked : 1;
-    // occlusion from the depth: a spiral of samples in a disc of p[3].x in the view (where baked, a small one)
-    float radius = have ? p[3].x * 0.5 : p[3].x;
+    // occlusion: a spiral of samples in a disc of p[3].x in the view
+    float radius = p[3].x;
     float2 rs = radius / P.z / (2 * p[0].xy);  // in uv
     float noise = frac(52.9829189 * frac(dot(i.pos.xy, float2(0.06711056, 0.00583715))));
     // samples past the screen's edge from the guard band (not the edge's depth repeated there, at a place it is not:
     // it darkened or lit a corner by the angle it was seen from); past the band too, left out
     float occ = 0, taken = 0;
-    const int n = p[3].y <= 0 ? 0 : have ? 6 : 12;
-    [loop] for (int k = 0; k < n; k++) {
+    const int n = 12;
+    [unroll] for (int k = 0; k < n; k++) {
         float a = (k + noise) * 2.399963;
         float rr = sqrt((k + 0.5) / n);
         float2 uv = i.uv + float2(cos(a), sin(a)) * rr * rs;
@@ -450,10 +130,6 @@ float4 ao(O i) : SV_Target {
         occ += saturate(dot(v, N) * rsqrt(vv + 1e-6) - 0.2) * fall;
     }
     float vis = saturate(1 - p[3].y * 0.7 * occ / max(taken, 1));
-    if (have) vis = min(vis, baked);
-    // (XBE_BAKE=2: what the bake does not have black, 3: a mid grey; 4: the baked alone)
-    if (bakecam[0].w > 0 && !have && bakecam[1].w > 1.5 && bakecam[1].w < 3.5) vis = bakecam[1].w > 2.5 ? 0.5 : 0;
-    if (have && bakecam[1].w > 3.5) vis = baked;
     // contact shadow: a short march towards the light, shadowed where the depth buffer has something in front
     float3 L = p[1].xyz;
     float sh = 0;
@@ -475,8 +151,6 @@ float4 ao(O i) : SV_Target {
     return vis;
 }
 float4 ao_depth(O i) : SV_Target { float d = D(i.uv); return frac(d * 16); }
-// the baked bounce's strength against the screen's (its samples' sum over 16, a disc on the screen)
-static const float BAKE_BOUNCE = 1.0;
 // XBE_SCENE_DEBUG=4: the guard band against the screen's depth where both have it (black: the same; white: 5% apart)
 float4 ao_guard(O i) : SV_Target {
     float d = D(i.uv);
@@ -484,19 +158,13 @@ float4 ao_guard(O i) : SV_Target {
     float g = guard.SampleLevel(pnt, (i.uv - 0.5) * GUARD + 0.5, 0);
     return saturate(abs(ViewZ(g) - ViewZ(d)) / (ViewZ(d) * 0.05));
 }
-// One bounce of light (half size): where the bake has the surface and its bounced light (bakelook's, t4, the same
-// texel), that: the light off everything about it within a few metres, as the game drew it, seen or not. Else (what
-// moves, what the bake never saw) the colour of the lit surfaces about a point on the screen (16 samples over a disc
-// of 2.5 m in the view, as the scene drew them) that face it and that it faces, by the cosines and their nearness.
-// Out: rgb the light arriving, a 1.
+// One bounce of light (half size): the colour of the lit surfaces about a point (16 samples over a disc of 2.5 m in the
+// view, as the scene drew them) that face it and that it faces, by the cosines and their nearness. Out: rgb the light
+// arriving, a 1.
 Texture2D gscene : register(t1);
 float4 gi(O i) : SV_Target {
     float d = D(i.uv);
     if (d >= 0.99999) return 0;
-    if (bakecam[0].w > 0 && BakeHasBounce()) {
-        uint2 v = bakelk.Load(int3(i.pos.xy, 0));
-        if (v.x & (1u << 24)) return float4(BakeLookBounce(v) * BAKE_BOUNCE, 1);
-    }
     float3 P = ViewPos(i.uv, d);
     float2 px = p[2].zw * 2;
     float3 l = ViewPos(i.uv - float2(px.x, 0), D(i.uv - float2(px.x, 0))), r = ViewPos(i.uv + float2(px.x, 0), D(i.uv + float2(px.x, 0)));
@@ -803,25 +471,11 @@ float2 skydilate(O i) : SV_Target {
 
 // t0 the scene, t1 the world's depth: on the sky (beyond most of the far plane), the clouds, then the sun by day or
 // the moon by night, before the bloom (the sun's own glare). Day or night by the level's own sky about each point;
-// the clouds take their colour from it and their light from the sun. t3 the clouds' field (cloudfield, half size).
+// the clouds take their colour from it and their light from the sun.
 inline constexpr char kSceneSkyHlsl[] = R"(
 Texture2D scene : register(t0);
 Texture2D<float> depth : register(t1);
 Texture2D<float2> skytiles : register(t2);  // level 1: kSkyTilesHlsl's, where the smoke (r) and the far water (g) are near
-Texture2D<float2> cloudf : register(t3);
-// The clouds at half size (soft: read back bilinear, as they were), where the sky is about (a texel's 4 x 4 pixels of
-// the screen): their thickness along the pixel's way and a little towards the sun (its light through their edges)
-float2 cloudfield(O i) : SV_Target {
-    float2 px = p[2].zw;
-    float4 g0 = depth.GatherRed(pnt, i.uv + px * float2(-1, -1)), g1 = depth.GatherRed(pnt, i.uv + px * float2(1, -1));
-    float4 g2 = depth.GatherRed(pnt, i.uv + px * float2(-1, 1)), g3 = depth.GatherRed(pnt, i.uv + px * float2(1, 1));
-    float far = max(max(max(g0.x, g0.y), max(g0.z, g0.w)), max(max(max(g1.x, g1.y), max(g1.z, g1.w)),
-                    max(max(max(g2.x, g2.y), max(g2.z, g2.w)), max(max(g3.x, g3.y), max(g3.z, g3.w)))));
-    if (ViewZ(far) < p[0].w * 0.6) return 0;
-    float3 w = SkyRay(i.uv), sun = sky[4].xyz;
-    float cloud = Clouds(w, 5);
-    return float2(cloud, cloud > 0 ? Clouds(normalize(w + sun * 0.08), 3) : 0);
-}
 // Level 1 (sky[0].w 2): the sky's pieces each at a depth of its own by the far plane (d3d12.cpp sky_phase_, a step
 // of 2^-21 apart), the oil smoke's shells veiled. About a pixel (a wide disc), the smoke's and the open sky's colours
 // apart. Where the shells meet each other their colours mix. Over the smoke's outline against the open sky a thick
@@ -862,8 +516,9 @@ float3 SkyFeather(O i, float3 c, float d0, out float veil) {
     float l0 = SkyLayer(d0);
     veil = v0 ? 1 : 0;
     float R = 0.17 * p[2].y;
-    // (the disc's turn each pixel's, the same each frame: a fine grain that holds still)
-    float noise = frac(52.9829189 * frac(dot(i.pos.xy, float2(0.06711056, 0.00583715))));
+    // (the disc's turn each pixel's, and each frame's: the anti-aliasing averages the samples' grain out)
+    float frame = floor(sky[1].w * 60);
+    float noise = frac(52.9829189 * frac(dot(i.pos.xy, float2(0.06711056, 0.00583715))) + frame * 0.618034);
     float3 accs = 0;
     float ns = 0, nk = 0, shells = 0, ws = 0;
     [loop] for (int k = 0; k < 64; k++) {
@@ -917,7 +572,8 @@ bool FarPix(int2 q) {
 bool HorizonSoft(O i, float d0, out float3 c) {
     c = 0;
     float B = 0.03 * p[2].y, R = 0.014 * p[2].y;
-    float noise = frac(52.9829189 * frac(dot(i.pos.xy, float2(0.06711056, 0.00583715))));
+    float frame = floor(sky[1].w * 60);
+    float noise = frac(52.9829189 * frac(dot(i.pos.xy, float2(0.06711056, 0.00583715))) + frame * 0.618034);
     float fw = 0, fs = 0;
     [loop] for (int k = 0; k < 20; k++) {
         float a = (k + noise) * 2.399963;
@@ -988,11 +644,10 @@ float4 skyfx(O i) : SV_Target {
     float strength = sky[4].w;
     float cloud = 0;
     if (sky[5].x > 0) {
-        float2 cf = cloudf.SampleLevel(lin, i.uv, 0);
-        cloud = cf.x;
+        cloud = Clouds(w, 5);
         if (cloud > 0) {
             // thicker towards the sun: that side in its own shade; the light through the edges facing the sun
-            float toward = cf.y;
+            float toward = Clouds(normalize(w + sun * 0.08), 3);
             float lit = saturate(1 - (toward - cloud) * 2.5 - cloud * 0.35);
             // (by night the moon's grey on them)
             float3 base = lerp(c, lum.xxx * 1.3 + 0.015, 0.7) + float3(0.022, 0.025, 0.032) * (1 - day);
@@ -1020,126 +675,51 @@ float4 skyfx(O i) : SV_Target {
     }
     if (sky[5].y > 0 && sky[3].w > 0 && !own_moon) {
         float a = dot(w, sun);
-        // the angle from its middle (radians), measured on the screen: a disc this large drawn by its angle alone
-        // stretches into an oval towards the screen's edges, as the view's projection widens there; round as a film
-        // shows it, its size the projection's mean there (the sun in the view by the camera's rows, as SkyRay)
-        // larger than life, as a film shows them: the sun 1.5 degrees across its radius, a white hot disc (past white:
-        // the bloom's glare) a little darker at its rim, a corona and a wide halo; the moon 2.2 degrees, pale, its seas
-        // dark on its face, a soft glow about it
-        const float RS = 0.0262, RM = 0.0384;
-        float3 sv = float3(dot(sun, sky[0].xyz), dot(sun, sky[1].xyz), dot(sun, sky[2].xyz));
-        float2 st = sv.xy / max(sv.z, 1e-3), pt = float2((i.uv.x * 2 - 1) * p[0].x, (1 - i.uv.y * 2) * p[0].y);
-        // (the screen's measure holds about the disc alone: far from it, the sun near the view's side, the projection
-        // squeezed the whole sky into its reach and it shone white; the true angle beyond a few of the moon's radii)
-        float ta = sqrt(max(2 * (1 - a), 0));
-        float ts = sv.z > 0 ? length(pt - st) / pow(1 + dot(st, st), 0.75) : ta;
-        float th = lerp(max(ts, ta * 0.6), ta, smoothstep(RM * 2, RM * 5, ta));
-        float disc = 1 - smoothstep(RS * 0.94, RS * 1.02, th);
-        float limb = 0.78 + 0.22 * sqrt(saturate(1 - (th / RS) * (th / RS)));
-        float corona = exp(-max(th - RS, 0) / (RS * 0.35)) * (1 - disc);
-        float halo = corona * 1.6 + exp(-th / (RS * 2.2)) * 0.45 + exp(-th / (RS * 9)) * 0.18;
-        float3 sunlight = float3(1, 0.94, 0.84) * (disc * limb * 14 + halo) * strength;
-        float moon = 1 - smoothstep(RM * 0.96, RM * 1.02, th);
-        float2 mf = (pt - st) / (pow(1 + dot(st, st), 0.75) * RM);
-        float face = 0.48 + 0.52 * smoothstep(0.3, 0.7, Fbm(mf * 2.6 + 1.7, 4));
-        float3 moonlight = float3(0.82, 0.87, 1) * (moon * face * 0.95 + exp(-max(th - RM, 0) / (RM * 0.5)) * (1 - moon) * 0.2 +
-                                                    exp(-th / (RM * 4)) * 0.05);
+        // the sun: a white hot disc (past white: the bloom's glare) and its halo; the moon: larger, pale, its face
+        // mottled
+        float disc = smoothstep(0.99990, 0.99994, a);
+        float halo = exp((a - 1) * 3000) * 1.5 + exp((a - 1) * 150) * 0.22;
+        float3 sunlight = float3(1, 0.94, 0.84) * (disc * 14 + halo) * strength;
+        float moon = smoothstep(0.99983, 0.99986, a);
+        float3 m = w - sun * a;
+        float face = 0.72 + 0.28 * Fbm(float2(dot(m, sky[0].xyz), dot(m, sky[1].xyz)) * 1800, 3);
+        float3 moonlight = float3(0.82, 0.87, 1) * (moon * face * 1.4 + exp((a - 1) * 2500) * 0.25 + exp((a - 1) * 180) * 0.04);
         c += lerp(moonlight, sunlight, day) * (1 - cloud * 0.92) * (1 - veil);
     }
     return float4(c, s.a);
 }
 )";
 
-// The reflections, from the level's baked probes (tools/bake --probes, d3d12.cpp ProbeLoad), nothing of the screen:
-// steady as the view moves, what is off the screen or behind something too. The eight probes about the surface (a
-// cube of their grid) weighed by their share, by which side of it they stand and by whether they see it (their
-// distance that way reaches it); each read where the reflected ray meets what it sees (its distance that way taken
-// as a sphere about it). Fresnel: little head on, more at a grazing angle; metal tints what it reflects with its colour and
-// takes its place, the rest add it. t0 the scene, t1 the depth now, t2 the reflection buffer (the materials':
-// octahedral normal in view space, view depth, reflectivity and roughness, metal by the sign), t3 the probes' table
-// (after "StructuredBuffer<uint2> bake" and kBakeHlsl: its size and count, the grid and the atlas's layout, then the
-// slots: a fingerprint of the grid place, the probe), t4 the occlusion, t5 the probes' atlas, t6 the world's depth.
-inline constexpr char kSceneReflHlsl[] = R"(
+// The reflections. t0 the scene, t1 the depth now, t2 the reflection buffer (the materials': octahedral normal, view
+// depth, reflectivity and roughness, metal by the sign), t3 the world's depth. A pixel whose buffer is its own (the
+// depths agree: nothing else drawn over it) reflects along its normal: the ray walks the screen through the world's
+// depth, longer steps further on, then narrows onto what it met; what it meets is the reflection, the sky (from the
+// screen's own, about the level's top) where it leaves the screen or runs towards the eye. Fresnel: little head on,
+// more at a grazing angle; metal tints what it reflects with its colour and takes its place, the rest add it.
+inline constexpr char kSceneSsrHlsl[] = R"(
 Texture2D scene : register(t0);
 Texture2D<float> depthnow : register(t1);
 Texture2D gb : register(t2);
+Texture2D<float> world : register(t3);
 Texture2D<float> aoc : register(t4);
-Texture2D atlas : register(t5);
-Texture2D<float> world : register(t6);
 float3 OctDecode(float2 e) {
     float3 n = float3(e, 1 - abs(e.x) - abs(e.y));
     if (n.z < 0) n.xy = (1 - abs(n.yx)) * (n.xy >= 0 ? 1 : -1);
     return normalize(n);
 }
-static const float PROBE_FAR = 12000;
-// the probe at a grid place (its key a cell's, facing 7 and size 3: tools/bake/bake.cpp BakeProbes), -1 none
-int ProbeFind(int3 g) {
-    uint n = bake[0].x;
-    if (n == 0) return -1;
-    const uint m = (1u << 19) - 1;
-    uint y = uint(g.y) & m;
-    uint klo = (uint(g.x) & m) | (y << 19);
-    uint khi = (y >> 13) | ((uint(g.z) & m) << 6) | (7u << 25) | (3u << 28) | 0x80000000u;
-    uint fp = BakeHash(khi, klo) | 1;
-    uint slot = MulHi(BakeHash(klo, khi), n);
-    [loop] for (int k = 0; k < 32; k++) {
-        uint2 e = bake[2 + slot];
-        if (e.x == 0) return -1;
-        if (e.x == fp) return int(e.y);
-        slot = slot + 1 < n ? slot + 1 : 0;
-    }
-    return -1;
-}
-// what probe idx sees the way d: the colour, the distance (its octahedral map, y the pole, in the atlas with a border)
-float4 ProbeRead(uint idx, float3 d) {
-    float2 e = d.xz / (abs(d.x) + abs(d.y) + abs(d.z));
-    if (d.y < 0) e = (1 - abs(e.yx)) * (e >= 0 ? 1 : -1);
-    uint row = bake[1].y & 0xFFFF, tile = bake[1].y >> 16;
-    float2 size;
-    atlas.GetDimensions(size.x, size.y);
-    float2 origin = float2(idx % row, idx / row) * (tile + 2) + 1;
-    float4 s = atlas.SampleLevel(lin, (origin + (e * 0.5 + 0.5) * tile) / size, 0);
-    return float4(s.rgb * s.rgb * 4, s.a * s.a * PROBE_FAR);
-}
-// what the surface at W (the world) with the normal N reflects along R; false where no probe is about it
-bool ProbeEnv(float3 W, float3 N, float3 R, out float3 env) {
-    env = 0;
-    float G = asfloat(bake[1].x);
-    if (G <= 0) return false;
-    // (half a metre off the surface, as the bake raised the probes' places off it)
-    float3 Wb = W + N * 50;
-    float3 f = Wb / G, b = floor(f), t = f - b;
+float2 ToScreen(float3 X) { return float2(X.x / X.z / p[0].x * 0.5 + 0.5, 0.5 - X.y / X.z / p[0].y * 0.5); }
+// the sky as the level draws it: what the screen shows of it, top and sides
+float3 SkyColour(float3 R) {
     float3 acc = 0;
-    float wsum = 0;
-    [loop] for (int k = 0; k < 8; k++) {
-        int3 o = int3(k & 1, (k >> 1) & 1, k >> 2);
-        float3 tw = o ? t : 1 - t;
-        float w = tw.x * tw.y * tw.z;
-        if (w < 1e-4) continue;
-        int idx = ProbeFind(int3(b) + o);
-        if (idx < 0) continue;
-        float3 Pp = (b + o) * G;
-        float3 v = Wb - Pp;
-        float len = max(length(v), 1);
-        float3 dv = v / len;
-        // a probe behind the surface counts little; one that does not see the place (a wall between) hardly at all
-        float side = (dot(-dv, N) + 1) * 0.5;
-        w *= side * side + 0.05;
-        float seen = ProbeRead(idx, dv).a;
-        w *= lerp(0.02, 1, saturate((seen * 1.05 + 30 - len) / 40));
-        // where the ray from W meets what the probe sees: its distance that way taken as a sphere about it
-        float3 oc = W - Pp;
-        float d0 = ProbeRead(idx, R).a;
-        float bq = dot(R, oc), c = dot(oc, oc) - d0 * d0;
-        float tt = -bq + sqrt(max(bq * bq - c, 0));
-        acc += ProbeRead(idx, normalize(oc + R * max(tt, 1))).rgb * w;
-        wsum += w;
+    float n = 0;
+    [unroll] for (int k = 0; k < 12; k++) {
+        float2 q = float2((k % 4 + 0.5) / 4, (k / 4 + 0.5) / 3 * 0.45);
+        if (ViewZ(world.SampleLevel(pnt, q, 0)) > p[0].w * 0.6) acc += scene.SampleLevel(lin, q, 0).rgb, n++;
     }
-    if (wsum < 1e-4) return false;
-    env = acc / wsum;
-    return true;
+    float3 sky = n > 0 ? acc / n : float3(0.35, 0.4, 0.45) * 0.4;
+    return sky * saturate(R.y * 1.5 + 0.6);
 }
-float4 refl(O i) : SV_Target {
+float4 ssr(O i) : SV_Target {
     int3 px = int3(i.pos.xy, 0);
     float4 s = scene.Load(px);
     float4 g = gb.Load(px);
@@ -1165,29 +745,64 @@ float4 refl(O i) : SV_Target {
     float F = f0 + (1 - f0) * pow(1 - ndv, 3);
     float amount = saturate(refl * F * 2);
     if (amount < 0.015) return s;
-    // nothing by the eye itself (the gun in hand, the hands): no probe stands there
-    if (z < 150) return s;
-    // a surface the game left dark (a room's floor, its walls) reflects less of what is about it
+    // fewer steps where the reflection is faint
+    int steps = (int)lerp(14, 40, saturate(amount * 3));
+    // the walk: from just off the surface, a step of 1.5% of the depth growing 18% each, up to 40 m
+    float3 hitc = 0;
+    float found = 0;
+    if (R.z > -0.2) {
+        float3 X = P + N * (2 + z * 0.002);
+        float step = max(z * 0.015, 4);
+        float dither = Hash(i.pos.xy) * 0.5 + 0.5;
+        float3 prev = X;
+        float grow = steps < 40 ? 1.3 : 1.18;
+        [loop] for (int k = 0; k < steps; k++) {
+            prev = X;
+            X += R * step * (k == 0 ? dither : 1);
+            step *= grow;
+            if (X.z < 1 || length(X - P) > 4000) break;
+            float2 q = ToScreen(X);
+            if (any(q < 0) || any(q > 1)) break;
+            float zs = ViewZ(world.SampleLevel(pnt, q, 0));
+            float gap = X.z - zs;
+            // nothing by the eye itself is reflected (the gun in hand or mounted, the hands): seen from the far
+            // ground it threw a dark, blocky copy of the gun and its flash down the line of fire
+            if (zs < 150) break;
+            if (gap > 0 && gap < max(step * 1.5, 40)) {
+                // narrowed onto the surface met
+                float3 a = prev, b = X;
+                [unroll] for (int r = 0; r < 5; r++) {
+                    float3 m = (a + b) * 0.5;
+                    float2 mq = ToScreen(m);
+                    if (m.z - ViewZ(world.SampleLevel(pnt, mq, 0)) > 0) b = m; else a = m;
+                }
+                float2 hq = ToScreen(b);
+                // blurrier the rougher and the further
+                float2 o = rough * 0.012 * float2(p[2].y / p[2].x, 1) * (1 + length(b - P) * 0.002);
+                hitc = (scene.SampleLevel(lin, hq, 0).rgb * 2 + scene.SampleLevel(lin, hq + o, 0).rgb +
+                        scene.SampleLevel(lin, hq - o, 0).rgb + scene.SampleLevel(lin, hq + float2(o.x, -o.y), 0).rgb +
+                        scene.SampleLevel(lin, hq - float2(o.x, -o.y), 0).rgb) / 6;
+                // faded at the screen's edges and with the way it went
+                float2 e = min(hq, 1 - hq);
+                found = saturate(min(e.x, e.y) * 12) * saturate(1 - length(b - P) / 4000);
+                break;
+            }
+        }
+    }
+    float3 Rw = R.x * sky[0].xyz + R.y * sky[1].xyz + R.z * sky[2].xyz;
+    // a surface the game left dark (a room's floor, its walls) sees no sky and little of the bright outside: its
+    // reflection fades with its own light (else a dark room shone with the sky and the street, and as the camera
+    // tilted and the reflected rays left the screen it went dark again)
     float lit = smoothstep(0.015, 0.15, dot(s.rgb, float3(0.299, 0.587, 0.114)));
     amount *= lerp(0.2, 1, lit);
     // specular occlusion: corners and creases (the AO) see little of the scene to reflect, less the rougher
     float ao = aoc.SampleLevel(lin, i.uv, 0);
     amount *= saturate(pow(ao, 1.5 + rough * 2) * 1.1 - 0.05);
-    // (too faint to show: no probes read)
-    if (amount < 0.004 && sky[5].w == 0) return s;
-    float3 W = P.x * bakecam[0].xyz + P.y * bakecam[1].xyz + P.z * bakecam[2].xyz + bakecam[3].xyz;
-    float3 Nw = normalize(N.x * bakecam[0].xyz + N.y * bakecam[1].xyz + N.z * bakecam[2].xyz);
-    float3 Rw = normalize(R.x * bakecam[0].xyz + R.y * bakecam[1].xyz + R.z * bakecam[2].xyz);
-    float3 env;
-    bool found = ProbeEnv(W, Nw, Rw, env);
-    // XBE_REFL_DEBUG: 1 what is reflected and how much, 2 reflectivity (red) and metal (green), 3 a probe about it,
-    // 5 what is reflected alone, 6 the amount alone
-    if (sky[5].w == 3) return float4(found ? 1 : 0, 0, amount, 1);
-    if (sky[5].w == 5) return float4(found ? env : float3(1, 0, 1), 1);
-    if (sky[5].w == 6) return float4(amount.xxx * 4, 1);
-    if (!found) return s;
+    float3 env = lerp(SkyColour(Rw) * lit, hitc, found);
+    // XBE_SSR_DEBUG: 1 what is reflected and how much, 2 reflectivity (red) and metal (green), 3 found on the screen
     if (sky[5].w == 1) return float4(env * amount * 3, 1);
     if (sky[5].w == 2) return float4(refl, metal ? 1 : 0, 0, 1);
+    if (sky[5].w == 3) return float4(found, 0, amount, 1);
     float3 c = s.rgb;
     if (metal) {
         float3 tint = c / max(max(max(c.r, c.g), c.b), 0.05);
@@ -1355,12 +970,7 @@ float2 Hurt(float2 uv, float h, float t) {
 // flash itself (the weapon firing, the hands), does not count. Soft: the samples' cover averaged with the nearer ones
 // weighing more.
 float FlashShadow(float3 P, float3 C, float2 uv0) {
-    // as many steps as the way from P to the flash crosses pixels on the screen, a step to three, 6 to 24 (a short
-    // way, a far flash, needs few to see all there is in it)
-    float3 E = P + (C - P) * 0.85;
-    if (E.z < 1) E = P + (C - P) * saturate((1 - P.z) / min(C.z - P.z, -1e-3));
-    float2 qe = float2(E.x / max(E.z, 1) / p[0].x * 0.5 + 0.5, 0.5 - E.y / max(E.z, 1) / p[0].y * 0.5);
-    const int n = int(clamp(ceil(length((qe - uv0) * p[2].xy) / 3), 6, 24));
+    const int n = 24;
     float dither = Hash(uv0 * p[2].xy) * 0.4 + 0.3;
     float shade = 0, total = 0;
     float thick = 70 + length(C - P) * 0.08;
@@ -1444,22 +1054,6 @@ float3 Motes(O i, float3 c) {
     float wn = shadowm.Load(int3(i.pos.xy, 0)).r;
     float zs = wn < 1 ? ViewZ(wn) : ViewZ(occ.SampleLevel(pnt, i.uv, 0));
     float3 ray = normalize(float3((i.uv.x * 2 - 1) * p[0].x, (1 - i.uv.y * 2) * p[0].y, 1));
-    // the embers glow by fires (heatz[6].z their count) alone: a fire whose reach (8 tenths of its radius) comes within
-    // 2.5 m of the way the steps walk (a point stands up to 2.1 m off it: its metre cell, drifting); none, the
-    // dust alone, which shows against what is lit (over 0.2) and within 40 m: a pixel dark (the dust's few pixels about
-    // it as dark) or past that, none to walk for
-    bool embers = false;
-    if (heatz[6].z > 0) {
-        float far = min(zs, 40 + 15 * 45);
-        for (int l = 0; l < (int)lcount.x && !embers; l++) {
-            if (abs(lcol[l].w - 0.5) > 0.1 && abs(lcol[l].w - 0.875) > 0.05) continue;
-            float3 C = lpos[l].xyz;
-            float tc = clamp(dot(C, ray) * ray.z, 40, far);  // (the steps' depth along the ray nearest to it)
-            float reach = lpos[l].w * 0.8 + 250;
-            embers = dot(C - ray * (tc / ray.z), C - ray * (tc / ray.z)) < reach * reach;
-        }
-    }
-    if (!embers && (zs > 4000 || dot(c, float3(0.2126, 0.7152, 0.0722)) < 0.15)) return c;
     float3 add = 0;
     float px = 2 * p[0].y / p[2].y;  // a pixel's size at depth 1
     // (a step in the cell of the step before adds what that one did: the same point, worked out once)
@@ -1668,11 +1262,8 @@ float4 composite(O i) : SV_Target {
     // the volumetric haze (d3d12.cpp FogPass, t5 at half size): what it hides takes its colour (the sky's or the
     // game's fog's, lit by the scene's own light around), and the sun's light scattered in it
     // (not over the weapon in hand and the hands: the haze of the world behind them, the sky's, washed them out)
-    // (four bilinear reads a pixel apart: a tent over its texels, the march's dither smoothed out)
     if (grade[2].w > 0 && shadowm.Load(int3(i.pos.xy, 0)).r >= 1) {
-        float2 o = p[2].zw;
-        float4 f = (b3.SampleLevel(lin, uv + o * float2(-1, -1), 0) + b3.SampleLevel(lin, uv + o * float2(1, -1), 0) +
-                    b3.SampleLevel(lin, uv + o * float2(-1, 1), 0) + b3.SampleLevel(lin, uv + o * float2(1, 1), 0)) * 0.25;
+        float4 f = b3.SampleLevel(lin, uv, 0);
         float3 tint = float3(grade[3].y, grade[3].z, grade[3].w);
         float ambient = dot(c, float3(0.2126, 0.7152, 0.0722));
         c = lerp(c, tint * lerp(0.25, 0.6, saturate(ambient * 3)), f.a * 0.55) + f.rgb * tint * 1.6;

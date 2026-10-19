@@ -83,21 +83,18 @@ def compass_bg():
         x, y = c + rr * np.sin(a), c - rr * np.cos(a)
         d.text((x, y), ch, font=letters, fill=(245, 245, 245, 255), anchor="mm", stroke_width=int(big * 0.008),
                stroke_fill=(30, 30, 30, 255))
-    # the rose: 4 long points and 4 short, each half light and half shade. A point's base corners lie halfway to its
-    # neighbours (45 degrees off its tip, on the star's waist), so the halves meet at the middle side by side, none
-    # over another (a base across the middle, square to its point, was cut by the points drawn after it and covered
-    # theirs: one point's base short, the last whole and run into the middle's dot)
-    def point(angle, length, waist, light, shade):
+    # the rose: 4 long points and 4 short, each half light and half shade
+    def point(angle, length, width, light, shade):
         a = np.radians(angle)
         tip = (c + length * np.sin(a), c - length * np.cos(a))
-        l = (c + waist * np.sin(a - np.pi / 4), c - waist * np.cos(a - np.pi / 4))
-        r = (c + waist * np.sin(a + np.pi / 4), c - waist * np.cos(a + np.pi / 4))
+        l = (c + width * np.sin(a - np.pi / 2), c - width * np.cos(a - np.pi / 2))
+        r = (c + width * np.sin(a + np.pi / 2), c - width * np.cos(a + np.pi / 2))
         d.polygon([(c, c), l, tip], fill=light)
         d.polygon([(c, c), tip, r], fill=shade)
     for ang in range(45, 360, 90):
-        point(ang, R * 0.42, R * 0.1, (190, 190, 190, 245), (120, 120, 120, 245))
+        point(ang, R * 0.42, R * 0.07, (190, 190, 190, 245), (120, 120, 120, 245))
     for ang in range(0, 360, 90):
-        point(ang, R * 0.62, R * 0.13, (250, 250, 250, 255), (165, 165, 165, 255))
+        point(ang, R * 0.62, R * 0.09, (250, 250, 250, 255), (165, 165, 165, 255))
     d.ellipse((c - R * 0.035, c - R * 0.035, c + R * 0.035, c + R * 0.035), fill=(60, 60, 60, 255))
     return down(im, out)
 

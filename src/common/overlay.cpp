@@ -139,22 +139,20 @@ Item Slider(const char* label, uint32_t* v, int lo, int hi, int step, const char
 }
 
 // --- graphics presets ------------------------------------------------------------------------------------------------
-// Each sets every setting of the Graphics and Effects pages (never the display's: resolution, frame
+// Each sets every setting of the Graphics and Effects pages (never the display's: resolution, render scale, frame
 // rate). Very High is everything on; each step down drops what costs the GPU most for what it shows (measured at
-// 2560x1440 on an RTX 4080, uncapped, levels 1 and 7 from a still camera, tools/perf_presets.py: about 3.1, 2.9,
-// 2.2, 0.9 and 0.5 ms on level 1): High the shadows' High step, smooth models, the volumetric fog (~0.17 ms) and
-// the flashes' shadows; Medium SMAA with 2x MSAA, the screen's occlusion and contact shadows (~0.15 to 0.45 with
-// their blur; the baked occlusion stays), the reflections (~0.25), the soft shadows and the lesser touches; Low SMAA
-// alone, the shadows down to Low, the clouds with the sun and moon (~0.45 on level 1), per-pixel lighting, the
-// surface materials, the dynamic lights, the water, the bounce light and the floating dust; Original everything
-// off: the game as it was, its own textures included. The baked lighting stays on to Low (it costs less than what it
-// replaces). (Measured at a frame cap the GPU idles and lowers its clocks: the steps' times grow and blur.)
+// 2560x1440 on levels 1 and 7, tools/perf_ab.py --paired): High the shadows' Ultra step (~0.9 ms), smooth models
+// (~0.5), the volumetric fog (~0.3), the bounce light and the flashes' shadows; Medium the shadows' High step, the
+// occlusion and contact shadows, the reflections, the floating dust, the soft shadows, SMAA and the lesser touches;
+// Low the shadows down to Low, the clouds with the sun and moon (their sky pass, ~1.8 ms), per-pixel lighting
+// (up to ~1.3), the surface materials, the 4x MSAA and temporal anti-aliasing (~0.8, SMAA stays), the dynamic
+// lights (~0.6) and the water (~0.5); Original everything off: the game as it was, its own textures included.
 enum Preset { kVeryHigh, kHigh, kMedium, kLow, kOriginal, kCustom };
 
 using SBool = bool app::Settings::*;
 using SUint = uint32_t app::Settings::*;
 constexpr SBool kPresetFlags[] = {
-    &app::Settings::bloom, &app::Settings::ao, &app::Settings::contact_shadows,
+    &app::Settings::smaa, &app::Settings::taa, &app::Settings::bloom, &app::Settings::ao, &app::Settings::contact_shadows,
     &app::Settings::dynamic_lights, &app::Settings::light_halos, &app::Settings::soft_particles, &app::Settings::heat_haze,
     &app::Settings::sun_shafts, &app::Settings::aim_dof, &app::Settings::explosion_flash, &app::Settings::damage_shake,
     &app::Settings::flash_shadows, &app::Settings::character_detail, &app::Settings::weapon_materials,
@@ -165,43 +163,14 @@ constexpr SBool kPresetFlags[] = {
     &app::Settings::auto_exposure, &app::Settings::color_grade, &app::Settings::film_grain, &app::Settings::hit_reactions,
     &app::Settings::smooth_models, &app::Settings::reflections, &app::Settings::sun_moon, &app::Settings::clouds,
     &app::Settings::remaster, &app::Settings::materials, &app::Settings::parallax, &app::Settings::detail,
-    &app::Settings::pixel_lighting, &app::Settings::height_blend, &app::Settings::baked_lighting};
+    &app::Settings::pixel_lighting, &app::Settings::height_blend};
 constexpr SUint kPresetValues[] = {&app::Settings::aniso, &app::Settings::sharpening, &app::Settings::shadow_quality,
-                                   &app::Settings::specular, &app::Settings::anti_aliasing};
+                                   &app::Settings::specular};
 
 // a preset's values (the settings' own defaults are Very High)
 app::Settings PresetValues(int p) {
     app::Settings v;
-    v.aniso = 16, v.sharpening = 0, v.shadow_quality = 3, v.specular = 100, v.anti_aliasing = 3;
-    for (SBool f : kPresetFlags) v.*f = true;
-    if (p >= kHigh) {
-        v.shadow_quality = 2;
-        v.smooth_models = v.volumetric_fog = v.flash_shadows = false;
-    }
-    if (p >= kMedium) {
-        v.shadow_quality = 2, v.aniso = 8, v.anti_aliasing = 2;
-        v.ao = v.contact_shadows = v.reflections = v.soft_shadows = false;
-        v.water_interaction = v.light_halos = v.sun_shafts = v.cloud_shadows = v.lit_smoke = false;
-        v.character_detail = v.sharp_distance = false;
-    }
-    if (p >= kLow) {
-        v.shadow_quality = 1, v.aniso = 4, v.anti_aliasing = 1;
-        v.clouds = v.sun_moon = v.lens_flare = v.pixel_lighting = v.materials = v.parallax = v.detail = false;
-        v.height_blend = v.weapon_materials = v.dynamic_lights = v.water = v.soft_particles = v.heat_haze = false;
-        v.shockwaves = v.aim_dof = v.snow_tracks = v.bounce_light = v.ambient_particles = false;
-    }
-    if (p >= kOriginal) {
-        for (SBool f : kPresetFlags) v.*f = false;
-        v.shadow_quality = 0, v.aniso = 0, v.anti_aliasing = 0;
-    }
-    return v;
-}
-
-// the presets as settings files of version 2 had them (kept as they were: a file on one moves to the same preset
-// now, MigratePresets); the anti-aliasing then 4x MSAA with the temporal from Very High to Medium, none on Low
-app::Settings PresetValuesV2(int p) {
-    app::Settings v;
-    v.aniso = 16, v.sharpening = 0, v.shadow_quality = 3, v.specular = 100, v.anti_aliasing = 3;
+    v.aniso = 16, v.sharpening = 0, v.shadow_quality = 3, v.specular = 100;
     for (SBool f : kPresetFlags) v.*f = true;
     if (p >= kHigh) {
         v.shadow_quality = 2;
@@ -209,19 +178,20 @@ app::Settings PresetValuesV2(int p) {
     }
     if (p >= kMedium) {
         v.shadow_quality = 2, v.aniso = 8;
-        v.ao = v.contact_shadows = v.reflections = v.ambient_particles = v.soft_shadows = false;
+        v.smaa = v.ao = v.contact_shadows = v.reflections = v.ambient_particles = v.soft_shadows = false;
         v.water_interaction = v.light_halos = v.sun_shafts = v.cloud_shadows = v.lit_smoke = false;
         v.character_detail = v.sharp_distance = false;
     }
     if (p >= kLow) {
-        v.shadow_quality = 1, v.aniso = 4, v.anti_aliasing = 0;
+        v.shadow_quality = 1, v.aniso = 4;
+        v.taa = false, v.smaa = true;  // (the cheap anti-aliasing kept)
         v.clouds = v.sun_moon = v.lens_flare = v.pixel_lighting = v.materials = v.parallax = v.detail = false;
         v.height_blend = v.weapon_materials = v.dynamic_lights = v.water = v.soft_particles = v.heat_haze = false;
         v.shockwaves = v.aim_dof = v.snow_tracks = false;
     }
     if (p >= kOriginal) {
         for (SBool f : kPresetFlags) v.*f = false;
-        v.shadow_quality = 0, v.aniso = 0, v.anti_aliasing = 0;
+        v.shadow_quality = 0, v.aniso = 0;
     }
     return v;
 }
@@ -244,55 +214,22 @@ int CurrentPreset() {
 
 // Settings saved before the shadows' Ultra went (it cost much for little): a file on one of the presets then takes
 // that preset now (Very High's shadows High, High's and Medium's Medium), others keep theirs with Ultra shadows High
-bool MigrateGraphics(uint32_t saved_shadows) {
+void MigrateGraphics(uint32_t saved_shadows) {
     constexpr uint32_t kOldShadows[] = {4, 3, 2, 1, 0};  // Very High to Original's then
     const app::Settings& s = app::Get();
     for (int p = kVeryHigh; p <= kOriginal; p++) {
-        app::Settings v = PresetValuesV2(p);
+        app::Settings v = PresetValues(p);
         bool same = saved_shadows == kOldShadows[p];
-        // (Baked Lighting came after: MigrateBaked)
-        for (SBool f : kPresetFlags) same = same && (f == &app::Settings::baked_lighting || s.*f == v.*f);
+        for (SBool f : kPresetFlags) same = same && s.*f == v.*f;
         for (SUint f : kPresetValues) same = same && (f == &app::Settings::shadow_quality || s.*f == v.*f);
         if (same) {
             ApplyPreset(p);
             LOGR("settings: from before the shadows' Ultra went: preset %d, shadows %u", p, app::Get().shadow_quality);
-            return true;
+            return;
         }
     }
     app::Get().shadow_quality = std::min<uint32_t>(saved_shadows, 3);
     LOGR("settings: from before the shadows' Ultra went: custom, shadows %u", app::Get().shadow_quality);
-    return false;
-}
-
-// Settings saved before Baked Lighting (a setting of its own since): on, as the presets have it, but for a file on
-// Original (everything off), which stays Original
-void MigrateBaked() {
-    app::Settings& s = app::Get();
-    app::Settings v = PresetValuesV2(kOriginal);
-    bool same = true;
-    for (SBool f : kPresetFlags) same = same && (f == &app::Settings::baked_lighting || s.*f == v.*f);
-    for (SUint f : kPresetValues) same = same && s.*f == v.*f;
-    s.baked_lighting = !same;
-    LOGR("settings: from before Baked Lighting: %s", same ? "Original, off" : "on");
-}
-
-// Settings saved before version 3 (the presets reworked with the baked lighting, the reflections' probes and the
-// anti-aliasing's choice): a file on one of version 2's presets takes that preset as it is now; others keep theirs
-// (the anti-aliasing as settings.cpp read it: 4x MSAA where the temporal was on, else none)
-void MigratePresets() {
-    const app::Settings& s = app::Get();
-    for (int p = kVeryHigh; p <= kOriginal; p++) {
-        app::Settings v = PresetValuesV2(p);
-        bool same = true;
-        for (SBool f : kPresetFlags) same = same && s.*f == v.*f;
-        for (SUint f : kPresetValues) same = same && s.*f == v.*f;
-        if (same) {
-            ApplyPreset(p);
-            LOGR("settings: from version 2: preset %d", p);
-            return;
-        }
-    }
-    LOGR("settings: from version 2: custom, anti-aliasing %u", s.anti_aliasing);
 }
 
 void ApplyPreset(int p) {
@@ -337,6 +274,8 @@ std::vector<Page> BuildPages() {
                                        },
                                        "Takes effect when you leave these settings."));
     }
+    display.items.push_back(Slider("Render Scale", &s.render_percent, 25, 200, 5, "%d%%",
+                                   "The game is drawn at this share of the screen's resolution: above 100% supersamples."));
     {
         static const uint32_t caps[] = {30, 60, 75, 90, 120, 144, 165, 240, 360, 0};
         std::vector<std::string> names;
@@ -399,13 +338,8 @@ std::vector<Page> BuildPages() {
     graphics.items.push_back(Choice("Shadows", {"Off", "Low", "Medium", "High"},
                                     [&s] { return int(std::min<uint32_t>(s.shadow_quality, 3)); },
                                     [&s](int i) { s.shadow_quality = uint32_t(i); },
-                                    "The sun's and the moon's shadows: sharper and further with each step."));
-    graphics.items.push_back(Toggle("Baked Lighting", &s.baked_lighting,
-                                    "The world's shade and the sun's shadows ray traced ahead of time: steady, and lighter on the GPU."));
-    graphics.items.push_back(Choice("Anti-Aliasing", {"Off", "SMAA", "SMAA + 2x MSAA", "SMAA + 4x MSAA"},
-                                    [&s] { return int(std::min<uint32_t>(s.anti_aliasing, 3)); },
-                                    [&s](int i) { s.anti_aliasing = uint32_t(i); },
-                                    "Smooth edges: SMAA over the 3D (fences, foliage, particles); MSAA the models' edges too."));
+                                    "Real time shadows from the scene's main light: sharper and further with each step."));
+    graphics.items.push_back(Toggle("Anti-Aliasing", &s.taa, "4x MSAA and temporal anti-aliasing: smooth edges, fences and foliage."));
     graphics.items.push_back(Slider("Sharpening", &s.sharpening, 0, 10, 1, "%d", "Contrast adaptive sharpening.",
                                     [](int v) { return v ? Fmt("%d", v) : std::string("Off"); }));
     graphics.items.push_back(Toggle("Remastered Textures", &s.remaster, "Every texture redrawn at four times the detail."));
@@ -424,7 +358,7 @@ std::vector<Page> BuildPages() {
 
     Page effects{"EFFECTS", {}};
     effects.items.push_back(Toggle("Bloom", &s.bloom, "Bright light and flashes glow."));
-    effects.items.push_back(Toggle("Ambient Occlusion", &s.ao, "Soft shade about what moves, from the screen (the world's own comes with Baked Lighting)."));
+    effects.items.push_back(Toggle("Ambient Occlusion", &s.ao, "Soft shade in corners and creases."));
     effects.items.push_back(Toggle("Contact Shadows", &s.contact_shadows, "Small shadows where things meet the ground."));
     effects.items.push_back(Toggle("Dynamic Lights", &s.dynamic_lights, "Muzzle flashes, tracers, fire and explosions light the scene."));
     effects.items.push_back(Toggle("Light Halos", &s.light_halos, "The air glows around flashes and fire."));

@@ -6,7 +6,6 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
-#include <compressapi.h>
 #include <d3d12.h>
 #include <d3d12sdklayers.h>
 #include <d3dcompiler.h>
@@ -21,8 +20,6 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
-#include <future>
-#include <memory>
 #include <mutex>
 #include <optional>
 #include <fstream>
@@ -75,22 +72,19 @@ constexpr uint32_t kSamplerCount = 2048;
 constexpr uint32_t kRtvCount = 1024;
 // views of the passes on the shown frame, after the back buffers': SMAA edges, weights and blend, sharpened; then
 // the scene passes': its copy, two occlusion targets, four bloom levels
-constexpr uint32_t kPostRtvs = 4, kSceneRtvs = 17;
+constexpr uint32_t kPostRtvs = 4, kSceneRtvs = 14;
 constexpr uint32_t kSceneVel = 12;   // full size: the screen's velocity (MotionPass)
-constexpr uint32_t kSceneHist = 13;  // (the temporal anti-aliasing's history, gone: a pixel, unused)
-constexpr uint32_t kSceneBake = 14;  // half size, R32G32_UINT: the bake's lookups (bakelook, BakePack)
-constexpr uint32_t kSceneColCap = 15;  // quarter size, R32G32_UINT: the bake's colour capture (BakeColourCapture)
-constexpr uint32_t kSceneCloud = 16;   // half size, R16G16_FLOAT: the clouds' field (SkyPass, kSceneSkyHlsl's cloudfield)
+constexpr uint32_t kSceneHist = 13;  // full size, the scene's format: the temporal anti-aliasing's history
 constexpr uint32_t kSceneFog = 10;  // half size: the volumetric haze (FogPass)
 constexpr uint32_t kSceneGi = 11;   // half size: one bounce of light (kSceneAo's gi)
 constexpr uint32_t kSceneBloomEnd = 7, kSceneShadow = 7;
 constexpr uint32_t kSceneRays = 8, kSceneDof = 9;  // half size: the sun's shafts, the blurred scene for aiming
 constexpr uint32_t kSkyConstantsAt = 86 * 4;  // floats: kSceneCommon's sky[6] after p, lcount, lpos, lcol, heat, heatz
-constexpr uint32_t kBakeCamAt = kSkyConstantsAt + 40;  // floats: kSceneCommon's bakecam[4] after sky[6], grade[4]
 constexpr uint32_t kGradeAt = kSkyConstantsAt + 24;  // floats: kSceneCommon's grade[4], after sky[6] (the 1536 bytes' end)
 constexpr uint32_t kMsaaKey = 0x1000;         // PsoKey::topo: drawn into the scene's multisampled targets (MSAA), the
                                               // sample count at bits 16..19
 constexpr uint32_t kPointSpriteKey = 0x100000;  // PsoKey::topo: points, each a square through PointSpriteGsHlsl
+constexpr uint32_t kA2cKey = 0x2000;          // PsoKey::topo: cut out by its alpha, the cut's edge alpha to coverage
 constexpr uint32_t kTessKey = 0x800;          // PsoKey::topo: PN triangle tessellation (TessHlsl)
 constexpr uint32_t kGbufKey = 0x400;          // PsoKey::topo: a material's second target, the reflection buffer
 constexpr uint32_t kWeaponCullKey = 0x200;    // PsoKey::topo: the weapon in hand's triangles through WeaponCullGsHlsl
@@ -828,7 +822,6 @@ private:
     void BlitFrame(Target& t, ID3D12Resource* src, DXGI_FORMAT fmt);
     // the passes on the shown frame (SMAA, sharpening): what to show, readable; t's own resource without any
     ID3D12Resource* PostProcess(Target& t, DXGI_FORMAT& fmt);
-    void SceneSmaa(Target& rt);
     bool EnsurePostTargets(DXGI_FORMAT fmt, uint32_t w, uint32_t h);
     bool EnsureSmaaLookups();
     D3D12_CPU_DESCRIPTOR_HANDLE PostRtv(uint32_t i) { return Cpu(rtv_heap_.Get(), kRtvCount + kFrames + i, rtv_inc_); }
@@ -854,69 +847,8 @@ private:
     bool EnsureSceneTargets(DXGI_FORMAT fmt, uint32_t w, uint32_t h);
     void ScenePass(const std::string& hlsl, const char* entry, uint32_t out, DXGI_FORMAT out_fmt, uint32_t w, uint32_t h,
                    std::initializer_list<std::pair<ID3D12Resource*, DXGI_FORMAT>> src, const float p[16],
-                   float blend = -1, const float* cam = nullptr, ID3D12Resource* table = nullptr, uint32_t table_n = 0);
+                   float blend = -1);
     void ScenePost();
-    // The lighting bake (tools/bake): the level's table of baked occlusion (bake/lvNN.bake beside the game), a
-    // structured buffer of uint4 entries read by the occlusion pass at t3 (BakeLoad)
-    ComPtr<ID3D12Resource> bake_;
-    uint32_t bake_n_ = 0;
-    int bake_level_ = -999;
-    struct BakeData {
-        int level = -1;
-        uint32_t size = 0;
-        std::vector<uint32_t> table;
-        std::unordered_set<uint64_t> ids;
-        float sun[3] = {};
-        bool have_sun = false;
-        std::vector<uint64_t> keys;  // each slot's key (the colour capture's)
-    };
-    std::future<std::shared_ptr<BakeData>> bake_job_;
-    // The bake's colour capture (XBE_BAKE_COLOR=<folder>, tools/bake: the reflections' probes): what colour each
-    // cell is drawn, from a pixel in sixteen a frame, read back and summed by slot, written to lvNN.col now and then
-    struct ColourSum {
-        double r = 0, g = 0, b = 0;
-        uint32_t n = 0, refl = 0;
-    };
-    std::vector<uint64_t> bake_keys_;
-    std::unordered_map<uint32_t, ColourSum> colcap_;
-    ColourSum colcap_sky_[128];  // the sky's colour by the way it is seen (16 round, 8 up)
-    int colcap_level_ = -1;
-    ComPtr<ID3D12Resource> colcap_rb_[kFrames];
-    uint64_t colcap_fence_[kFrames] = {};
-    uint32_t colcap_dims_[kFrames][3] = {};  // width, height, row pitch
-    float bake_cam_[16] = {};  // this frame's view space to the world (SceneOcclusion's cam)
-    // The reflections' probes (tools/bake --probes: bake/lvNN.refl): their table by grid place and their octahedral
-    // maps in an atlas, read on a thread of their own as the level changes (ProbeLoad); kSceneReflHlsl reads them
-    struct ProbeData {
-        int level = -1;
-        std::vector<uint32_t> table;
-        std::vector<uint8_t> atlas;
-        uint32_t w = 0, h = 0;
-    };
-    std::future<std::shared_ptr<ProbeData>> probe_job_;
-    std::shared_ptr<ProbeData> ProbeRead(int level);
-    void ProbeLoad();
-    ComPtr<ID3D12Resource> probe_tab_, probe_atlas_;
-    uint32_t probe_n_ = 0;
-    int probe_level_ = -999;
-    void BakeColourCapture(Target& rt);
-    void BakeColourWrite();
-    std::shared_ptr<BakeData> BakeRead(int level);
-    float bake_sun_[3] = {};
-    bool bake_have_sun_ = false;
-    bool bake_sun_ok_ = false;  // the light now is the baked sun (within 10 degrees): the baked shadows hold
-    bool bake_looked_ = false;  // this frame's bakelook made (scene_[kSceneBake])
-    bool occ_made_ = false;     // this frame's occlusion made (scene_[1]: the AO's, or the baked alone)
-    std::unordered_set<uint64_t> bake_ids_;  // the draws the bake has (DrawWorldId): out of the shadow map
-    void BakeLoad();
-    // the bake in use: 0 none (Baked Lighting off), 1 on; XBE_BAKE (tests): 2 to 7 its debug views
-    int BakeMode() const {
-        static const int env = [] {
-            const char* e = std::getenv("XBE_BAKE");
-            return e ? std::atoi(e) : 1;
-        }();
-        return app::Get().baked_lighting ? env : 0;
-    }
     void SceneOcclusion();
     void SceneComposite(Target& rt, const char* entry, ID3D12Resource* occ, bool bloom, const float p[16], ID3D12Resource* depth,
                         ID3D12Resource* shadow = nullptr, bool lights = false);
@@ -955,7 +887,6 @@ private:
         ID3D12PipelineState* guard;   // the guard band's (DrawGuard)
         ID3D12PipelineState* top;     // seen from above, its cover of the water (WaterInteraction)
         float zmin, zmax;             // its viewport's depth range
-        bool baked;                   // the bake has it (its shadow on the world baked): not in the shadow map
     };
     std::vector<Caster> casters_;
     // The veil (DrawVeil): the world's see-through draws (smoke, dust: blended over, no depth write) again, before
@@ -1040,10 +971,6 @@ private:
     std::unordered_map<int64_t, std::vector<float>> map_cells_;
     bool map_on_ = false;
     void CollectMap(const State& s, const Assembled& a, const DrawShaders& sh, const PixelKey& pk, const PsoKey& k);
-    void CaptureGeometry(const State& s, const Assembled& a, const DrawShaders& sh, const PixelKey& pk, const PsoKey& k,
-                         const DrawTextures& stages);
-    bool DrawWorldId(const State& s, const Assembled& a, const DrawShaders& sh, const PixelKey& pk, float W[16], uint64_t& h);
-    bool ProgramWorld(const float A[16], float W[16]);
     void MapFrame();
     // the hits' places this frame (CollectEmitter: EmitterKind::impact), the ones seen lately (a hit's sprite lasts),
     // this frame's new ones sent to the field (drops: texel x, z, height, strength)
@@ -1078,7 +1005,7 @@ private:
     float wave_water_y_ = -1e9f;   // a water height the field read back lately (tests)
     D3D12_CPU_DESCRIPTOR_HANDLE WaveRtv(uint32_t i) { return Cpu(rtv_heap_.Get(), kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 6 + i, rtv_inc_); }
     // Motion (MotionPass): the frame's opaque draws again with their constants of the frame before, matched by what
-    // they draw and their order; the screen's velocity, the per object motion blur
+    // they draw and their order; the screen's velocity, the per object motion blur, the temporal anti-aliasing
     struct MotionDraw {
         ID3D12PipelineState* pso;
         D3D12_VERTEX_BUFFER_VIEW vb[16];
@@ -1107,9 +1034,14 @@ private:
     bool motion_ok_ = false;  // this frame's velocity drawn
     float prev_view_[16] = {}, prev_proj_[16] = {};
     bool prev_cam_ok_ = false;
+    float taa_jit_[2] = {};    // this frame's jitter, clip space
+    uint32_t taa_index_ = 0;
+    bool taa_hist_ok_ = false;
+    int taa_level_ = -9;
     void RecordMotion(const State& s, const Assembled& a, const DrawShaders& sh, const PsoKey& k);
     void MotionPass(Target& rt);
     void MotionBlurPass(Target& rt);
+    void TaaPass(Target& rt);
     void MotionParams(float out[28]);
     uint64_t ring_gen_ = 0;     // the frame's uploads so far went (Submit(true), a wrapped descriptor ring)
     uint64_t casters_gen_ = 0;  // ring_gen_ the casters were recorded in
@@ -2120,6 +2052,7 @@ float ShadowDebug() {
     }();
     return v;
 }
+bool SmaaMode();
 
 // the multisampled colour, depth (and reflection buffer) for a scene's target of this size and format
 bool D3D12Backend::EnsureMsaa(const Target& rt, uint32_t samples) {
@@ -3460,6 +3393,8 @@ void D3D12Backend::FillPipelineDesc(const PsoKey& k, ID3DBlob* vs, ID3DBlob* ps,
     d.RTVFormats[0] = k.has_rt ? DXGI_FORMAT(k.rtfmt) : DXGI_FORMAT_UNKNOWN;
     d.DSVFormat = k.has_ds ? DXGI_FORMAT_D24_UNORM_S8_UINT : DXGI_FORMAT_UNKNOWN;
     d.SampleDesc.Count = (k.topo & kMsaaKey) ? (k.topo >> 16) & 0xF : 1;
+    // the cut out's soft edge (the pixel shader's alpha past the reference, alphatest) as samples covered
+    d.BlendState.AlphaToCoverageEnable = (k.topo & kMsaaKey) && (k.topo & kA2cKey);
 }
 
 ID3D12PipelineState* D3D12Backend::EnsurePipeline(const PsoKey& k, ID3DBlob* vs, ID3DBlob* ps) {
@@ -5024,14 +4959,21 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     }
     if (pk.gbuf && BindGbuf(true)) k.topo |= kGbufKey;
     else BindGbuf(false);
-    // multisampled: the sample count (the geometry's edges; what is cut out by its alpha, foliage, fences, wires, is
-    // smoothed by the SMAA after with the rest of the picture)
-    if (msaa_bound_) k.topo |= kMsaaKey | (msaa_samples_ << 16);
-    static const bool refl_log = std::getenv("XBE_REFL_LOG") != nullptr;
-    if (refl_log) {
+    // multisampled: the sample count, and what is cut out by its alpha (foliage, fences, wires; drawn solid, the
+    // alpha past a reference) with its edge as coverage: smooth, not stair stepped
+    bool a2c = false;
+    if (msaa_bound_) {
+        k.topo |= kMsaaKey | (msaa_samples_ << 16);
+        uint32_t f = Cmp(SimpleState(s, kMAlphaFunc));
+        if (SimpleState(s, kMAlphaTestEnable) && !k.blend && k.has_rt &&
+            (f == D3D12_COMPARISON_FUNC_GREATER || f == D3D12_COMPARISON_FUNC_GREATER_EQUAL))
+            k.topo |= kA2cKey, a2c = true;
+    }
+    static const bool ssr_log = std::getenv("XBE_SSR_LOG") != nullptr;
+    if (ssr_log) {
         static int n = 0;
         if (stages.mat && !flat && n++ % 500 == 0)
-            LOGR("reflections: material draw refl %.2f gbuf %u bound %d scene %d blend %u character %d", stages.mat->m ? stages.mat->m->refl : -1.0f,
+            LOGR("ssr: material draw refl %.2f gbuf %u bound %d scene %d blend %u character %d", stages.mat->m ? stages.mat->m->refl : -1.0f,
                  pk.gbuf, int(gbuf_bound_), int(bound_rt_ == scene_rt_), SimpleState(s, kMBlendEnable), int(draw_character_));
     }
     // the weapon in hand on a wide screen (drawn after the world's depth is cleared): see WeaponCullGsHlsl
@@ -5072,6 +5014,8 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     weapon_filter_ = false;
     if (c.layout[2] > 0 && c.layout[2] < 1 && sh.prog && a.topology == Topology::Triangles && WeaponPieces(s, a, sh))
         c.layout[2] = 0;
+    if (!flat && bound_rt_ && bound_rt_ == scene_rt_) c.jitter[0] = taa_jit_[0], c.jitter[1] = taa_jit_[1];
+    c.jitter[2] = a2c ? 1.0f : 0.0f;  // alphatest: the edge as coverage
     if (points) {
         auto f = [&](int rs) { return std::bit_cast<float>(s.rs[rs]); };
         c.pts0[0] = f(kRsPointSize), c.pts0[1] = f(kRsPointSizeMin), c.pts0[2] = f(kRsPointSizeMax);
@@ -5133,8 +5077,8 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
             }
         }
     }
-    // a character (mrefl.z over a quarter: its per pixel light everywhere on it), its light (Character Lighting: 1)
-    if (draw_character_ && sh.prog && !flat && !g_texview.load()) c.mrefl[2] = app::Get().character_light ? 1.0f : 0.5f;
+    // a character's light (Character Lighting)
+    if (app::Get().character_light && draw_character_ && sh.prog && !flat && !g_texview.load()) c.mrefl[2] = 1;
     // a glowing sprite: past white in the HDR scene (its bloom), and its light
     if (emitter && hdr_ && glow.glow > 1 && app::Get().bloom) c.layout[3] = glow.glow;
     // a flame's sprite: the time for its inner flow (Animated Fire), its flicker kind (fire, not a shot's flash)
@@ -5287,7 +5231,6 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     RecordVeil(s, a, sh, k, stages);
     RecordMotion(s, a, sh, k);
     if (map_on_) CollectMap(s, a, sh, pk, k);
-    CaptureGeometry(s, a, sh, pk, k, stages);
 }
 
 void D3D12Backend::Layout2D(const State& s, const Assembled& a, bool prog, GuestExtent size, DrawConstants& c) {
@@ -5419,9 +5362,8 @@ void D3D12Backend::Clear(const State& s, uint32_t count, const uint8_t* rects, u
     Target* ds = (flags & (kClearZ | kClearStencil)) ? EnsureTarget(s.zs, true) : nullptr;
     // the frame's first full clear of the scene's colour and depth: the multisampled pair from now on (Anti-Aliasing)
     if (msaa_active_) MsaaResolve();
-    const uint32_t aa = app::Get().anti_aliasing;
-    if (!msaa_done_ && aa >= 2 && rt && ds && count == 0 && (flags & kClearTarget) && (flags & kClearZ) &&
-        !rt->depth && rt->gw == guest_w_ && rt->gh == guest_h_ && rt->w == ds->w && rt->h == ds->h && EnsureMsaa(*rt, aa == 3 ? 4 : 2)) {
+    if (!msaa_done_ && app::Get().taa && !SmaaMode() && rt && ds && count == 0 && (flags & kClearTarget) && (flags & kClearZ) &&
+        !rt->depth && rt->gw == guest_w_ && rt->gh == guest_h_ && rt->w == ds->w && rt->h == ds->h && EnsureMsaa(*rt, 4)) {
         float col[4];
         Color(color, col);
         for (int i = 0; t_range_ok(rt) && i < 3; i++) col[i] /= rt->range;
@@ -6194,7 +6136,7 @@ void D3D12Backend::ResolveLight() {
 // to the frame before's by what they draw (their shader, vertices, texture) and their order among the alike
 void D3D12Backend::RecordMotion(const State& s, const Assembled& a, const DrawShaders& sh, const PsoKey& k) {
     const app::Settings& set = app::Get();
-    if (!set.motion_blur || s.layout2d || a.pretransformed || sh.quad) return;
+    if (!(set.taa || set.motion_blur) || s.layout2d || a.pretransformed || sh.quad) return;
     if (!bound_rt_ || bound_rt_ != scene_rt_ || bound_ds_ != scene_ds_ || a.topology != Topology::Triangles) return;
     // what is drawn into the depth (solid, cut out), and what is seen through (smoke, sparks, fire, tracers: over
     // what is behind them, flagged)
@@ -6320,7 +6262,7 @@ void D3D12Backend::MotionParams(float out[28]) {
     if (!shadow::Invert(cam_view_, inv)) std::memcpy(inv, cam_view_, sizeof(inv));
     shadow::Mul(pv, pp, vp);
     shadow::Mul(inv, vp, cam);
-    float mv2[4] = {0, 0, 0, 0};
+    float mv2[4] = {taa_jit_[0], taa_jit_[1], 0, 0};
     std::memcpy(out, mv0, 16), std::memcpy(out + 4, mv1, 16), std::memcpy(out + 8, cam, 64), std::memcpy(out + 24, mv2, 16);
 }
 
@@ -6438,6 +6380,87 @@ void D3D12Backend::MotionBlurPass(Target& rt) {
     bound_rt_ = bound_ds_ = nullptr;
 }
 
+// Temporal anti-aliasing on the scene's target (kTaaHlsl), before the 2D; its result kept as the next frame's history
+void D3D12Backend::TaaPass(Target& rt) {
+    if (!scene_ds_ || !scene_[kSceneHist] || !motion_ok_) {
+        taa_hist_ok_ = false;
+        return;
+    }
+    std::string text = std::string(kPassVs) + kTaaHlsl;
+    ID3D12PipelineState* pso = EnsurePassPipeline(text.c_str(), "taa", rt.fmt, -1);
+    if (!pso) return;
+    // a cut (the camera far from where it was, or turned away), a new level: the history starts over
+    bool reset = !taa_hist_ok_ || !prev_cam_ok_ || g_level.load() != taa_level_;
+    taa_level_ = g_level.load();
+    if (!reset) {
+        float a[16], b[16];
+        if (shadow::Invert(cam_view_, a) && shadow::Invert(prev_view_, b)) {
+            float d[3] = {a[12] - b[12], a[13] - b[13], a[14] - b[14]};
+            float fwd = a[8] * b[8] + a[9] * b[9] + a[10] * b[10];
+            reset = d[0] * d[0] + d[1] * d[1] + d[2] * d[2] > 300.0f * 300.0f || fwd < 0.9f;
+        }
+    }
+    Target& ds = *scene_ds_;
+    CopyScene(rt);
+    Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    Transition(scene_[kSceneHist].Get(), scene_state_[kSceneHist], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    std::pair<ID3D12Resource*, DXGI_FORMAT> src[4] = {{scene_[0].Get(), rt.fmt},
+                                                      {scene_[kSceneHist].Get(), rt.fmt},
+                                                      {scene_[kSceneVel].Get(), DXGI_FORMAT_R16G16B16A16_FLOAT},
+                                                      {ds.res.Get(), DXGI_FORMAT_R24_UNORM_X8_TYPELESS}};
+    uint32_t slot = AllocSrvSlots(7);
+    for (uint32_t i = 0; i < 7; i++) {
+        D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
+        sv.Format = i < 4 ? src[i].second : kBgra;
+        sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        sv.Texture2D.MipLevels = 1;
+        dev_->CreateShaderResourceView(i < 4 ? src[i].first : nullptr, &sv, Cpu(srv_heap_.Get(), slot + i, srv_inc_));
+    }
+    Transition(rt.res.Get(), rt.state, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    D3D12_CPU_DESCRIPTOR_HANDLE rh = Cpu(rtv_heap_.Get(), rt.view, rtv_inc_);
+    cl_->OMSetRenderTargets(1, &rh, FALSE, nullptr);
+    SetFullViewport(rt.w, rt.h);
+    Alloc cb = Upload(256, 256);
+    float tp[8] = {float(rt.w), float(rt.h), 1.0f / rt.w, 1.0f / rt.h, reset ? 1.0f : 0.0f, world_depth_saved_ ? 1.0f : 0.0f, 0, 0};
+    std::memcpy(cb.cpu, tp, sizeof(tp));
+    DrawFullScreen(pso, cb.gpu, slot);
+    Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+    // the history: this frame's result
+    Transition(rt.res.Get(), rt.state, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    Transition(scene_[kSceneHist].Get(), scene_state_[kSceneHist], D3D12_RESOURCE_STATE_COPY_DEST);
+    cl_->CopyResource(scene_[kSceneHist].Get(), rt.res.Get());
+    Transition(scene_[kSceneHist].Get(), scene_state_[kSceneHist], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    taa_hist_ok_ = true;
+    bound_rt_ = bound_ds_ = nullptr;
+    // the film grain, past the history
+    if (app::Get().film_grain) {
+        std::string gt = std::string(kPassVs) + kGrainHlsl;
+        ID3D12PipelineState* gp = EnsurePassPipeline(gt.c_str(), "grain", rt.fmt, -1);
+        if (!gp) return;
+        CopyScene(rt);
+        uint32_t gs = AllocSrvSlots(7);
+        for (uint32_t i = 0; i < 7; i++) {
+            D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
+            sv.Format = i == 0 ? rt.fmt : kBgra;
+            sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+            sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            sv.Texture2D.MipLevels = 1;
+            dev_->CreateShaderResourceView(i == 0 ? scene_[0].Get() : nullptr, &sv, Cpu(srv_heap_.Get(), gs + i, srv_inc_));
+        }
+        Transition(rt.res.Get(), rt.state, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        D3D12_CPU_DESCRIPTOR_HANDLE grh = Cpu(rtv_heap_.Get(), rt.view, rtv_inc_);
+        cl_->OMSetRenderTargets(1, &grh, FALSE, nullptr);
+        SetFullViewport(rt.w, rt.h);
+        static const auto t0 = std::chrono::steady_clock::now();
+        float g[4] = {0.012f, std::fmod(std::chrono::duration<float>(std::chrono::steady_clock::now() - t0).count(), 1000.0f), 0, 0};
+        Alloc gcb = Upload(256, 256);
+        std::memcpy(gcb.cpu, g, sizeof(g));
+        DrawFullScreen(gp, gcb.gpu, gs);
+        bound_rt_ = bound_ds_ = nullptr;
+    }
+}
+
 void D3D12Backend::RecordCaster(const State& s, const Assembled& a, const DrawShaders& sh, const PixelKey& pk, const PsoKey& k,
                                 const DrawTextures& stages) {
     // the 3D of the screen with a depth write, solid or cut out by its alpha test, before the occlusion (the weapon
@@ -6505,13 +6528,6 @@ void D3D12Backend::RecordCaster(const State& s, const Assembled& a, const DrawSh
     c.vc = last_vc_, c.dc = last_dc_, c.tail = last_tail_;
     c.srv = last_srv_, c.smp = last_smp_;
     c.alpha = alpha;
-    // the lighting bake's static world: its shadows are baked, the shadow map has what moves alone
-    if (!bake_ids_.empty()) {
-        const int bake_mode = BakeMode();
-        float W[16];
-        uint64_t id = 0;
-        c.baked = bake_mode > 0 && bake_mode != 7 && bake_sun_ok_ && DrawWorldId(s, a, sh, pk, W, id) && bake_ids_.count(id);
-    }
     // characters (skinned, lit by their own lights) and what they hold (lit fixed function): their pixels are marked
     // on the screen, where shadows leave out the model's own coarse facets
     bool character = (sh.prog && pk.lit && !(prog_light_.count(sh.vkey) && prog_light_[sh.vkey].ok)) ||
@@ -6647,11 +6663,8 @@ bool D3D12Backend::DrawShadowMap() {
     ID3D12PipelineState* bound = nullptr;
     static const int exp = std::getenv("XBE_SHADOW_EXP") ? std::atoi(std::getenv("XBE_SHADOW_EXP")) : 0;
     uint32_t instances = exp == 1 ? 1 : uint32_t(cascades_.count);
-    uint32_t drawn = 0;
     for (const Caster& c : casters_) {
         if (exp == 2) break;
-        if (c.baked) continue;
-        drawn++;
         if (c.pso != bound) SetPso(bound = c.pso);
         cl_->SetGraphicsRootConstantBufferView(0, c.vc);
         cl_->SetGraphicsRootConstantBufferView(1, c.dc);
@@ -6668,7 +6681,7 @@ bool D3D12Backend::DrawShadowMap() {
             cl_->DrawInstanced(c.count, instances, 0, 0);
         }
     }
-    shadow_casters_n_ += drawn;
+    shadow_casters_n_ += casters_.size();
     Transition(shadow_atlas_.Get(), shadow_state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     ShadowTimestamp(1);
     bound_rt_ = bound_ds_ = nullptr;
@@ -7502,198 +7515,6 @@ void D3D12Backend::CollectMap(const State& s, const Assembled& a, const DrawShad
     }
 }
 
-// A program's world matrix from its world-view-projection rows (A, row vectors: model to clip): back to the view
-// through the projection's x, y and w alone (w is the view's depth; its z, the depth buffer's, is near singular with
-// the near plane this close: through it a distant model came out metres off, and somewhere else from every place the
-// camera stood), then to the world by the view's inverse (rigid: exact). False for a projection not a perspective's
-bool D3D12Backend::ProgramWorld(const float A[16], float W[16]) {
-    if (!cam_ok_) return false;
-    const float* P = cam_proj_;
-    if (std::fabs(P[3]) > 1e-6f || std::fabs(P[7]) > 1e-6f || std::fabs(P[11] - 1) > 1e-4f || std::fabs(P[15]) > 1e-6f ||
-        std::fabs(P[0]) < 1e-6f || std::fabs(P[5]) < 1e-6f)
-        return false;
-    double wv[16];
-    for (int i = 0; i < 4; i++) {
-        double cx = A[i * 4 + 0], cy = A[i * 4 + 1], cw = A[i * 4 + 3];
-        double tx = i == 3 ? P[12] : 0, ty = i == 3 ? P[13] : 0;
-        wv[i * 4 + 0] = (cx - cw * P[8] - tx) / P[0];
-        wv[i * 4 + 1] = (cy - cw * P[9] - ty) / P[5];
-        wv[i * 4 + 2] = cw;
-        wv[i * 4 + 3] = i == 3 ? 1 : 0;
-    }
-    float inv[16];
-    if (!shadow::Invert(cam_view_, inv)) return false;
-    for (int i = 0; i < 4; i++)
-        for (int j = 0; j < 4; j++) {
-            double v = 0;
-            for (int k = 0; k < 4; k++) v += wv[i * 4 + k] * double(inv[k * 4 + j]);
-            W[i * 4 + j] = float(v);
-        }
-    return true;
-}
-
-// A static draw's identity for the lighting bake (CaptureGeometry writes it, RecordCaster looks it up): its world
-// matrix (W, out) and a hash of its buffers' counts, its texture, the matrix rounded (a program's is worked out from
-// the camera's: its noise differs every frame) and a few of its vertices and indices (memory is reused by the
-// streamed sections). False for what the bake leaves out: the characters, positions not in floats
-bool D3D12Backend::DrawWorldId(const State& s, const Assembled& a, const DrawShaders& sh, const PixelKey& pk, float W[16], uint64_t& h) {
-    auto pl = sh.prog ? prog_light_.find(sh.vkey) : prog_light_.end();
-    bool character = (sh.prog && pk.lit && !(pl != prog_light_.end() && pl->second.ok)) || (sh.fixed_transform && (sh.fk.light & 1));
-    if (character) return false;
-    if (sh.prog) {
-        if (pl == prog_light_.end() || !pl->second.ok) return false;
-        float A[16];
-        for (int i = 0; i < 4; i++)
-            for (int j = 0; j < 4; j++) A[i * 4 + j] = s.vsc[pl->second.pos[j]][size_t(i)];
-        if (!ProgramWorld(A, W)) return false;
-    } else {
-        std::memcpy(W, s.transforms[kTsWorld].data(), 16 * sizeof(float));
-    }
-    const VertexElement& e = a.elements[0];
-    if (!(a.regs & 1) || e.buffer >= a.buffer_count) return false;
-    const VertexBuffer& b = a.buffers[e.buffer];
-    bool f3 = e.format == DXGI_FORMAT_R32G32B32_FLOAT || e.format == DXGI_FORMAT_R32G32B32A32_FLOAT;
-    if (!b.src || !b.stride || !f3) return false;
-    uint32_t verts = b.bytes / b.stride;
-    uint32_t n = a.index_count ? a.index_count : a.draw_count;
-    h = 1469598103934665603ull;
-    auto mix = [&](const void* p, size_t bytes) {
-        const uint8_t* c = static_cast<const uint8_t*>(p);
-        for (size_t i = 0; i < bytes; i++) h = (h ^ c[i]) * 1099511628211ull;
-    };
-    mix(&verts, 4), mix(&n, 4), mix(&a.base_vertex, sizeof(a.base_vertex)), mix(&draw_tex0_, 8);
-    for (int i = 0; i < 16; i++) {
-        int64_t q = std::llround(W[i] * (i >= 12 && i < 15 ? 0.25f : 500.0f));
-        mix(&q, 8);
-    }
-    for (uint32_t i = 0; i < 8 && verts; i++) mix(b.src + size_t(i * (verts - 1) / 7) * b.stride + e.offset, 12);
-    if (a.index_count && a.index_src) mix(a.index_src, std::min<size_t>(64, size_t(n) * (a.index16 ? 2 : 4)));
-    return true;
-}
-
-// The lighting bake's capture (XBE_BAKE_CAPTURE=<folder>, tools/bake): the solid 3D the game draws, in world space,
-// each draw once a level, to <folder>/lvNN.geo. A record: "GEO2", its kind (0 fixed function, 1 a program's static
-// model), flags (1 alpha tested, 2 its world matrix the identity: a world sector, 4 one sided, 8 its front counter
-// clockwise, 16 its matrix a mirror), the first texture's id, the draw's
-// identity (DrawWorldId), the counts,
-// the vertices (x y z) and the triangles (three indices each). Not the characters, the sprites, decals, the sky.
-void D3D12Backend::CaptureGeometry(const State& s, const Assembled& a, const DrawShaders& sh, const PixelKey& pk, const PsoKey& k,
-                                   const DrawTextures& stages) {
-    static const char* dir = std::getenv("XBE_BAKE_CAPTURE");
-    if (!dir || !*dir) return;
-    if (s.layout2d || a.pretransformed || sh.quad || occlusion_done_ || draw_far_ || draw_emitter_ || tess_draw_) return;
-    if (!bound_rt_ || !bound_ds_ || bound_rt_->gw != guest_w_ || bound_rt_->gh != guest_h_) return;
-    if (!k.zen || !k.zwrite || a.topology != Topology::Triangles || k.zbias != 0 || k.fill == kFillWireframe) return;
-    bool alpha_test = SimpleState(s, kMAlphaTestEnable) != 0 || (pk.alphakill & 1);
-    if (k.blend && !alpha_test) return;
-    float W[16];
-    uint64_t h = 0;
-    if (!DrawWorldId(s, a, sh, pk, W, h)) return;
-    const VertexElement& e = a.elements[0];
-    const VertexBuffer& b = a.buffers[e.buffer];
-    // a new level: its own file and its own set of draws seen
-    static int level = -999;
-    static std::unordered_map<uint64_t, uint32_t> seen;  // frames each draw was seen still (0: written)
-    static std::ofstream out, eyes;
-    if (g_level.load() != level) {
-        level = g_level.load();
-        seen.clear();
-        out.close();
-        if (level < 0) return;
-        std::filesystem::create_directories(dir);
-        char name[32];
-        std::snprintf(name, sizeof(name), "lv%02d.geo", level);
-        out.open(std::filesystem::path(dir) / name, std::ios::binary | std::ios::app);
-        std::snprintf(name, sizeof(name), "lv%02d.eye", level);
-        eyes.close();
-        eyes.open(std::filesystem::path(dir) / name, std::ios::binary | std::ios::app);
-        LOGR("bake: capturing level %d", level);
-    }
-    if (!out) return;
-    // where the eye goes (the bake's places worth its finest cells): once a frame, x y z
-    static uint64_t eye_frame = ~0ull;
-    float inv[16];
-    if (eye_frame != frame_ && cam_ok_ && shadow::Invert(cam_view_, inv)) {
-        eye_frame = frame_;
-        eyes.write(reinterpret_cast<const char*>(inv + 12), 12);
-        eyes.flush();
-        // the level's sun (towards it, the world's): the last one the shadows found
-        if (light_.on && frame_ % 60 == 0) {
-            char sname[32];
-            std::snprintf(sname, sizeof(sname), "lv%02d.sun", level);
-            std::ofstream sun(std::filesystem::path(dir) / sname, std::ios::binary | std::ios::trunc);
-            sun.write(reinterpret_cast<const char*>(light_.dir), 12);
-        }
-    }
-    uint32_t verts = b.bytes / b.stride;
-    uint32_t n = a.index_count ? a.index_count : a.draw_count;
-    // only what stays where it is: seen the same in 90 frames (what moves, a bomb falling, debris drifting, a plane,
-    // is another draw each frame)
-    static uint64_t counted_frame = ~0ull;
-    static std::unordered_set<uint64_t> this_frame;
-    if (counted_frame != frame_) counted_frame = frame_, this_frame.clear();
-    if (!this_frame.insert(h).second) return;
-    uint32_t& count = seen[h];
-    if (count == ~0u || ++count < 90) return;
-    count = ~0u;
-    auto index = [&](uint32_t i) -> uint32_t {
-        if (!a.index_count) return i;
-        uint32_t v = a.index16 ? static_cast<const uint16_t*>(a.index_src)[i] : static_cast<const uint32_t*>(a.index_src)[i];
-        return uint32_t(int32_t(v) + a.base_vertex);
-    };
-    // the vertices the triangles use, in world space
-    std::unordered_map<uint32_t, uint32_t> remap;
-    std::vector<float> pos;
-    std::vector<uint32_t> tris;
-    auto vertex = [&](uint32_t v, uint32_t& o) {
-        auto it = remap.find(v);
-        if (it != remap.end()) return (o = it->second), true;
-        if (v >= verts) return false;
-        float p[3], q[3];
-        std::memcpy(p, b.src + size_t(v) * b.stride + e.offset, 12);
-        float w = p[0] * W[3] + p[1] * W[7] + p[2] * W[11] + W[15];
-        if (std::fabs(w) < 1e-6f) return false;
-        for (int j = 0; j < 3; j++) q[j] = (p[0] * W[j] + p[1] * W[4 + j] + p[2] * W[8 + j] + W[12 + j]) / w;
-        if (!std::isfinite(q[0] + q[1] + q[2]) || std::fabs(q[0]) > 1e6f || std::fabs(q[1]) > 1e6f || std::fabs(q[2]) > 1e6f) return false;
-        o = uint32_t(pos.size() / 3);
-        pos.insert(pos.end(), q, q + 3);
-        remap.emplace(v, o);
-        return true;
-    };
-    auto add = [&](uint32_t i0, uint32_t i1, uint32_t i2) {
-        uint32_t o[3];
-        if (i0 == i1 || i1 == i2 || i0 == i2) return;
-        if (!vertex(i0, o[0]) || !vertex(i1, o[1]) || !vertex(i2, o[2])) return;
-        tris.insert(tris.end(), o, o + 3);
-    };
-    if (a.strip) {
-        // (a strip's every other triangle wound the other way: its first two swapped, as D3D draws it)
-        for (uint32_t i = 2; i < n; i++) (i & 1) ? add(index(i - 1), index(i - 2), index(i)) : add(index(i - 2), index(i - 1), index(i));
-    } else {
-        for (uint32_t i = 0; i + 2 < n; i += 3) add(index(i), index(i + 1), index(i + 2));
-    }
-    if (tris.empty()) return;
-    bool identity = true;
-    for (int i = 0; i < 16; i++) identity = identity && std::fabs(W[i] - (i % 5 == 0 ? 1.0f : 0.0f)) < 1e-5f;
-    // the side drawn: one sided (culled), its front counter clockwise, its matrix a mirror (the bake's cells on the
-    // side seen alone)
-    float det = W[0] * (W[5] * W[10] - W[6] * W[9]) - W[1] * (W[4] * W[10] - W[6] * W[8]) + W[2] * (W[4] * W[9] - W[5] * W[8]);
-    uint8_t sides = uint8_t((k.cull ? 4 : 0) | (k.ccw ? 8 : 0) | (det < 0 ? 16 : 0));
-    struct {
-        char magic[4];
-        uint8_t kind, flags;
-        uint16_t pad;
-        uint64_t tex, id;
-        uint32_t verts, tris;
-    } head{{'G', 'E', 'O', '2'}, uint8_t(sh.prog ? 1 : 0), uint8_t((alpha_test ? 1 : 0) | (identity ? 2 : 0) | sides), 0, draw_tex0_, h,
-           uint32_t(pos.size() / 3), uint32_t(tris.size() / 3)};
-    out.write(reinterpret_cast<const char*>(&head), sizeof(head));
-    out.write(reinterpret_cast<const char*>(pos.data()), std::streamsize(pos.size() * 4));
-    out.write(reinterpret_cast<const char*>(tris.data()), std::streamsize(tris.size() * 4));
-    out.flush();  // (the tests end by closing the game)
-    (void)stages;
-}
-
 // tests: the map's frames counted down (g_map_frames); at the end the cells written to logs/map.txt
 void D3D12Backend::MapFrame() {
     int left = g_map_frames.load();
@@ -7754,7 +7575,7 @@ ID3D12Resource* D3D12Backend::DrawGuard(uint32_t w, uint32_t h) {
     ID3D12PipelineState* bound = nullptr;
     float zr[2] = {-1, -1};
     for (const Caster& c : casters_) {
-        if (!c.guard || c.baked) continue;  // (the baked world: its occlusion past the screen is baked)
+        if (!c.guard) continue;
         if (c.zmin != zr[0] || c.zmax != zr[1]) {
             zr[0] = c.zmin, zr[1] = c.zmax;
             D3D12_VIEWPORT vp{0, 0, float(gw), float(gh), c.zmin, c.zmax};
@@ -7815,10 +7636,8 @@ bool D3D12Backend::CharacterMask(Target& rt, Target& ds) {
 }
 
 // the screen's shadow mask (shadow_shaders.h) into scene_[kSceneShadow]; the depth is left readable
-const std::string& MaskText();
-
 ID3D12Resource* D3D12Backend::ShadowMask(Target& rt, Target& ds) {
-    const std::string& text = MaskText();
+    std::string text = kShadowMask;
     ID3D12PipelineState* pso = EnsurePassPipeline(text.c_str(), "mask", DXGI_FORMAT_R8G8B8A8_UNORM, -1);
     if (!pso) return nullptr;
     Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
@@ -7835,17 +7654,6 @@ ID3D12Resource* D3D12Backend::ShadowMask(Target& rt, Target& ds) {
         sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         sv.Texture2D.MipLevels = 1;
         dev_->CreateShaderResourceView(i < 4 ? src[i].first : nullptr, &sv, Cpu(srv_heap_.Get(), slot + i, srv_inc_));
-    }
-    // the bake's table at t4 (tools/bake)
-    const int bake_mode = BakeMode();
-    const bool baked = bake_ && bake_mode > 0 && bake_sun_ok_ && bake_looked_;
-    if (baked && bake_looked_) {
-        D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
-        sv.Format = DXGI_FORMAT_R32G32_UINT;
-        sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-        sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        sv.Texture2D.MipLevels = 1;
-        dev_->CreateShaderResourceView(scene_[kSceneBake].Get(), &sv, Cpu(srv_heap_.Get(), slot + 4, srv_inc_));
     }
     // the parameters (kShadowMask's cbuffer)
     struct Params {
@@ -7881,19 +7689,8 @@ ID3D12Resource* D3D12Backend::ShadowMask(Target& rt, Target& ds) {
     D3D12_CPU_DESCRIPTOR_HANDLE rh = SceneRtv(kSceneShadow);
     cl_->OMSetRenderTargets(1, &rh, FALSE, nullptr);
     SetFullViewport(rt.w, rt.h);
-    // (the haze's p9 p10 after them, unused here, then the bake's rows: the view's inverse)
-    struct {
-        Params m;
-        float p9[4], p10[4], bk[4][4];
-    } U{};
-    U.m = P;
-    if (baked) {
-        for (int r = 0; r < 4; r++)
-            for (int j = 0; j < 3; j++) U.bk[r][j] = vw[r * 4 + j];
-        U.bk[0][3] = 1, U.bk[1][3] = float(bake_mode);
-    }
-    Alloc cb = Upload(sizeof(U), 256);
-    std::memcpy(cb.cpu, &U, sizeof(U));
+    Alloc cb = Upload(sizeof(P), 256);
+    std::memcpy(cb.cpu, &P, sizeof(P));
     std::memcpy(mask_params_, &P, sizeof(P));
     mask_params_ok_ = true;
     DrawFullScreen(pso, cb.gpu, slot);
@@ -7908,7 +7705,7 @@ ID3D12Resource* D3D12Backend::ShadowMask(Target& rt, Target& ds) {
 // (the eye 1.6 m over it), the sun's light by its strength. Added in the composite.
 void D3D12Backend::FogPass(Target& rt, Target& ds) {
     if (!mask_params_ok_ || !scene_[kSceneFog]) return;
-    const std::string& text = MaskText();
+    std::string text = kShadowMask;
     ID3D12PipelineState* pso = EnsurePassPipeline(text.c_str(), "fog", DXGI_FORMAT_R16G16B16A16_FLOAT, -1);
     if (!pso) return;
     Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
@@ -8067,12 +7864,9 @@ bool D3D12Backend::EnsureSceneTargets(DXGI_FORMAT fmt, uint32_t w, uint32_t h) {
         DXGI_FORMAT f = i == 0 || i == kSceneHist ? fmt
                         : i < 3                   ? DXGI_FORMAT_R8_UNORM
                         : i == kSceneShadow       ? DXGI_FORMAT_R8G8B8A8_UNORM
-                        : i == kSceneColCap || i == kSceneBake ? DXGI_FORMAT_R32G32_UINT
-                        : i == kSceneCloud        ? DXGI_FORMAT_R16G16_FLOAT
                                                   : DXGI_FORMAT_R16G16B16A16_FLOAT;
-        uint32_t div = i == kSceneColCap ? 4 : i == kSceneBake || i == kSceneCloud ? 2 : i < 3 || i == kSceneShadow || i >= kSceneVel ? 1 : i >= kSceneRays ? 2 : 2u << (i - 3);
-        // (the temporal anti-aliasing's history, gone: a pixel)
-        D3D12_RESOURCE_DESC td = i == kSceneHist ? Texture2DDesc(f, 1, 1) : Texture2DDesc(f, std::max(1u, w / div), std::max(1u, h / div));
+        uint32_t div = i < 3 || i == kSceneShadow || i >= kSceneVel ? 1 : i >= kSceneRays ? 2 : 2u << (i - 3);
+        D3D12_RESOURCE_DESC td = Texture2DDesc(f, std::max(1u, w / div), std::max(1u, h / div));
         td.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
         D3D12_CLEAR_VALUE cv{};
         cv.Format = f;
@@ -8084,13 +7878,14 @@ bool D3D12Backend::EnsureSceneTargets(DXGI_FORMAT fmt, uint32_t w, uint32_t h) {
         dev_->CreateRenderTargetView(scene_[i].Get(), nullptr, SceneRtv(i));
     }
     scene_w_ = w, scene_h_ = h, scene_fmt_ = fmt;
+    taa_hist_ok_ = false;
     return true;
 }
 
 // a full screen pass of kSceneCommon and hlsl into scene_[out], the sources at t0 on, 16 parameters at b1
 void D3D12Backend::ScenePass(const std::string& hlsl, const char* entry, uint32_t out, DXGI_FORMAT out_fmt, uint32_t w,
                              uint32_t h, std::initializer_list<std::pair<ID3D12Resource*, DXGI_FORMAT>> src, const float p[16],
-                             float blend, const float* cam, ID3D12Resource* table, uint32_t table_n) {
+                             float blend) {
     std::string text = std::string(kSceneCommon) + hlsl;
     ID3D12PipelineState* pso = EnsurePassPipeline(text.c_str(), entry, out_fmt, blend);
     if (!pso) return;
@@ -8112,23 +7907,12 @@ void D3D12Backend::ScenePass(const std::string& hlsl, const char* entry, uint32_
         sv.Texture2D.MipLevels = 1;
         dev_->CreateShaderResourceView(nullptr, &sv, Cpu(srv_heap_.Get(), slot + i, srv_inc_));
     }
-    // a structured buffer of uint4 at t3 (the bake's table)
-    if (table) {
-        D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
-        sv.Format = DXGI_FORMAT_UNKNOWN;
-        sv.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-        sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        sv.Buffer.NumElements = table_n;
-        sv.Buffer.StructureByteStride = 8;
-        dev_->CreateShaderResourceView(table, &sv, Cpu(srv_heap_.Get(), slot + 3, srv_inc_));
-    }
     Transition(scene_[out].Get(), scene_state_[out], D3D12_RESOURCE_STATE_RENDER_TARGET);
     D3D12_CPU_DESCRIPTOR_HANDLE rh = SceneRtv(out);
     cl_->OMSetRenderTargets(1, &rh, FALSE, nullptr);
     SetFullViewport(w, h);
-    Alloc cb = Upload(1792, 256);
+    Alloc cb = Upload(1536, 256);
     std::memcpy(cb.cpu, p, 16 * sizeof(float));
-    if (cam) std::memcpy(cb.cpu + kBakeCamAt * sizeof(float), cam, 16 * sizeof(float));
     std::memcpy(cb.cpu + kSkyConstantsAt * sizeof(float), sky_cb_, sizeof(sky_cb_));
     if (blend >= 0) {
         const float f[4] = {blend, blend, blend, blend};
@@ -8871,290 +8655,6 @@ void D3D12Backend::CopyScene(Target& rt) {
     Transition(scene_[0].Get(), scene_state_[0], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 }
 
-// the shadows' mask and haze (kShadowMask) with the bake's lookups, its table at t4
-const std::string& MaskText() {
-    static const std::string text = std::string("StructuredBuffer<uint2> bake : register(t6);\n") + kBakeHlsl + kShadowMask;
-    return text;
-}
-
-// the occlusion pass's shaders (kSceneAo) with the bake's lookups, its table at t3
-const std::string& AoText() {
-    static const std::string text = std::string("StructuredBuffer<uint2> bake : register(t3);\n") + kBakeHlsl + kSceneAo;
-    return text;
-}
-
-// The level's bake (tools/bake: bake/lvNN.bake beside the game, or XBE_BAKE_DIR), read and laid out in its table on
-// a thread of its own when the level changes (a quarter second of unpacking: no hitch), then copied to bake_; none:
-// bake_ empty, the occlusion and the shadows as before
-namespace {
-uint32_t BakeHash(uint64_t key) {  // (tools/bake/bake.cpp Hash, scene_shaders.h BakeHash)
-    uint32_t a = uint32_t(key), b = uint32_t(key >> 32);
-    uint32_t h = a * 0x9E3779B1u ^ (b + 0x7F4A7C15u) * 0x85EBCA77u;
-    h ^= h >> 15;
-    h *= 0x2C1B3C6Du;
-    h ^= h >> 12;
-    h *= 0x297A2D39u;
-    h ^= h >> 15;
-    return h;
-}
-}  // namespace
-
-std::shared_ptr<D3D12Backend::BakeData> D3D12Backend::BakeRead(int level) {
-    static const char* env = std::getenv("XBE_BAKE_DIR");
-    std::filesystem::path dir = env && *env ? std::filesystem::path(env) : app::ExeDir() / "bake";
-    char name[32];
-    std::snprintf(name, sizeof(name), "lv%02d.bake", level);
-    std::ifstream in(dir / name, std::ios::binary);
-    if (!in) return nullptr;
-    struct {
-        char magic[4];
-        uint32_t version;
-        float cells[4];
-        uint32_t count, size;
-        float sun[3];
-        uint32_t have_sun;
-        uint64_t raw, packed;
-    } head{};
-    in.read(reinterpret_cast<char*>(&head), sizeof(head));
-    // (version 6: each entry's bounced light after its value)
-    const uint32_t stride = head.version == 6 ? 16 : 12;
-    if (!in || std::memcmp(head.magic, "BAK1", 4) != 0 || (head.version != 5 && head.version != 6) ||
-        head.size <= head.count || head.size > (1u << 27) || head.raw < uint64_t(head.count) * stride + 4 || head.raw > (1ull << 31) ||
-        head.packed > (1ull << 31)) {
-        LOGR("bake: %s not a bake this game reads", name);
-        return nullptr;
-    }
-    std::vector<uint8_t> packed(size_t(head.packed)), raw(size_t(head.raw));
-    if (!in.read(reinterpret_cast<char*>(packed.data()), std::streamsize(packed.size()))) return nullptr;
-    DECOMPRESSOR_HANDLE d = nullptr;
-    if (!CreateDecompressor(COMPRESS_ALGORITHM_LZMS, nullptr, &d)) return nullptr;
-    SIZE_T got = 0;
-    bool ok = Decompress(d, packed.data(), packed.size(), raw.data(), raw.size(), &got) && got == raw.size();
-    CloseDecompressor(d);
-    if (!ok) {
-        LOGR("bake: %s unreadable", name);
-        return nullptr;
-    }
-    auto data = std::make_shared<BakeData>();
-    data->level = level;
-    data->size = head.size;
-    data->have_sun = head.have_sun != 0;
-    std::memcpy(data->sun, head.sun, sizeof(data->sun));
-    // the slots: a fingerprint of the key (never 0: an empty slot), the value; a key's first slot its hash's share of
-    // the table, then the next ones (scene_shaders.h BakeFind)
-    // the buffer: 5 slots of head (the table's size; the size map's voxel counts, corner and voxel size; where the
-    // bounced light starts), the table, the size map (16 voxels a slot, 2 bits each), the bounced light (by slot, two
-    // to an element; version 6)
-    constexpr size_t kHead = 5;
-    data->table.assign((kHead + size_t(head.size)) * 2, 0);
-    std::vector<uint32_t> bounce(stride == 16 ? head.size : 0, 0);
-    static const bool colour = std::getenv("XBE_BAKE_COLOR") != nullptr;
-    if (colour) data->keys.assign(head.size, 0);
-    const uint8_t* at = raw.data();
-    for (uint32_t i = 0; i < head.count; i++, at += stride) {
-        uint64_t key;
-        uint32_t value;
-        std::memcpy(&key, at, 8), std::memcpy(&value, at + 8, 4);
-        uint32_t slot = uint32_t((uint64_t(BakeHash(key)) * head.size) >> 32);
-        while (data->table[(kHead + slot) * 2] != 0) slot = slot + 1 < head.size ? slot + 1 : 0;
-        data->table[(kHead + slot) * 2] = BakeHash(key << 32 | key >> 32) | 1;
-        data->table[(kHead + slot) * 2 + 1] = value;
-        if (colour) data->keys[slot] = key;
-        if (!bounce.empty()) std::memcpy(&bounce[slot], at + 12, 4);
-    }
-    uint32_t ids = 0;
-    std::memcpy(&ids, at, 4);
-    at += 4;
-    if (uint64_t(at - raw.data()) + uint64_t(ids) * 8 > raw.size()) return nullptr;
-    data->ids.reserve(ids);
-    for (uint32_t i = 0; i < ids; i++, at += 8) {
-        uint64_t id;
-        std::memcpy(&id, at, 8);
-        data->ids.insert(id);
-    }
-    // the size map
-    float lo[4];
-    uint32_t dims[3];
-    if (uint64_t(at - raw.data()) + 28 > raw.size()) return nullptr;
-    std::memcpy(lo, at, 16), std::memcpy(dims, at + 16, 12);
-    at += 28;
-    uint64_t voxels = uint64_t(dims[0]) * dims[1] * dims[2], slots = (voxels + 15) / 16;
-    if (voxels > (1u << 26) || uint64_t(at - raw.data()) + slots * 8 > raw.size()) return nullptr;
-    const size_t bounce_at = kHead + size_t(head.size) + size_t(slots);
-    data->table.resize((bounce_at + (bounce.size() + 1) / 2) * 2);
-    std::memcpy(&data->table[(kHead + head.size) * 2], at, size_t(slots) * 8);
-    if (!bounce.empty()) std::memcpy(&data->table[bounce_at * 2], bounce.data(), bounce.size() * 4);
-    uint32_t* h = data->table.data();
-    h[0] = head.size, h[1] = dims[0], h[2] = dims[1], h[3] = dims[2];
-    std::memcpy(h + 4, lo, 16);
-    h[8] = bounce.empty() ? 0 : uint32_t(bounce_at);
-    data->size = uint32_t(data->table.size() / 2);
-    LOGR("bake: level %d, %u cells in a table of %u (%.1f MB), %zu static draws, sun %s, bounce %s", level, head.count, head.size,
-         data->table.size() * 4 / 1048576.0, data->ids.size(), data->have_sun ? "baked" : "none", bounce.empty() ? "none" : "baked");
-    return data;
-}
-
-void D3D12Backend::BakeLoad() {
-    int level = g_level.load();
-    if (level != bake_level_) {
-        // a new level: the old bake gone, the new one read meanwhile
-        bake_level_ = level;
-        if (bake_) Release(std::move(bake_));
-        bake_n_ = 0;
-        bake_ids_.clear();
-        bake_have_sun_ = false;
-        if (level >= 0) bake_job_ = std::async(std::launch::async, [this, level] { return BakeRead(level); });
-        return;
-    }
-    if (!bake_job_.valid() || bake_job_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
-    std::shared_ptr<BakeData> data = bake_job_.get();
-    if (!data || data->level != bake_level_) return;
-    const uint64_t bytes = uint64_t(data->size) * 8;
-    D3D12_HEAP_PROPERTIES up{D3D12_HEAP_TYPE_UPLOAD}, dp{D3D12_HEAP_TYPE_DEFAULT};
-    D3D12_RESOURCE_DESC bd = BufferDesc(bytes);
-    ComPtr<ID3D12Resource> staging;
-    if (FAILED(CreateResource(&up, D3D12_HEAP_FLAG_NONE, &bd, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&staging)))) return;
-    uint8_t* map = nullptr;
-    if (FAILED(staging->Map(0, nullptr, reinterpret_cast<void**>(&map)))) return;
-    std::memcpy(map, data->table.data(), size_t(bytes));
-    staging->Unmap(0, nullptr);
-    if (FAILED(CreateResource(&dp, D3D12_HEAP_FLAG_NONE, &bd, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&bake_)))) return;
-    cl_->CopyBufferRegion(bake_.Get(), 0, staging.Get(), 0, bytes);
-    D3D12_RESOURCE_BARRIER b{};
-    b.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    b.Transition.pResource = bake_.Get();
-    b.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    b.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-    b.Transition.StateAfter = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-    cl_->ResourceBarrier(1, &b);
-    CurrentFrame().garbage.push_back(staging);
-    bake_n_ = data->size;
-    bake_ids_ = std::move(data->ids);
-    bake_keys_ = std::move(data->keys);
-    bake_have_sun_ = data->have_sun;
-    std::memcpy(bake_sun_, data->sun, sizeof(bake_sun_));
-}
-
-// The level's reflection probes (tools/bake --probes: bake/lvNN.refl beside the game, or XBE_BAKE_DIR): "PRB1", the
-// version, the grid, the tile, the count, the tiles a row, the atlas's size, raw and packed; then (LZMS) the probes'
-// keys and the atlas (RGBA8). Laid out as the bake's table: 2 slots of head (the table's size and the count; the grid
-// and the atlas's layout), then the slots (a fingerprint of the key, the probe)
-std::shared_ptr<D3D12Backend::ProbeData> D3D12Backend::ProbeRead(int level) {
-    static const char* env = std::getenv("XBE_BAKE_DIR");
-    std::filesystem::path dir = env && *env ? std::filesystem::path(env) : app::ExeDir() / "bake";
-    char name[32];
-    std::snprintf(name, sizeof(name), "lv%02d.refl", level);
-    std::ifstream in(dir / name, std::ios::binary);
-    if (!in) return nullptr;
-    struct {
-        char magic[4];
-        uint32_t version;
-        float grid;
-        uint32_t tile, count, row, w, h;
-        uint64_t raw, packed;
-    } head{};
-    if (!in.read(reinterpret_cast<char*>(&head), sizeof(head)) || std::memcmp(head.magic, "PRB1", 4) != 0 || head.version != 1 ||
-        !(head.grid > 0) || head.tile == 0 || head.tile > 64 || head.row == 0 || head.row > 0xFFFF || head.count > (1u << 22) ||
-        head.w == 0 || head.h == 0 || head.w > 16384 || head.h > 16384 ||
-        head.raw != uint64_t(head.count) * 8 + uint64_t(head.w) * head.h * 4 || head.packed > (1ull << 31)) {
-        LOGR("reflections: %s not probes this game reads", name);
-        return nullptr;
-    }
-    std::vector<uint8_t> packed(size_t(head.packed)), raw(size_t(head.raw));
-    if (!in.read(reinterpret_cast<char*>(packed.data()), std::streamsize(packed.size()))) return nullptr;
-    DECOMPRESSOR_HANDLE d = nullptr;
-    if (!CreateDecompressor(COMPRESS_ALGORITHM_LZMS, nullptr, &d)) return nullptr;
-    SIZE_T got = 0;
-    bool ok = Decompress(d, packed.data(), packed.size(), raw.data(), raw.size(), &got) && got == raw.size();
-    CloseDecompressor(d);
-    if (!ok) {
-        LOGR("reflections: %s unreadable", name);
-        return nullptr;
-    }
-    auto data = std::make_shared<ProbeData>();
-    data->level = level;
-    uint32_t size = std::max(2u, head.count * 2);
-    data->table.assign((2 + size_t(size)) * 2, 0);
-    uint32_t* h = data->table.data();
-    h[0] = size, h[1] = head.count;
-    std::memcpy(&h[2], &head.grid, 4);
-    h[3] = head.row | head.tile << 16;
-    for (uint32_t i = 0; i < head.count; i++) {
-        uint64_t key;
-        std::memcpy(&key, raw.data() + size_t(i) * 8, 8);
-        uint32_t slot = uint32_t((uint64_t(BakeHash(key)) * size) >> 32);
-        while (h[(2 + slot) * 2] != 0) slot = slot + 1 < size ? slot + 1 : 0;
-        h[(2 + slot) * 2] = BakeHash(key << 32 | key >> 32) | 1;
-        h[(2 + slot) * 2 + 1] = i;
-    }
-    data->atlas.assign(raw.begin() + size_t(head.count) * 8, raw.end());
-    data->w = head.w, data->h = head.h;
-    LOGR("reflections: level %d, %u probes (a grid of %.0f cm), an atlas of %ux%u", level, head.count, head.grid, head.w, head.h);
-    return data;
-}
-
-void D3D12Backend::ProbeLoad() {
-    int level = g_level.load();
-    if (level != probe_level_) {
-        probe_level_ = level;
-        if (probe_tab_) Release(std::move(probe_tab_));
-        if (probe_atlas_) Release(std::move(probe_atlas_));
-        probe_n_ = 0;
-        if (level >= 0) probe_job_ = std::async(std::launch::async, [this, level] { return ProbeRead(level); });
-        return;
-    }
-    if (!probe_job_.valid() || probe_job_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
-    std::shared_ptr<ProbeData> data = probe_job_.get();
-    if (!data || data->level != probe_level_) return;
-    D3D12_HEAP_PROPERTIES up{D3D12_HEAP_TYPE_UPLOAD}, dp{D3D12_HEAP_TYPE_DEFAULT};
-    // the table
-    const uint64_t bytes = uint64_t(data->table.size()) * 4;
-    D3D12_RESOURCE_DESC bd = BufferDesc(bytes);
-    ComPtr<ID3D12Resource> staging, tab, tex;
-    if (FAILED(CreateResource(&up, D3D12_HEAP_FLAG_NONE, &bd, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&staging)))) return;
-    uint8_t* map = nullptr;
-    if (FAILED(staging->Map(0, nullptr, reinterpret_cast<void**>(&map)))) return;
-    std::memcpy(map, data->table.data(), size_t(bytes));
-    staging->Unmap(0, nullptr);
-    if (FAILED(CreateResource(&dp, D3D12_HEAP_FLAG_NONE, &bd, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&tab)))) return;
-    // the atlas
-    D3D12_RESOURCE_DESC td = Texture2DDesc(DXGI_FORMAT_R8G8B8A8_UNORM, data->w, data->h);
-    D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp{};
-    UINT rows = 0;
-    UINT64 row_size = 0, tex_bytes = 0;
-    dev_->GetCopyableFootprints(&td, 0, 1, 0, &fp, &rows, &row_size, &tex_bytes);
-    D3D12_RESOURCE_DESC ud = BufferDesc(tex_bytes);
-    ComPtr<ID3D12Resource> tstaging;
-    if (FAILED(CreateResource(&up, D3D12_HEAP_FLAG_NONE, &ud, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&tstaging)))) return;
-    if (FAILED(tstaging->Map(0, nullptr, reinterpret_cast<void**>(&map)))) return;
-    for (UINT r = 0; r < rows; r++) std::memcpy(map + fp.Offset + size_t(r) * fp.Footprint.RowPitch, data->atlas.data() + size_t(r) * data->w * 4, size_t(data->w) * 4);
-    tstaging->Unmap(0, nullptr);
-    if (FAILED(CreateResource(&dp, D3D12_HEAP_FLAG_NONE, &td, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&tex)))) return;
-    cl_->CopyBufferRegion(tab.Get(), 0, staging.Get(), 0, bytes);
-    D3D12_TEXTURE_COPY_LOCATION dst{}, src{};
-    dst.pResource = tex.Get();
-    dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-    dst.SubresourceIndex = 0;
-    src.pResource = tstaging.Get();
-    src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-    src.PlacedFootprint = fp;
-    cl_->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
-    D3D12_RESOURCE_BARRIER b[2] = {};
-    for (int k = 0; k < 2; k++) {
-        b[k].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        b[k].Transition.pResource = k ? tex.Get() : tab.Get();
-        b[k].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        b[k].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-        b[k].Transition.StateAfter = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-    }
-    cl_->ResourceBarrier(2, b);
-    CurrentFrame().garbage.push_back(staging);
-    CurrentFrame().garbage.push_back(tstaging);
-    probe_tab_ = std::move(tab);
-    probe_atlas_ = std::move(tex);
-    probe_n_ = uint32_t(data->table.size() / 2);
-}
-
 // Ambient occlusion and contact shadows on the world, from its depth, before anything is drawn over it with a depth
 // of its own (the weapon in hand clears the depth first)
 void D3D12Backend::SceneOcclusion() {
@@ -9163,16 +8663,9 @@ void D3D12Backend::SceneOcclusion() {
     GpuMark("msaa resolve");
     occlusion_done_ = true;
     const app::Settings& set = app::Get();
-    BakeLoad();
     ResolveLight();
-    // the baked shadows hold while the light is the sun they were baked for (another, a room's or the level's
-    // changed one: the shadow map has everything again)
-    bake_sun_ok_ = bake_ && bake_have_sun_ && light_.on && BakeMode() > 0 && BakeMode() != 7 &&
-                   light_.dir[0] * bake_sun_[0] + light_.dir[1] * bake_sun_[1] + light_.dir[2] * bake_sun_[2] > 0.985f;
     bool shadows = scene_rt_ && scene_ds_ && light_.on && shadow_q_.cascades > 0 && cam_ok_;
-    // (the baked occlusion is applied with Ambient Occlusion off too: Baked Lighting's)
-    const bool baked_ao = bake_ && BakeMode() > 0;
-    if (!scene_rt_ || !scene_ds_ || (!set.ao && !set.contact_shadows && !shadows && !baked_ao)) {
+    if (!scene_rt_ || !scene_ds_ || (!set.ao && !set.contact_shadows && !shadows)) {
         casters_.clear();
         return;
     }
@@ -9184,28 +8677,6 @@ void D3D12Backend::SceneOcclusion() {
     uint32_t w = rt.w, h = rt.h;
     CopyScene(rt);
     GpuMark("scene copy");
-    // the bake (tools/bake): the passes' view space (ViewPos: the view window's) to the world, this frame's camera
-    // (the sky's rows are the frame before's); its lookups once, at half size (bakelook), for the occlusion and the
-    // shadows' mask. XBE_BAKE (tests): 0 off, 2 black where unbaked, 3 grey, 4 the baked occlusion alone
-    const int bake_mode = BakeMode();
-    float cam[16] = {};
-    {
-        float inv[16];
-        if (bake_ && bake_mode > 0 && cam_ok_ && shadow::Invert(cam_view_, inv) && cam_proj_[0] != 0 && cam_proj_[5] != 0 && p[0] != 0 &&
-            p[1] != 0) {
-            float sx = 1 / (cam_proj_[0] * p[0]), sy = 1 / (cam_proj_[5] * p[1]);
-            for (int j = 0; j < 3; j++) cam[j] = inv[j] * sx, cam[4 + j] = inv[4 + j] * sy, cam[8 + j] = inv[8 + j], cam[12 + j] = inv[12 + j];
-            cam[3] = 1, cam[7] = float(bake_mode);
-        }
-    }
-    std::memcpy(bake_cam_, cam, sizeof(cam));
-    bake_looked_ = false;
-    if (cam[3] > 0 && scene_[kSceneBake]) {
-        Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-        ScenePass(AoText(), "bakelook", kSceneBake, DXGI_FORMAT_R32G32_UINT, std::max(1u, w / 2), std::max(1u, h / 2),
-                  {{ds.res.Get(), DXGI_FORMAT_R24_UNORM_X8_TYPELESS}}, p, -1, cam, bake_.Get(), bake_n_);
-        bake_looked_ = true;
-    }
     bool shadow_map = shadows && DrawShadowMap();
     GpuMark("shadow map");
     ID3D12Resource* mask = shadow_map ? ShadowMask(rt, ds) : nullptr;
@@ -9245,40 +8716,24 @@ void D3D12Backend::SceneOcclusion() {
     // one bounce of light, from the scene as drawn (its copy, scene_[0])
     bool gi = set.bounce_light && scene_[kSceneGi];
     if (gi) {
-        // (t4 the bake's lookups: its bounced light where it has the surface)
-        ScenePass(AoText(), "gi", kSceneGi, DXGI_FORMAT_R16G16B16A16_FLOAT, std::max(1u, w / 2), std::max(1u, h / 2),
-                  {{ds.res.Get(), kDepth}, {scene_[0].Get(), rt.fmt}, {nullptr, kBgra}, {nullptr, kBgra},
-                   {bake_looked_ ? scene_[kSceneBake].Get() : nullptr, DXGI_FORMAT_R32G32_UINT}},
-                  p, -1, bake_looked_ ? cam : nullptr, bake_looked_ ? bake_.Get() : nullptr, bake_n_);
+        ScenePass(kSceneAo, "gi", kSceneGi, DXGI_FORMAT_R16G16B16A16_FLOAT, std::max(1u, w / 2), std::max(1u, h / 2),
+                  {{ds.res.Get(), kDepth}, {scene_[0].Get(), rt.fmt}}, p);
     }
     gi_ready_ = gi;
     // the clouds' shadows need the world's depth and the shadows' mask
     ID3D12Resource* cloud_depth = set.cloud_shadows && set.clouds && real_mask ? ds.res.Get() : nullptr;
-    occ_made_ = false;
-    if (!set.ao && !set.contact_shadows && bake_looked_) {
-        // the baked occlusion alone (smooth: no blur)
-        ScenePass(AoText(), "ao", 1, DXGI_FORMAT_R8_UNORM, w, h,
-                  {{ds.res.Get(), kDepth}, {nullptr, kBgra}, {nullptr, DXGI_FORMAT_R32_FLOAT}, {nullptr, kBgra},
-                   {scene_[kSceneBake].Get(), DXGI_FORMAT_R32G32_UINT}},
-                  p, -1, cam, bake_.Get(), bake_n_);
-        occ_made_ = true;
-    } else if (!set.ao && !set.contact_shadows) {
+    if (!set.ao && !set.contact_shadows) {
         // no occlusion: white (a null view reads 0, the whole world black)
         Transition(scene_[1].Get(), scene_state_[1], D3D12_RESOURCE_STATE_RENDER_TARGET);
         const float white[4] = {1, 1, 1, 1};
         cl_->ClearRenderTargetView(SceneRtv(1), white, 0, nullptr);
         Transition(scene_[1].Get(), scene_state_[1], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    }
-    if (!set.ao && !set.contact_shadows) {
         SceneComposite(rt, "occlude", scene_[1].Get(), false, p, cloud_depth, mask);
         Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
         return;
     }
-    occ_made_ = true;
-    ScenePass(AoText(), dbg == 2 ? "ao_depth" : dbg == 3 ? "ao_viewz" : dbg == 4 ? "ao_guard" : "ao", 1, DXGI_FORMAT_R8_UNORM, w, h,
-              {{ds.res.Get(), kDepth}, {nullptr, kBgra}, {guard, DXGI_FORMAT_R32_FLOAT}, {nullptr, kBgra},
-               {bake_looked_ ? scene_[kSceneBake].Get() : nullptr, DXGI_FORMAT_R32G32_UINT}},
-              p, -1, cam, cam[3] > 0 ? bake_.Get() : nullptr, bake_n_);
+    ScenePass(kSceneAo, dbg == 2 ? "ao_depth" : dbg == 3 ? "ao_viewz" : dbg == 4 ? "ao_guard" : "ao", 1, DXGI_FORMAT_R8_UNORM, w, h,
+              {{ds.res.Get(), kDepth}, {nullptr, kBgra}, {guard, DXGI_FORMAT_R32_FLOAT}}, p);
     float ph[16];
     std::memcpy(ph, p, sizeof(ph));
     ph[4] = 1, ph[5] = 0;
@@ -9312,7 +8767,7 @@ void D3D12Backend::ScenePost() {
     uint32_t w = rt.w, h = rt.h;
     motion_ok_ = false;
     GpuMark("weapon and late draws");
-    if (set.motion_blur && cam_ok_) MotionPass(rt);
+    if ((set.taa || set.motion_blur) && cam_ok_) MotionPass(rt);
     GpuMark("motion");
     CopyScene(rt);
     if (set.auto_exposure) Exposure(rt);
@@ -9326,15 +8781,12 @@ void D3D12Backend::ScenePost() {
     } else if (sky_done_) {
         SkyConstants();  // the constants the passes below read
     }
-    static const bool refl_log = std::getenv("XBE_REFL_LOG") != nullptr;
-    if (refl_log) {
+    static const bool ssr_log = std::getenv("XBE_SSR_LOG") != nullptr;
+    if (ssr_log) {
         static int n = 0;
-        if (n++ % 300 == 0) LOGR("reflections: pass used %d gbuf %dx%d rt %ux%u", int(gbuf_used_), gbuf_w_, gbuf_h_, rt.w, rt.h);
+        if (n++ % 300 == 0) LOGR("ssr: pass used %d gbuf %dx%d rt %ux%u", int(gbuf_used_), gbuf_w_, gbuf_h_, rt.w, rt.h);
     }
-    static const bool colour_capture = std::getenv("XBE_BAKE_COLOR") != nullptr;
-    if (colour_capture) BakeColourCapture(rt);
-    ProbeLoad();
-    if (set.reflections && gbuf_used_ && gbuf_ && gbuf_w_ == rt.w && gbuf_h_ == rt.h && probe_tab_ && probe_atlas_) {
+    if (set.reflections && gbuf_used_ && gbuf_ && gbuf_w_ == rt.w && gbuf_h_ == rt.h) {
         ReflectionPass(rt, p);
         GpuMark("reflections");
         CopyScene(rt);
@@ -9414,10 +8866,9 @@ void D3D12Backend::ScenePost() {
     DrawSplashes(rt);
     GpuMark("splashes");
     if (set.motion_blur && motion_ok_) MotionBlurPass(rt);
-    // SMAA on the 3D and its passes (with MSAA too: the cut outs' edges, the particles, the passes' own), before the
-    // game's 2D (its HUD, its menus) is drawn over them
-    if (set.anti_aliasing >= 1) SceneSmaa(rt);
-    GpuMark("smaa");
+    if (set.taa) TaaPass(rt);
+    else taa_hist_ok_ = false;
+    GpuMark("taa");
     world_depth_saved_ = false;
 }
 
@@ -9437,11 +8888,11 @@ bool D3D12Backend::SkyConstants() {
     std::memset(sky_cb_, 0, sizeof(sky_cb_));
     static const bool lights_debug = std::getenv("XBE_LIGHTS_DEBUG") != nullptr;
     sky_cb_[22] = lights_debug ? 1.0f : 0.0f;
-    static const float refl_debug = [] {
-        const char* e = std::getenv("XBE_REFL_DEBUG");
+    static const float ssr_debug = [] {
+        const char* e = std::getenv("XBE_SSR_DEBUG");
         return e ? float(std::atoi(e)) : 0.0f;
     }();
-    sky_cb_[23] = refl_debug;
+    sky_cb_[23] = ssr_debug;
     static const bool sky_layers_debug = std::getenv("XBE_SKY_LAYERS") != nullptr;  // level 1's sky pieces in colours
     if (!cam_ok_ || !scene_ds_ || (!set.sun_moon && !set.clouds)) return false;
     float inv[16];
@@ -9466,7 +8917,7 @@ bool D3D12Backend::SkyConstants() {
                       inv[8], inv[9], inv[10], 0.5f,
                       sv[0], sv[1], sv[2], sun ? 1.0f : 0.0f,
                       sw[0], sw[1], sw[2], std::clamp(light_.direct * 2.0f, 0.4f, 1.5f),
-                      set.clouds ? 1.0f : 0.0f, sun ? 1.0f : 0.0f, Daylight() + (lights_debug ? 2.0f : 0.0f), refl_debug};
+                      set.clouds ? 1.0f : 0.0f, sun ? 1.0f : 0.0f, Daylight() + (lights_debug ? 2.0f : 0.0f), ssr_debug};
     std::memcpy(sky_cb_, rows, sizeof(rows));
     return true;
 }
@@ -9520,25 +8971,17 @@ void D3D12Backend::SkyPass(Target& rt, const float p[16]) {
             tiles = sky_tiles_[1].Get();
         }
     }
-    // the clouds' field at half size (cloudfield)
-    ID3D12Resource* clouds = nullptr;
-    if (sky_cb_[20] > 0 && scene_[kSceneCloud]) {
-        ScenePass(kSceneSkyHlsl, "cloudfield", kSceneCloud, DXGI_FORMAT_R16G16_FLOAT, std::max(1u, rt.w / 2), std::max(1u, rt.h / 2),
-                  {{nullptr, rt.fmt}, {depth, DXGI_FORMAT_R24_UNORM_X8_TYPELESS}}, p);
-        clouds = scene_[kSceneCloud].Get();
-    }
     uint32_t slot = AllocSrvSlots(7);
-    std::pair<ID3D12Resource*, DXGI_FORMAT> src[4] = {{scene_[0].Get(), rt.fmt},
+    std::pair<ID3D12Resource*, DXGI_FORMAT> src[3] = {{scene_[0].Get(), rt.fmt},
                                                       {depth, DXGI_FORMAT_R24_UNORM_X8_TYPELESS},
-                                                      {tiles, DXGI_FORMAT_R8G8_UNORM},
-                                                      {clouds, DXGI_FORMAT_R16G16_FLOAT}};
+                                                      {tiles, DXGI_FORMAT_R8G8_UNORM}};
     for (uint32_t i = 0; i < 7; i++) {
         D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
-        sv.Format = i < 4 && src[i].first ? src[i].second : kBgra;
+        sv.Format = i < 3 && src[i].first ? src[i].second : kBgra;
         sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         sv.Texture2D.MipLevels = 1;
-        dev_->CreateShaderResourceView(i < 4 ? src[i].first : nullptr, &sv, Cpu(srv_heap_.Get(), slot + i, srv_inc_));
+        dev_->CreateShaderResourceView(i < 3 ? src[i].first : nullptr, &sv, Cpu(srv_heap_.Get(), slot + i, srv_inc_));
     }
     Transition(rt.res.Get(), rt.state, D3D12_RESOURCE_STATE_RENDER_TARGET);
     D3D12_CPU_DESCRIPTOR_HANDLE rh = Cpu(rtv_heap_.Get(), rt.view, rtv_inc_);
@@ -9553,140 +8996,11 @@ void D3D12Backend::SkyPass(Target& rt, const float p[16]) {
     bound_rt_ = bound_ds_ = nullptr;
 }
 
-// The bake's colour capture (XBE_BAKE_COLOR): a pixel in each 4 x 4 (another each frame) of the scene before the
-// reflections, its cell's slot and colour (kBakeColourHlsl, scene_[kSceneColCap]), read back kFrames later and summed
-// by slot; every 10 s (and as the level changes) the sums by key to <folder>/lvNN.col: "COL1", the count, then each
-// cell's key (64 bits), its colour (3 floats, the average), its samples and how many of them were reflective; then
-// the sky's colour seen 128 ways (16 round from +x towards +z, 8 up from 0.2 under the horizon: 3 floats, samples)
-void D3D12Backend::BakeColourCapture(Target& rt) {
-    int level = g_level.load();
-    if (level != colcap_level_) {
-        BakeColourWrite();
-        colcap_.clear();
-        for (ColourSum& c : colcap_sky_) c = {};
-        colcap_level_ = level;
-    }
-    uint32_t fs = uint32_t(frame_ % kFrames);
-    // what was read kFrames ago
-    if (colcap_fence_[fs] && fence_->GetCompletedValue() >= colcap_fence_[fs] && colcap_rb_[fs]) {
-        const uint8_t* m = nullptr;
-        uint32_t w = colcap_dims_[fs][0], h = colcap_dims_[fs][1], pitch = colcap_dims_[fs][2];
-        D3D12_RANGE r{0, size_t(pitch) * h};
-        if (SUCCEEDED(colcap_rb_[fs]->Map(0, &r, reinterpret_cast<void**>(const_cast<uint8_t**>(&m)))) && m) {
-            for (uint32_t y = 0; y < h; y++) {
-                const uint32_t* row = reinterpret_cast<const uint32_t*>(m + size_t(y) * pitch);
-                for (uint32_t x = 0; x < w; x++) {
-                    uint32_t slot = row[x * 2], v = row[x * 2 + 1];
-                    auto dec = [](uint32_t q) {
-                        float t = float(q & 1023) / 1023.0f;
-                        return t * t * 4;
-                    };
-                    if (slot & 0x80000000u) {
-                        ColourSum& c = colcap_sky_[slot & 127];
-                        c.r += dec(v), c.g += dec(v >> 10), c.b += dec(v >> 20), c.n++;
-                        continue;
-                    }
-                    if (!slot || slot - 1 >= bake_keys_.size()) continue;
-                    ColourSum& c = colcap_[slot - 1];
-                    c.r += dec(v), c.g += dec(v >> 10), c.b += dec(v >> 20);
-                    c.n++, c.refl += (v >> 30) != 0;
-                }
-            }
-            D3D12_RANGE none{0, 0};
-            colcap_rb_[fs]->Unmap(0, &none);
-        }
-        colcap_fence_[fs] = 0;
-    }
-    static auto last = std::chrono::steady_clock::now();
-    if (std::chrono::steady_clock::now() - last > std::chrono::seconds(10)) {
-        last = std::chrono::steady_clock::now();
-        BakeColourWrite();
-    }
-    if (!bake_ || bake_keys_.empty() || bake_cam_[3] <= 0 || !scene_[kSceneColCap] || !scene_ds_ || !gbuf_) return;
-    Target& ds = *scene_ds_;
-    uint32_t w = std::max(1u, rt.w / 4), h = std::max(1u, rt.h / 4);
-    uint32_t pitch = (w * 8 + 255) & ~255u;
-    if (!colcap_rb_[fs] || colcap_dims_[fs][0] != w || colcap_dims_[fs][1] != h) {
-        colcap_rb_[fs].Reset();
-        D3D12_HEAP_PROPERTIES rp{D3D12_HEAP_TYPE_READBACK};
-        D3D12_RESOURCE_DESC bd = BufferDesc(uint64_t(pitch) * h);
-        if (FAILED(CreateResource(&rp, D3D12_HEAP_FLAG_NONE, &bd, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&colcap_rb_[fs])))) return;
-        colcap_dims_[fs][0] = w, colcap_dims_[fs][1] = h, colcap_dims_[fs][2] = pitch;
-    }
-    float p[16];
-    SceneParams(rt, p);
-    float cam[16];
-    std::memcpy(cam, bake_cam_, sizeof(cam));
-    static uint32_t n = 0;
-    n++;
-    cam[11] = float(n % 4), cam[15] = float((n / 4) % 4);  // (the pixel of each 4 x 4 this frame)
-    if (world_depth_saved_) Transition(world_depth_.Get(), world_depth_state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    if (bound_rt_ == &rt) BindGbuf(false);
-    Transition(gbuf_.Get(), gbuf_state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    constexpr DXGI_FORMAT kDepth = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
-    static const std::string text = std::string("StructuredBuffer<uint2> bake : register(t3);\n") + kBakeHlsl + kBakeColourHlsl;
-    ScenePass(text, "bakecolour", kSceneColCap, DXGI_FORMAT_R32G32_UINT, w, h,
-              {{world_depth_saved_ ? world_depth_.Get() : ds.res.Get(), kDepth}, {scene_[0].Get(), rt.fmt},
-               {gbuf_.Get(), DXGI_FORMAT_R16G16B16A16_FLOAT}, {nullptr, kBgra}, {nullptr, kBgra}, {gbuf_.Get(), DXGI_FORMAT_R16G16B16A16_FLOAT}},
-              p, -1, cam, bake_.Get(), bake_n_);
-    Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-    gbuf_bound_ = false;
-    Transition(scene_[kSceneColCap].Get(), scene_state_[kSceneColCap], D3D12_RESOURCE_STATE_COPY_SOURCE);
-    D3D12_TEXTURE_COPY_LOCATION dst{}, from{};
-    dst.pResource = colcap_rb_[fs].Get();
-    dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-    dst.PlacedFootprint.Footprint = {DXGI_FORMAT_R32G32_UINT, w, h, 1, pitch};
-    from.pResource = scene_[kSceneColCap].Get();
-    from.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-    from.SubresourceIndex = 0;
-    cl_->CopyTextureRegion(&dst, 0, 0, 0, &from, nullptr);
-    Transition(scene_[kSceneColCap].Get(), scene_state_[kSceneColCap], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    colcap_fence_[fs] = fence_value_ + 1;
-}
-
-void D3D12Backend::BakeColourWrite() {
-    static const char* dir = std::getenv("XBE_BAKE_COLOR");
-    if (!dir || colcap_level_ < 0 || colcap_.empty() || bake_keys_.empty()) return;
-    char name[32];
-    std::snprintf(name, sizeof(name), "lv%02d.col", colcap_level_);
-    std::filesystem::create_directories(dir);
-    std::ofstream out(std::filesystem::path(dir) / name, std::ios::binary);
-    uint32_t count = 0;
-    for (auto& [slot, c] : colcap_) count += slot < bake_keys_.size() && bake_keys_[slot] != 0;
-    out.write("COL1", 4);
-    out.write(reinterpret_cast<const char*>(&count), 4);
-    for (auto& [slot, c] : colcap_) {
-        if (slot >= bake_keys_.size() || !bake_keys_[slot]) continue;
-        float rgb[3] = {float(c.r / c.n), float(c.g / c.n), float(c.b / c.n)};
-        out.write(reinterpret_cast<const char*>(&bake_keys_[slot]), 8);
-        out.write(reinterpret_cast<const char*>(rgb), 12);
-        out.write(reinterpret_cast<const char*>(&c.n), 4);
-        out.write(reinterpret_cast<const char*>(&c.refl), 4);
-    }
-    // then the sky's 128 ways: the colour (3 floats), the samples
-    for (const ColourSum& c : colcap_sky_) {
-        float rgb[3] = {c.n ? float(c.r / c.n) : 0, c.n ? float(c.g / c.n) : 0, c.n ? float(c.b / c.n) : 0};
-        out.write(reinterpret_cast<const char*>(rgb), 12);
-        out.write(reinterpret_cast<const char*>(&c.n), 4);
-    }
-    LOGR("bake colour: level %d, %u cells written", colcap_level_, count);
-}
-
-// The reflections (kSceneReflHlsl: the level's probes) on the scene's target, from its copy (scene_[0]): t1 the
-// depth now, t2 the reflection buffer, t3 the probes' table, t4 the occlusion, t5 the probes' atlas, t6 the world's
-// depth (kept before the weapon in hand cleared it; the depth now without it); the view space to the world as the
-// bake's (bakecam)
+// The reflections (kSceneSsrHlsl) on the scene's target, from its copy (scene_[0]): t1 the depth now, t2 the reflection
+// buffer, t3 the world's depth (kept before the weapon in hand cleared it; the depth now without it)
 void D3D12Backend::ReflectionPass(Target& rt, const float p[16]) {
-    float inv[16], cam[16] = {};
-    if (!cam_ok_ || !shadow::Invert(cam_view_, inv) || cam_proj_[0] == 0 || cam_proj_[5] == 0 || p[0] == 0 || p[1] == 0) return;
-    {
-        float sx = 1 / (cam_proj_[0] * p[0]), sy = 1 / (cam_proj_[5] * p[1]);
-        for (int j = 0; j < 3; j++) cam[j] = inv[j] * sx, cam[4 + j] = inv[4 + j] * sy, cam[8 + j] = inv[8 + j], cam[12 + j] = inv[12 + j];
-        cam[3] = 1;
-    }
-    static const std::string text = std::string(kSceneCommon) + "StructuredBuffer<uint2> bake : register(t3);\n" + kBakeHlsl + kSceneReflHlsl;
-    ID3D12PipelineState* pso = EnsurePassPipeline(text.c_str(), "refl", rt.fmt, -1);
+    std::string text = std::string(kSceneCommon) + kSceneSsrHlsl;
+    ID3D12PipelineState* pso = EnsurePassPipeline(text.c_str(), "ssr", rt.fmt, -1);
     if (!pso || !scene_ds_) return;
     Target& ds = *scene_ds_;
     if (bound_rt_ == &rt) BindGbuf(false);
@@ -9696,41 +9010,30 @@ void D3D12Backend::ReflectionPass(Target& rt, const float p[16]) {
     constexpr DXGI_FORMAT kDepth = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
     // t4 the occlusion (the AO's, scene_[1]: corners and creases reflect less); none: 1
     const app::Settings& set = app::Get();
-    bool ao = occ_made_;
-    std::pair<ID3D12Resource*, DXGI_FORMAT> src[7] = {{scene_[0].Get(), rt.fmt},
+    bool ao = set.ao || set.contact_shadows;
+    std::pair<ID3D12Resource*, DXGI_FORMAT> src[5] = {{scene_[0].Get(), rt.fmt},
                                                       {ds.res.Get(), kDepth},
                                                       {gbuf_.Get(), DXGI_FORMAT_R16G16B16A16_FLOAT},
-                                                      {nullptr, DXGI_FORMAT_UNKNOWN},
-                                                      {ao ? scene_[1].Get() : nullptr, DXGI_FORMAT_R8_UNORM},
-                                                      {probe_atlas_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM},
-                                                      {world_depth_saved_ ? world_depth_.Get() : ds.res.Get(), kDepth}};
+                                                      {world_depth_saved_ ? world_depth_.Get() : ds.res.Get(), kDepth},
+                                                      {ao ? scene_[1].Get() : nullptr, DXGI_FORMAT_R8_UNORM}};
     uint32_t slot = AllocSrvSlots(7);
     for (uint32_t i = 0; i < 7; i++) {
         D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
-        sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        if (i == 3) {
-            sv.Format = DXGI_FORMAT_UNKNOWN;
-            sv.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-            sv.Buffer.NumElements = probe_n_;
-            sv.Buffer.StructureByteStride = 8;
-            dev_->CreateShaderResourceView(probe_tab_.Get(), &sv, Cpu(srv_heap_.Get(), slot + i, srv_inc_));
-            continue;
-        }
-        sv.Format = src[i].first ? src[i].second : i == 4 ? DXGI_FORMAT_R8_UNORM : kBgra;
+        sv.Format = i < 5 && src[i].first ? src[i].second : i == 4 ? DXGI_FORMAT_R8_UNORM : kBgra;
         sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-        if (i == 4 && !ao) sv.Shader4ComponentMapping = D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(5, 5, 5, 5);
+        sv.Shader4ComponentMapping = i == 4 && !ao ? D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(5, 5, 5, 5)
+                                                   : D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         sv.Texture2D.MipLevels = 1;
-        dev_->CreateShaderResourceView(src[i].first, &sv, Cpu(srv_heap_.Get(), slot + i, srv_inc_));
+        dev_->CreateShaderResourceView(i < 5 ? src[i].first : nullptr, &sv, Cpu(srv_heap_.Get(), slot + i, srv_inc_));
     }
     Transition(rt.res.Get(), rt.state, D3D12_RESOURCE_STATE_RENDER_TARGET);
     D3D12_CPU_DESCRIPTOR_HANDLE rh = Cpu(rtv_heap_.Get(), rt.view, rtv_inc_);
     cl_->OMSetRenderTargets(1, &rh, FALSE, nullptr);
     SetFullViewport(rt.w, rt.h);
-    Alloc cb = Upload(1792, 256);
-    std::memset(cb.cpu, 0, 1792);
+    Alloc cb = Upload(1536, 256);
+    std::memset(cb.cpu, 0, 1536);
     std::memcpy(cb.cpu, p, 16 * sizeof(float));
     std::memcpy(cb.cpu + kSkyConstantsAt * sizeof(float), sky_cb_, sizeof(sky_cb_));
-    std::memcpy(cb.cpu + kBakeCamAt * sizeof(float), cam, sizeof(cam));
     DrawFullScreen(pso, cb.gpu, slot);
     Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
     bound_rt_ = bound_ds_ = nullptr;
@@ -9842,11 +9145,7 @@ void D3D12Backend::SceneFinal(Target& rt, const float p[16], bool bloom, bool ra
         if (app::Get().ambient_particles && cam_ok_ && shadow::Invert(cam_view_, inv)) {
             static const bool motes_debug = std::getenv("XBE_MOTES_DEBUG") != nullptr;
             float on = motes_debug ? 2.0f : 1.0f, eye[3] = {inv[12], inv[13], inv[14]};
-            // (the fires among the lights at heatz[6].z: their embers; none, the dust alone)
-            float fires = 0;
-            for (uint32_t k = 0; k < nlights; k++) fires += std::fabs(lcol[k * 4 + 3] - 0.5f) < 0.1f || std::fabs(lcol[k * 4 + 3] - 0.875f) < 0.05f;
-            float motes[2] = {on, fires};
-            std::memcpy(cb.cpu + (24 + kMaxLights * 8 + 32 + 6 * 4 + 1) * sizeof(float), motes, sizeof(motes));
+            std::memcpy(cb.cpu + (24 + kMaxLights * 8 + 32 + 6 * 4 + 1) * sizeof(float), &on, sizeof(on));
             std::memcpy(cb.cpu + (24 + kMaxLights * 8 + 32 + 7 * 4 + 1) * sizeof(float), eye, sizeof(eye));
         }
     }
@@ -9867,7 +9166,7 @@ void D3D12Backend::SceneFinal(Target& rt, const float p[16], bool bloom, bool ra
 void D3D12Backend::Exposure(Target& rt) {
     if (!meter_) {
         D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_DEFAULT};
-        D3D12_RESOURCE_DESC td = Texture2DDesc(DXGI_FORMAT_R32G32_FLOAT, 16, 12);
+        D3D12_RESOURCE_DESC td = Texture2DDesc(DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 1);
         td.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
         D3D12_CLEAR_VALUE cv{};
         cv.Format = td.Format;
@@ -9875,7 +9174,7 @@ void D3D12Backend::Exposure(Target& rt) {
         if (FAILED(CreateResource(&hp, D3D12_HEAP_FLAG_NONE, &td, meter_state_, &cv, IID_PPV_ARGS(&meter_)))) return;
         dev_->CreateRenderTargetView(meter_.Get(), nullptr, MeterRtv());
         D3D12_HEAP_PROPERTIES rp{D3D12_HEAP_TYPE_READBACK};
-        D3D12_RESOURCE_DESC bd = BufferDesc(256 * 12);
+        D3D12_RESOURCE_DESC bd = BufferDesc(256);
         for (auto& b : meter_rb_)
             if (FAILED(CreateResource(&rp, D3D12_HEAP_FLAG_NONE, &bd, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
                                                      IID_PPV_ARGS(&b))))
@@ -9888,16 +9187,10 @@ void D3D12Backend::Exposure(Target& rt) {
     float dt = std::clamp(std::chrono::duration<float>(now - last).count(), 0.0f, 0.1f);
     last = now;
     if (meter_fence_[slot] && fence_->GetCompletedValue() >= meter_fence_[slot]) {
-        const uint8_t* v = nullptr;
-        D3D12_RANGE r{0, 256 * 12};
-        if (SUCCEEDED(meter_rb_[slot]->Map(0, &r, reinterpret_cast<void**>(const_cast<uint8_t**>(&v)))) && v) {
-            // (the grid's weighed log luminances, a row of 16 to each 256 bytes)
-            double sum = 0, w = 0;
-            for (int y = 0; y < 12; y++) {
-                const float* row = reinterpret_cast<const float*>(v + y * 256);
-                for (int x = 0; x < 16; x++) sum += row[x * 2], w += row[x * 2 + 1];
-            }
-            float lum = w > 0 ? float(sum / w) : 0;
+        float* v = nullptr;
+        D3D12_RANGE r{0, 16};
+        if (SUCCEEDED(meter_rb_[slot]->Map(0, &r, reinterpret_cast<void**>(&v))) && v) {
+            float lum = v[0];
             D3D12_RANGE none{0, 0};
             meter_rb_[slot]->Unmap(0, &none);
             constexpr float kReference = -3.3f;  // log2 of the luminance the levels' daylight mostly averages
@@ -9914,12 +9207,12 @@ void D3D12Backend::Exposure(Target& rt) {
     DXGI_FORMAT fmt[3] = {rt.fmt, rt.fmt, rt.fmt};
     float p[8] = {0, 0, 0, 0, 0, 0, float(rt.w), float(rt.h)};
     Transition(meter_.Get(), meter_state_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    Pass(kMeterHlsl, "meter", DXGI_FORMAT_R32G32_FLOAT, MeterRtv(), 16, 12, src, fmt, p, -1);
+    Pass(kMeterHlsl, "meter", DXGI_FORMAT_R32G32B32A32_FLOAT, MeterRtv(), 1, 1, src, fmt, p, -1);
     Transition(meter_.Get(), meter_state_, D3D12_RESOURCE_STATE_COPY_SOURCE);
     D3D12_TEXTURE_COPY_LOCATION dst{}, from{};
     dst.pResource = meter_rb_[slot].Get();
     dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-    dst.PlacedFootprint.Footprint = {DXGI_FORMAT_R32G32_FLOAT, 16, 12, 1, 256};
+    dst.PlacedFootprint.Footprint = {DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 1, 1, 256};
     from.pResource = meter_.Get();
     from.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
     from.SubresourceIndex = 0;
@@ -9945,7 +9238,7 @@ void D3D12Backend::Grade() {
     }
     bool on = set.auto_exposure || set.color_grade;
     float g[16] = {exposure, sat, 1, on ? 1.0f : 0.0f, gain[0], gain[1], gain[2], 0, lift[0], lift[1], lift[2], 0,
-                   set.film_grain ? 0.012f : 0.0f, 0, 0, 0};
+                   set.film_grain && !set.taa ? 0.012f : 0.0f, 0, 0, 0};
     std::memcpy(grade_cb_, g, sizeof(g));
 }
 
@@ -10257,54 +9550,49 @@ bool D3D12Backend::EnsureSmaaLookups() {
     return true;
 }
 
-// SMAA (Anti-Aliasing's first step) on the scene's target: its edges, their weights, the blend into post_[2], copied
-// back; the 3D with every pass on it, the 2D drawn over it after
-void D3D12Backend::SceneSmaa(Target& t) {
-    if (!EnsurePostTargets(t.fmt, t.w, t.h) || !EnsureSmaaLookups()) return;
-    uint32_t w = t.w, h = t.h;
-    ID3D12Resource* src = t.res.Get();
-    DXGI_FORMAT fmt = t.fmt;
-    Transition(t.res.Get(), t.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    auto into = [&](uint32_t i) { Transition(post_[i].Get(), post_state_[i], D3D12_RESOURCE_STATE_RENDER_TARGET); };
-    auto done = [&](uint32_t i) { Transition(post_[i].Get(), post_state_[i], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE); };
-    float p[8] = {1.0f / w, 1.0f / h, float(w), float(h)};
-    const float clear[4] = {};
-    // edge detection discards where there is no edge: the edges start clear
-    into(0);
-    cl_->ClearRenderTargetView(PostRtv(0), clear, 0, nullptr);
-    ID3D12Resource* e_src[3] = {src, nullptr, nullptr};
-    DXGI_FORMAT e_fmt[3] = {fmt, fmt, fmt};
-    Pass(SmaaPass(0).c_str(), "smaa_edges", DXGI_FORMAT_R8G8_UNORM, PostRtv(0), w, h, e_src, e_fmt, p, -1);
-    done(0);
-    into(1);
-    cl_->ClearRenderTargetView(PostRtv(1), clear, 0, nullptr);
-    ID3D12Resource* w_src[3] = {post_[0].Get(), smaa_lut_[0].Get(), smaa_lut_[1].Get()};
-    DXGI_FORMAT w_fmt[3] = {DXGI_FORMAT_R8G8_UNORM, DXGI_FORMAT_R8G8_UNORM, DXGI_FORMAT_R8_UNORM};
-    Pass(SmaaPass(1).c_str(), "smaa_weights", DXGI_FORMAT_R8G8B8A8_UNORM, PostRtv(1), w, h, w_src, w_fmt, p, -1);
-    done(1);
-    into(2);
-    ID3D12Resource* b_src[3] = {src, post_[1].Get(), nullptr};
-    DXGI_FORMAT b_fmt[3] = {fmt, DXGI_FORMAT_R8G8B8A8_UNORM, fmt};
-    Pass(SmaaPass(2).c_str(), "smaa_blend", fmt, PostRtv(2), w, h, b_src, b_fmt, p, -1);
-    // back into the scene's target
-    Transition(post_[2].Get(), post_state_[2], D3D12_RESOURCE_STATE_COPY_SOURCE);
-    Transition(t.res.Get(), t.state, D3D12_RESOURCE_STATE_COPY_DEST);
-    cl_->CopyResource(t.res.Get(), post_[2].Get());
-    Transition(post_[2].Get(), post_state_[2], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    bound_rt_ = bound_ds_ = nullptr;
+// tests (XBE_AA=smaa): Anti-Aliasing as SMAA and TAA, not 4x MSAA and TAA
+bool SmaaMode() {
+    static const bool on = [] {
+        const char* e = std::getenv("XBE_AA");
+        return e && std::strcmp(e, "smaa") == 0;
+    }();
+    return on;
 }
 
-// the passes on the shown frame: the sharpening
 ID3D12Resource* D3D12Backend::PostProcess(Target& t, DXGI_FORMAT& fmt) {
     const app::Settings& set = app::Get();
     ID3D12Resource* src = t.res.Get();
     fmt = t.fmt;
-    if (!set.sharpening) return src;
+    const bool smaa = set.taa && SmaaMode();
+    if (!smaa && !set.sharpening) return src;
     if (!EnsurePostTargets(t.fmt, t.w, t.h)) return src;
     uint32_t w = t.w, h = t.h;
     Transition(t.res.Get(), t.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     auto into = [&](uint32_t i) { Transition(post_[i].Get(), post_state_[i], D3D12_RESOURCE_STATE_RENDER_TARGET); };
     auto done = [&](uint32_t i) { Transition(post_[i].Get(), post_state_[i], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE); };
+    if (smaa && EnsureSmaaLookups()) {
+        float p[8] = {1.0f / w, 1.0f / h, float(w), float(h)};
+        const float clear[4] = {};
+        // edge detection discards where there is no edge: the edges start clear
+        into(0);
+        cl_->ClearRenderTargetView(PostRtv(0), clear, 0, nullptr);
+        ID3D12Resource* e_src[3] = {src, nullptr, nullptr};
+        DXGI_FORMAT e_fmt[3] = {fmt, fmt, fmt};
+        Pass(SmaaPass(0).c_str(), "smaa_edges", DXGI_FORMAT_R8G8_UNORM, PostRtv(0), w, h, e_src, e_fmt, p, -1);
+        done(0);
+        into(1);
+        cl_->ClearRenderTargetView(PostRtv(1), clear, 0, nullptr);
+        ID3D12Resource* w_src[3] = {post_[0].Get(), smaa_lut_[0].Get(), smaa_lut_[1].Get()};
+        DXGI_FORMAT w_fmt[3] = {DXGI_FORMAT_R8G8_UNORM, DXGI_FORMAT_R8G8_UNORM, DXGI_FORMAT_R8_UNORM};
+        Pass(SmaaPass(1).c_str(), "smaa_weights", DXGI_FORMAT_R8G8B8A8_UNORM, PostRtv(1), w, h, w_src, w_fmt, p, -1);
+        done(1);
+        into(2);
+        ID3D12Resource* b_src[3] = {src, post_[1].Get(), nullptr};
+        DXGI_FORMAT b_fmt[3] = {fmt, DXGI_FORMAT_R8G8B8A8_UNORM, fmt};
+        Pass(SmaaPass(2).c_str(), "smaa_blend", fmt, PostRtv(2), w, h, b_src, b_fmt, p, -1);
+        done(2);
+        src = post_[2].Get();
+    }
     if (set.sharpening) {
         float p[8] = {std::min(set.sharpening, 10u) / 10.0f, 0, 0, 0, 0, 0, float(w), float(h)};
         into(3);
@@ -10777,6 +10065,19 @@ void D3D12Backend::Present(const Surface& front) {
     motion_.clear();
     prev_cam_ok_ = cam_ok_;
     if (cam_ok_) std::memcpy(prev_view_, cam_view_, sizeof(prev_view_)), std::memcpy(prev_proj_, cam_proj_, sizeof(prev_proj_));
+    // the next frame's jitter: Halton (2, 3) over 8 frames, within a pixel
+    if (app::Get().taa && scene_w_ > 0 && scene_h_ > 0) {
+        auto halton = [](uint32_t i, uint32_t b) {
+            float f = 1, r = 0;
+            for (; i > 0; i /= b) f /= float(b), r += f * float(i % b);
+            return r;
+        };
+        uint32_t i = taa_index_++ % 8 + 1;
+        taa_jit_[0] = (2 * halton(i, 2) - 1) / float(scene_w_);
+        taa_jit_[1] = (2 * halton(i, 3) - 1) / float(scene_h_);
+    } else {
+        taa_jit_[0] = taa_jit_[1] = 0;
+    }
     cam_ok_ = false;
     shadows_drawn_ = false;
     scene_drawn_ = scene_rt_ != nullptr;

@@ -174,7 +174,7 @@ struct DrawConstants {
     float mrefl[4];      // the material's reflectivity, metal (remaster::Material), 0, 0
     float tess[4];       // tessellation: the program's position rows (c[] indices) for x y z w
     float tess2[4];      // its offset constant's index
-    float jitter[4];     // xy unused (the temporal anti-aliasing's sub pixel offset, gone); z, w below
+    float jitter[4];     // temporal anti-aliasing: the frame's sub pixel offset, clip space xy (the 3D's draws)
     float pts0[4];       // points (PointSpriteGsHlsl): D3DRS_POINTSIZE, its min, max, the scale on
     float pts1[4];       // the scale's A, B, C; point sprites on
     float flow[4];       // falling water (Water): the time (0 none), the texture's speed along v, the brightness, the opacity

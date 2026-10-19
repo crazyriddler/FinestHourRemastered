@@ -18,11 +18,12 @@ enum class DisplayMode : uint32_t { Fullscreen, Borderless, Windowed };
 struct Settings {
     DisplayMode display_mode = DisplayMode::Borderless;
     uint32_t width = 0, height = 0;  // 0 is the desktop mode
+    uint32_t render_percent = 100;   // of the output height
     uint32_t fps_cap = 60;           // 0 unlimited
     bool vsync = true;
     uint32_t aniso = 16;             // 0 as the game asks
-    uint32_t anti_aliasing = 3;      // Anti-Aliasing: 0 off, 1 SMAA (the 3D and its passes), 2 and 3 SMAA with 2x and
-                                     // 4x MSAA of the 3D (the geometry's edges)
+    bool smaa = true;                // SMAA on the shown frame
+    bool taa = true;                 // Anti-Aliasing: 4x MSAA (cut outs' edges as coverage) and temporal of the 3D
     bool motion_blur = false;        // what moves blurs along its motion (retired: off, not offered)
     uint32_t sharpening = 0;         // contrast adaptive sharpening of the shown frame, 0 to 10
     bool hdr = true;                 // the scene in 16 bit float: light added past white keeps its brightness
@@ -54,7 +55,6 @@ struct Settings {
     bool lit_smoke = true;           // smoke and dust lit from inside by the flashes, fire and explosions near them
     bool character_light = true;     // characters: a soft warm light through the skin and a faint rim on their outline
     bool bounce_light = true;        // light bounced off nearby lit surfaces (one bounce, never into dark rooms)
-    bool baked_lighting = true;      // the world's shade and sun's shadows ray traced ahead of time (tools/bake, bake/)
     bool soft_shadows = true;        // the sun's shadows sharp where they touch, softer the further from what casts them
     bool volumetric_fog = true;      // a light haze in the air, thicker low, lit by the sun (its beams past shadows) and the flashes
     bool cloud_shadows = true;       // the clouds' shadows drifting over the sunlit ground

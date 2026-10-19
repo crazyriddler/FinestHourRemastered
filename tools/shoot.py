@@ -36,7 +36,7 @@ EFFECTS = ["bloom", "hit_reactions", "ao", "contact_shadows", "dynamic_lights", 
            "wind", "barrel_heat", "animated_fire", "shockwaves", "water", "water_interaction", "snow_tracks",
            "lens_flare", "sharp_distance", "weapon_materials", "character_detail", "color_grade", "film_grain",
            "smooth_models", "reflections", "sun_moon", "clouds", "materials", "parallax", "detail", "pixel_lighting",
-           "height_blend", "aa", "motion_blur", "remaster", "shadows"]
+           "height_blend", "smaa", "taa", "motion_blur", "remaster", "shadows"]
 
 
 def film(shot, out, take_off):

@@ -7,6 +7,12 @@ games are kept.
 New installations do not need it: the installer on the [1.0 release](https://github.com/crazyriddler/FinestHourRemastered/releases/tag/v1.0)
 always carries the latest update and installs it with the game.
 
+> [!IMPORTANT]
+> The baked lighting update of 19 October has been withdrawn: it broke too many things. This update brings any
+> installation back to the version before it, that update's included (its baked lighting files are removed, the
+> textures it changed restored), and brings earlier versions up to it as usual. Your settings and saved games are
+> kept.
+
 ## How to update
 1. Download `FinestHourRemasteredUpdate.exe`.
 2. Run it and choose the folder where Finest Hour Remastered is installed, then **Update**.
@@ -16,40 +22,6 @@ The version installed is in `version.txt` beside the game. Unattended:
 1 failed).
 
 ## Changes since 1.0
-- New **Baked Lighting** (Graphics, on by default): every level's world has been ray traced ahead of time, its
-  ambient occlusion and the sun's or moon's shadows with real soft edges, for every surface and for the air over the
-  floors (soldiers walking into a building's shadow are shaded too). The shade in corners no longer shimmers or
-  changes as the camera moves, sees what is off the screen, and the static world's shadows now reach as far as the
-  eye sees. The game's own painted lighting is kept: the bake only shades it. It is also lighter on the GPU: the
-  real-time shadow maps now draw only what moves.
-- **Reflections** are baked too: every level has probes, ray traced ahead of time, that see what is about each glossy
-  surface in the colours the game draws it. The reflections no longer shimmer or come and go as the view turns, show
-  what is off the screen or behind you, and cost less than before.
-- The **bounce light** (Bounce Light, Effects) comes from the bake too: the light off the walls and the ground about
-  a surface, seen or not, steady, for a fraction of its cost before (what moves still takes it from the screen).
-- **Anti-Aliasing** is now a choice: Off, SMAA, SMAA + 2x MSAA or SMAA + 4x MSAA. SMAA smooths the whole 3D with
-  every effect on it (fences, foliage, particles, the post-processing), never the HUD or the menus; MSAA adds the
-  models' and the world's edges. The temporal anti-aliasing is gone: with the lighting and the reflections baked
-  nothing needs it to smooth its grain any more, and the picture stays sharp in motion. Very High and High use SMAA +
-  4x MSAA, Medium SMAA + 2x MSAA, Low SMAA, Original none. (Before, Low had no anti-aliasing at all: its SMAA was
-  never applied.)
-- The **Render Scale** option is gone: the game is always drawn at the screen's resolution.
-- **Ambient Occlusion**: the world's own shade comes with Baked Lighting and stays with the option off; the option
-  adds the screen's shade about what moves (soldiers, vehicles).
-- The **presets** were reworked around the baked lighting: the bounce light is on down to Medium, the floating dust
-  too, the anti-aliasing as above. At 2560x1440 on an RTX 4080 the first level takes about 3.1, 2.9, 2.2, 0.9 and
-  0.5 ms of GPU time on Very High, High, Medium, Low and Original. Your settings move over by themselves: a preset
-  stays that preset, your own choices stay yours.
-- The **sun and the moon** (Sun and Moon) are larger, as a film shows them: the sun a white hot disc with a corona and
-  a wide glow, the moon twice as large with its seas on its face and a soft halo; round wherever they are on the screen.
-- Many effects cost less with the same look: the clouds (worked out at half size, as soft as before), the floating
-  dust and embers (only where a fire is near), the flashes' shadows (as many steps as they cross pixels), the
-  surfaces' relief (Parallax: as many steps as it shifts on the screen), the volumetric fog's smoothing and the eye's
-  exposure meter.
-- **Shadows**: each step now costs less than before (High is the old Medium, Medium the old Low, Low lower still):
-  with Baked Lighting the static world's shadows are baked, sharp and soft where they should be, and the real-time
-  shadow maps only add what moves. Baked Lighting is on in every preset but Original; your settings move over by
-  themselves (a file on Original stays Original).
 - The world's animated textures now move, as their artists made them: the light caustics on the sewer walls, the
   falling water, the Volga and the rivers, glowing coals, fans and more. The game always ran these animations, but
   RenderWare drew those surfaces without them: their sectors never had the material effects turned on.

@@ -52,6 +52,10 @@ The version installed is in `version.txt` beside the game. Unattended:
   tunnel (among others at level loads). The game's loading thread and its main thread changed the same RenderWare
   lists at once: on the Xbox's single core they always took turns, on a PC's many cores they did not. They take
   turns again, with no cost to the frame rate.
+- More crashes fixed (a fault in RenderWare's frames or memory blocks, at any point of play): the turns above were
+  taken by the wrong thread. The game's main thread is not the one the XBE starts with (that one only starts main's
+  thread and ends), so main and the loading thread still ran at once. Now main's thread takes the turns.
+- The compass rose: each point's base is whole and none of them runs into the centre dot.
 - Fires' lights hold steady: their light and shadows on the walls around a fire no longer jump from frame to frame.
 - The surfaces' highlights by a shadow's edge no longer flicker as the view turns.
 

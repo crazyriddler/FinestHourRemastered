@@ -25,12 +25,14 @@ namespace cod::jobs {
 // thread walks and draws, with no lock between them: on the Xbox it ran only while the title thread waited (one core,
 // the title thread above it). On a PC the two ran at once and corrupted RenderWare's lists (a dirty frame's object
 // list, the arena's block list: crashes in sub_001CE830 and sub_001CB8E0). They share one core again
-// (kernel::ShareOneCore): the loading thread runs while the title thread waits on something, as it did.
-constexpr uint32_t kTitleEntry = 0x13409E;   // the title thread: the XBE's entry
+// (kernel::ShareOneCore): the loading thread runs while the title thread waits on something, as it did. The title
+// thread is not the XBE's entry (0x13409E): that one only sizes a stack, starts the CRT's main (0x13402A) on a thread
+// of its own with it and exits; main's thread is the one that runs the game.
+constexpr uint32_t kTitleMain = 0x13402A;   // the title thread: the CRT's main, started by the XBE's entry
 constexpr uint32_t kLoadingThread = 0x68D90;
 
 void Init() {
-    kernel::ShareOneCore(kTitleEntry);
+    kernel::ShareOneCore(kTitleMain);
     kernel::ShareOneCore(kLoadingThread);
 }
 

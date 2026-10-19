@@ -42,6 +42,12 @@ The version installed is in `version.txt` beside the game. Unattended:
   texture stage that reads no texture now reads black, as on the console.
 - The installer and the updater speak English, French, Italian and Spanish (the system's language), and a new
   installation starts the game in the system's language when it is one of the game's four (English otherwise).
+- Crashes fixed: moving the tank on Airfield Ambush after the planes are destroyed, and the dead-end room in the
+  tunnel (among others at level loads). The game's loading thread and its main thread changed the same RenderWare
+  lists at once: on the Xbox's single core they always took turns, on a PC's many cores they did not. They take
+  turns again, with no cost to the frame rate.
+- Fires' lights hold steady: their light and shadows on the walls around a fire no longer jump from frame to frame.
+- The surfaces' highlights by a shadow's edge no longer flicker as the view turns.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

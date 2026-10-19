@@ -74,6 +74,8 @@ const char* kCommonTail = R"(    float4 spread[4];
     float4 wave[3];  // Water Interaction: world x, world z from view space; the field's corner, 1 / size, slope scale
     float4 trail[2];  // Snow Tracks: the trail's corner, 1 / size, strength; world y from view space
     float4 dtl;  // Detail Textures: the grain's slice in t6 (-1 none), its strength, Character Detail's tiling, the grain's texels per tile
+    row_major float4x4 sunprev;  // the view space now to the frame before's clip space, and to this frame's (sunvis)
+    row_major float4x4 sunnow;
 };
 )";
 
@@ -1833,7 +1835,16 @@ std::string MaterialShade(int i) {
         "    gl = 2 / ra - 2;\n"
         // the sun's: none in its shadow (the last frame's mask, d3d12.cpp BindSunVisibility, asked for by a negative
         // strength)
-        "    float sun = mtl[1].w < 0 ? sunvis.Load(int3(i.pos.xy, 0)).g : 1;\n"
+        "    float sun = 1;\n"
+        "    if (mtl[1].w < 0) {\n"
+        // where this point was on the screen when the mask was made, moved by the camera since (read where the pixel
+        // is now, a stale mask lit and put out the highlights about a shadow's edge as the view turned)
+        "        float4 qa = mul(float4(mP, 1), sunprev), qb = mul(float4(mP, 1), sunnow);\n"
+        "        float2 mv = (qa.xy / max(qa.w, 1e-3) - qb.xy / max(qb.w, 1e-3)) * float2(0.5, -0.5);\n"
+        "        float2 ssz;\n"
+        "        sunvis.GetDimensions(ssz.x, ssz.y);\n"
+        "        sun = sunvis.Load(int3(clamp(i.pos.xy + mv * ssz, 0, ssz - 1), 0)).g;\n"
+        "    }\n"
         "    float sp = min(mMat.a * pow(saturate(dot(sN, H)), gl) * (gl + 8) / 25.1, 0.6) * abs(mtl[1].w) * sun;\n"
         "    float3 shaded = outc.rgb * lerp(1, lf, mtl[0].w) * cav + sp * lit * saturate(dot(mNs, L) * 2 + 0.3);\n"
         "    outc.rgb = lerp(outc.rgb, shaded, saturate(fogin.a));\n"

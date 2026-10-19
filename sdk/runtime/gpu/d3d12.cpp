@@ -1049,6 +1049,8 @@ private:
     // visibility in g), at t7 (root table 4) for the whole frame
     bool sun_vis_ok_ = false;     // a mask (or the white of no shadows) was made at the scene targets' size
     bool sun_vis_bound_ = false;  // and is at t7 for this list
+    float sunrp_[2][16] = {}, sunrp_view_[16] = {};  // the draws' sunrp (DrawConstants), for the camera sunrp_view_
+    uint64_t sunrp_frame_ = ~0ull;
     bool wave_bound_ = false;     // the wave field at t8 (Water Interaction)
     D3D12_GPU_DESCRIPTOR_HANDLE sun_table_{};
     void BindSunVisibility();
@@ -1113,7 +1115,10 @@ private:
         bool flicker;
         float heat, flash;
         bool shadows;
+        uint32_t id;  // (XBE_DYN_LOG: the lights shown kept or changed from a frame to the next)
     };
+    uint32_t dyn_next_id_ = 1;
+    std::vector<uint32_t> dyn_shown_ids_;
     std::vector<DynLight> dyn_frame_, dyn_lights_;
     // the frame's effects for the composite: heat sources (screen xy, radius, strength; view depth), the flash
     struct SceneFx {
@@ -1802,7 +1807,7 @@ uint32_t D3D12Backend::AllocSrvSlots(uint32_t n) {
     Frame& f = CurrentFrame();
     const uint32_t per = kSrvCount / kFrames;
     if (f.srv + n > per) {
-        LOG_FIRST(4, "d3d12: descriptor ring wrapped within a frame");
+        LOG_FIRST(4, "d3d12: descriptor ring wrapped within a frame (%llu presents)", (unsigned long long)presents_);
         f.srv = 0;
         ring_gen_++;
     }
@@ -4195,8 +4200,27 @@ void D3D12Backend::UploadConstants(const State& s, const DrawShaders& sh, const 
         // the highlight is the sun's: kept out of its shadow (the last frame's mask at t7, asked for by a negative
         // strength) on the screen's world, where the mask's pixels are the draw's
         if (c1[3] > 0 && !draw_character_ && sun_vis_bound_ && bound_rt_ && bound_rt_ == scene_rt_ && bound_rt_->w == scene_w_ &&
-            bound_rt_->h == scene_h_)
+            bound_rt_->h == scene_h_) {
             c1[3] = -c1[3];
+            // where the mask's pixels were: the camera's move since the frame before (the same at every draw of the
+            // frame, worked out again only when the camera given differs)
+            if (cam_ok_ && (sunrp_frame_ != frame_ || std::memcmp(sunrp_view_, cam_view_, sizeof(sunrp_view_)) != 0)) {
+                sunrp_frame_ = frame_;
+                std::memcpy(sunrp_view_, cam_view_, sizeof(sunrp_view_));
+                float inv[16], vp[16];
+                const float* pv = prev_cam_ok_ ? prev_view_ : cam_view_;
+                const float* pp = prev_cam_ok_ ? prev_proj_ : cam_proj_;
+                if (shadow::Invert(cam_view_, inv)) {
+                    shadow::Mul(pv, pp, vp);
+                    shadow::Mul(inv, vp, sunrp_[0]);
+                } else {
+                    std::memcpy(sunrp_[0], cam_proj_, sizeof(sunrp_[0]));
+                }
+                std::memcpy(sunrp_[1], cam_proj_, sizeof(sunrp_[1]));
+            }
+            if (cam_ok_) std::memcpy(c.sunrp, sunrp_, sizeof(c.sunrp));
+            else std::memcpy(c.sunrp[0], cam_proj_, sizeof(c.sunrp[0])), std::memcpy(c.sunrp[1], cam_proj_, sizeof(c.sunrp[1]));
+        }
         std::memcpy(c.mtl[0], c0, 16);
         std::memcpy(c.mtl[1], c1, 16);
         std::memcpy(c.mtl[2], c2, 16);
@@ -4652,7 +4676,11 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     Assembled& a = asm_;
     if (!AssembleDraw(s, prim, start, count, indices, a)) return;
     // past the ring every upload is a buffer of its own: seconds lost on a frame that draws a whole level once
-    if (CurrentFrame().used > kUploadSize - kUploadReserve) Submit(true);
+    if (CurrentFrame().used > kUploadSize - kUploadReserve) {
+        static std::atomic<int> n{0};
+        if (n++ < 20) LOGR("d3d12: upload ring full within a frame (%llu MB, %llu presents)", (unsigned long long)(CurrentFrame().used >> 20), (unsigned long long)presents_);
+        Submit(true);
+    }
     // the first 2D after the 3D: the scene's passes run on what is drawn so far
     bool flat = s.layout2d || a.pretransformed;
     if (flat && scene_rt_ && !scene_done_) ScenePost();
@@ -8359,19 +8387,64 @@ void D3D12Backend::UpdateDynLights() {
         t.radius = r, t.color[0] = 1.5f, t.color[1] = 1.0f, t.color[2] = 0.5f, t.strength = 1, t.hold = 0.06f, t.shadows = true;
         dyn_frame_.push_back(t);
     }
+    // the frame's sprites matched to the lights shown: a light takes the mean of every sample near it (a fire's sprites
+    // spread over it, a different few each frame: one sample's place alone jumped about, and the others near it
+    // started lights of their own, the strongest few shown changing every frame, the light and its shadows on the
+    // walls about a fire flickering); a fire's place, size and strength ease to it, a shot's flash takes it at once
+    struct Acc {
+        float pos[3], w, strength, radius;
+        int n;
+    };
+    std::vector<Acc> acc(dyn_lights_.size(), Acc{});
+    std::vector<const DynLight*> fresh;
     for (const DynLight& f : dyn_frame_) {
-        DynLight* best = nullptr;
+        int best = -1;
         float best_d2 = 0;
-        for (DynLight& l : dyn_lights_) {
-            if (l.age <= 0 || l.hold != f.hold || l.color[0] != f.color[0]) continue;
+        for (size_t i = 0; i < dyn_lights_.size(); i++) {
+            const DynLight& l = dyn_lights_[i];
+            if (l.hold != f.hold || l.color[0] != f.color[0]) continue;
             float d2 = 0;
             for (int k = 0; k < 3; k++) d2 += (l.pos[k] - f.pos[k]) * (l.pos[k] - f.pos[k]);
             float r = 0.6f * std::max(l.radius, f.radius);
-            if (d2 < r * r && (!best || d2 < best_d2)) best = &l, best_d2 = d2;
+            if (d2 < r * r && (best < 0 || d2 < best_d2)) best = int(i), best_d2 = d2;
         }
-        if (best) *best = f;
-        else if (dyn_lights_.size() < 256) {
+        if (best >= 0) {
+            Acc& a = acc[size_t(best)];
+            float w = std::max(f.strength, 0.01f);
+            for (int k = 0; k < 3; k++) a.pos[k] += f.pos[k] * w;
+            a.w += w, a.strength = std::max(a.strength, f.strength), a.radius = std::max(a.radius, f.radius), a.n++;
+        } else {
+            fresh.push_back(&f);
+        }
+    }
+    const float ease = 1 - std::exp(-dt / 0.2f);
+    for (size_t i = 0; i < acc.size(); i++) {
+        const Acc& a = acc[i];
+        if (!a.n) continue;
+        DynLight& l = dyn_lights_[i];
+        float k = l.flicker ? ease : 1.0f;
+        for (int j = 0; j < 3; j++) l.pos[j] += (a.pos[j] / a.w - l.pos[j]) * k;
+        // (a fire lit again after its hold ran down starts from what is left of it)
+        float left = l.strength * std::exp(-l.age / std::max(l.hold, 0.005f));
+        l.strength = left + (a.strength - left) * k;
+        l.radius += (a.radius - l.radius) * k;
+        l.age = 0;
+    }
+    for (const DynLight* fp : fresh) {
+        const DynLight& f = *fp;
+        // (two new samples near each other this frame: the first one's light takes the second)
+        bool joined = false;
+        for (size_t i = acc.size(); i < dyn_lights_.size() && !joined; i++) {
+            DynLight& l = dyn_lights_[i];
+            float d2 = 0;
+            for (int k = 0; k < 3; k++) d2 += (l.pos[k] - f.pos[k]) * (l.pos[k] - f.pos[k]);
+            float r = 0.6f * std::max(l.radius, f.radius);
+            if (d2 < r * r && l.hold == f.hold && l.color[0] == f.color[0]) l.strength = std::max(l.strength, f.strength), joined = true;
+        }
+        if (joined) continue;
+        if (dyn_lights_.size() < 256) {
             dyn_lights_.push_back(f);
+            dyn_lights_.back().id = dyn_next_id_++;
             // a new blast, seen for the first time (Shockwaves): a ring from its place on the screen, only a near
             // one (within about 25 m), weaker further; very near, dirt on the view
             if (f.flash > 0 && cam_ok_) {
@@ -8429,6 +8502,7 @@ uint32_t D3D12Backend::DynLightConstants(float* pos_radius, float* color, uint32
         bool shadows;
         bool fire;  // a steady, flickering light (fire): the ambient motes' embers
         bool strong;
+        uint32_t id;
     };
     std::vector<Shown> shown;
     for (const DynLight& l : dyn_lights_) {
@@ -8451,6 +8525,7 @@ uint32_t D3D12Backend::DynLightConstants(float* pos_radius, float* color, uint32
         sw.shadows = l.shadows;
         sw.fire = l.flicker;
         sw.strong = l.radius >= 400 && l.strength >= 0.8f;  // a big bright light (a fire, a burning wreck, a lamp)
+        sw.id = l.id;
         shown.push_back(sw);
     }
     // the hot ones' air shimmers (on the screen: where, how far, how strongly), the close explosions flash the view
@@ -8521,6 +8596,28 @@ uint32_t D3D12Backend::DynLightConstants(float* pos_radius, float* color, uint32
         float pr[4] = {sw.v[0], sw.v[1], sw.v[2], sw.radius}, c[4] = {sw.c[0], sw.c[1], sw.c[2], cast ? (sw.fire ? 0.875f : 1.0f) : sw.fire ? 0.5f : 0.0f};  // (0.875: a fire that casts)
         std::memcpy(pos_radius + i * 4, pr, sizeof(pr));
         std::memcpy(color + i * 4, c, sizeof(c));
+    }
+    // tests (XBE_DYN_LOG): how many of the lights shown (and of those casting) were not shown the frame before
+    static const bool dyn_log = std::getenv("XBE_DYN_LOG") != nullptr;
+    static uint64_t dyn_logged = ~0ull;
+    if (dyn_log && max == 32 && dyn_logged != frame_) {
+        dyn_logged = frame_;
+        static uint32_t frames = 0, changed = 0, cast_changed = 0, total = 0, fires = 0, fire_new = 0;
+        static std::vector<uint32_t> last_cast;
+        std::vector<uint32_t> ids, cast_ids;
+        for (uint32_t i = 0; i < n; i++) ids.push_back(shown[i].id);
+        for (uint32_t i : casting) cast_ids.push_back(shown[i].id);
+        for (uint32_t i = 0; i < n; i++)
+            if (shown[i].fire) fires++, fire_new += std::find(dyn_shown_ids_.begin(), dyn_shown_ids_.end(), shown[i].id) == dyn_shown_ids_.end();
+        for (uint32_t id : ids) changed += std::find(dyn_shown_ids_.begin(), dyn_shown_ids_.end(), id) == dyn_shown_ids_.end();
+        for (uint32_t id : cast_ids) cast_changed += std::find(last_cast.begin(), last_cast.end(), id) == last_cast.end();
+        total += n;
+        dyn_shown_ids_ = ids, last_cast = cast_ids;
+        if (++frames == 120) {
+            LOGR("dyn: %.1f lights shown, %.2f new a frame, %.2f casting new a frame (%zu tracked); fires %.1f, %.2f new a frame",
+                 total / 120.0, changed / 120.0, cast_changed / 120.0, dyn_lights_.size(), fires / 120.0, fire_new / 120.0);
+            frames = changed = cast_changed = total = fires = fire_new = 0;
+        }
     }
     return n;
 }

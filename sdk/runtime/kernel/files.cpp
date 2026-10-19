@@ -485,6 +485,7 @@ static uint32_t Transfer(const Args& a, bool write, uint32_t pages) {
     if (!f || (!f->fp && !f->entry)) return kInvalidHandle;
     if (write && f->entry) return kAccessDenied;
     ResetEvent(*f);
+    CoreYield yield;  // the disc's transfer: on the Xbox the thread waited on it, the others sharing its core ran
     std::lock_guard<std::mutex> lock(f->io);
     uint64_t pos = Offset(*f, off);
     if (f->fp) Seek(f->fp, pos);

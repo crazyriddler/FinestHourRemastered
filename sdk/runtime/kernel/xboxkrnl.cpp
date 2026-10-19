@@ -265,6 +265,7 @@ KERNEL_EXPORT(99, KeDelayExecutionThread, 3) {
         return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
     };
     SuspendPoint();
+    CoreYield yield;  // (a delay of 0 too: the others sharing the core take their turn)
     if (interval == 0) {
         std::this_thread::yield();
         return kSuccess;
@@ -272,7 +273,10 @@ KERNEL_EXPORT(99, KeDelayExecutionThread, 3) {
     while (now() < deadline) {
         int64_t left = deadline - now();
         std::this_thread::sleep_for(std::chrono::nanoseconds(std::min<int64_t>(left, 2000000)));
-        if (alertable && t && RunApcs(*t)) return kUserApc;
+        if (alertable && t) {
+            CoreHold hold;
+            if (RunApcs(*t)) return kUserApc;
+        }
     }
     return kSuccess;
 }

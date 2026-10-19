@@ -10,9 +10,28 @@
 #endif
 #include <windows.h>
 
+#include "kernel/kernel.h"
 #include "xdk/hle.h"
 
 void cod_job_thread_idle(X86Context& ctx, uint8_t* base) {
     (void)ctx, (void)base;
+    kernel::CoreYield yield;  // (sharing the title thread's core: its turn while this one rests)
     Sleep(1);
 }
+
+namespace cod::jobs {
+
+// The loading thread builds RenderWare's objects (frames, atomics, the resource arena's blocks) that the title's
+// thread walks and draws, with no lock between them: on the Xbox it ran only while the title thread waited (one core,
+// the title thread above it). On a PC the two ran at once and corrupted RenderWare's lists (a dirty frame's object
+// list, the arena's block list: crashes in sub_001CE830 and sub_001CB8E0). They share one core again
+// (kernel::ShareOneCore): the loading thread runs while the title thread waits on something, as it did.
+constexpr uint32_t kTitleEntry = 0x13409E;   // the title thread: the XBE's entry
+constexpr uint32_t kLoadingThread = 0x68D90;
+
+void Init() {
+    kernel::ShareOneCore(kTitleEntry);
+    kernel::ShareOneCore(kLoadingThread);
+}
+
+}  // namespace cod::jobs

@@ -160,6 +160,31 @@ struct Thread : Object {
 };
 using ThreadRef = std::shared_ptr<Thread>;
 
+// One core. The Xbox ran its threads on one processor: a title's threads never ran at the same moment, and a
+// thread of lower priority ran only while those above it waited. A title may count on that (one thread building
+// what another reads, unlocked). The threads started at the routines given here take turns, in order of asking:
+// one runs the title's code at a time, and each gives its turn up where it would stop on the Xbox (a wait, a delay,
+// a file transfer, a frame's present) and takes it back after. Other threads run as they please.
+void ShareOneCore(uint32_t start_routine);  // before the thread starts
+void CoreTake();                            // the current thread's turn (a sharing thread only)
+void CoreGive();
+// the turn given up while a blocking call runs, taken back after (nothing for other threads)
+struct CoreYield {
+    bool held;
+    CoreYield();
+    ~CoreYield();
+    CoreYield(const CoreYield&) = delete;
+    CoreYield& operator=(const CoreYield&) = delete;
+};
+// the turn taken while guest code runs inside a CoreYield (an APC run by a wait)
+struct CoreHold {
+    bool taken;
+    CoreHold();
+    ~CoreHold();
+    CoreHold(const CoreHold&) = delete;
+    CoreHold& operator=(const CoreHold&) = delete;
+};
+
 Thread* Current();
 ThreadRef CurrentRef();
 void StartHostThread(const char* name, std::function<void(X86Context&)> fn);

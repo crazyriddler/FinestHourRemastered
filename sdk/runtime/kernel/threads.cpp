@@ -18,6 +18,12 @@ namespace kernel {
 namespace {
 
 thread_local ThreadRef t_current;
+// one core (ShareOneCore): a ticket lock, turns in order of asking
+std::mutex g_core_lock;
+std::condition_variable g_core_cv;
+uint64_t g_core_next = 0, g_core_serving = 0;
+std::vector<uint32_t> g_core_routines;
+thread_local bool t_core_member = false, t_core_held = false;
 std::mutex g_threads_lock;
 std::vector<ThreadRef> g_threads;
 std::atomic<uint32_t> g_next_id{0x10};
@@ -171,11 +177,15 @@ void StartThread(ThreadRef t) {
         }
         LOGI("thread %X starts at %08X (%08X, %08X)", t->id, si.system_routine ? si.system_routine : si.start_routine,
              si.start_routine, si.start_context);
+        t_core_member = std::find(g_core_routines.begin(), g_core_routines.end(), si.start_routine) != g_core_routines.end();
+        if (t_core_member) LOGR("thread %X (%08X) shares one core", t->id, si.start_routine);
+        CoreTake();
         uint32_t code;
         if (si.system_routine)
             code = CallGuest(ctx, si.system_routine, {si.start_routine, si.start_context});
         else
             code = CallGuest(ctx, si.start_routine, {si.start_context});
+        CoreGive();
         LOGI("thread %X returned %08X", t->id, code);
         MarkExited(*t, code);
         Unregister(t.get());
@@ -199,7 +209,42 @@ void StartHostThread(const char* name, std::function<void(X86Context&)> fn) {
     });
 }
 
+void ShareOneCore(uint32_t start_routine) {
+    static const bool free_cores = std::getenv("XBE_CORES_FREE") != nullptr;  // tests: as before, each on its own
+    if (!free_cores) g_core_routines.push_back(start_routine);
+}
+
+void CoreTake() {
+    if (!t_core_member || t_core_held) return;
+    std::unique_lock<std::mutex> lock(g_core_lock);
+    uint64_t mine = g_core_next++;
+    g_core_cv.wait(lock, [&] { return g_core_serving == mine; });
+    t_core_held = true;
+}
+
+void CoreGive() {
+    if (!t_core_member || !t_core_held) return;
+    {
+        std::lock_guard<std::mutex> lock(g_core_lock);
+        g_core_serving++;
+    }
+    g_core_cv.notify_all();
+    t_core_held = false;
+}
+
+CoreYield::CoreYield() : held(t_core_held) { CoreGive(); }
+CoreYield::~CoreYield() {
+    if (held) CoreTake();
+}
+CoreHold::CoreHold() : taken(t_core_member && !t_core_held) {
+    if (taken) CoreTake();
+}
+CoreHold::~CoreHold() {
+    if (taken) CoreGive();
+}
+
 void ExitThread(uint32_t code) {
+    CoreGive();
     Thread* t = Current();
     if (t) {
         LOGI("thread %X exits with %08X", t->id, code);

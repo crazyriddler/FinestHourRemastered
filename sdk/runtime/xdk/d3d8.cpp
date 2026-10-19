@@ -425,6 +425,7 @@ HLE_STDCALL(D3D_MakeRequestedSpace, 2) {
 }
 
 HLE_STDCALL(D3DDevice_BlockUntilVerticalBlank, 0) {
+    CoreYield yield;  // waiting for the blank: the title's other threads sharing its core run
     std::this_thread::sleep_for(std::chrono::milliseconds(16));
     return 0;
 }
@@ -497,6 +498,8 @@ namespace {
 std::atomic<uint32_t> g_presents{0};
 }  // namespace
 
+static uint32_t SwapNow();
+
 HLE_STDCALL(D3DDevice_Swap, 1) {
     app::SplashFirstFrame();
     // handed over from the previous instance: the window opens on the second frame, the first picture with
@@ -508,6 +511,15 @@ HLE_STDCALL(D3DDevice_Swap, 1) {
         }
         app::FinishHandover();
     }
+    uint32_t n = SwapNow();
+    // the frame's pace (its cap) out of the device's lock: the swap is where the Xbox's title waited for the blank,
+    // and the title's other threads sharing its core run meanwhile (kernel::ShareOneCore)
+    CoreYield yield;
+    app::Pace();
+    return n;
+}
+
+static uint32_t SwapNow() {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     g_presents++;
     // the kept display is shown until the title presents its own
@@ -521,7 +533,6 @@ HLE_STDCALL(D3DDevice_Swap, 1) {
         }
     }
     if (g_backend) g_backend->Present(SurfaceOf(g_buffers[1]));
-    app::Pace();
     // like the XDK, the surfaces stay put and their memory rotates: titles keep back buffer pointers and copy its data
     uint32_t last = g_buffers[g_buffer_count - 1], data = R32(last + 4), lk = R32(last + 8);
     for (uint32_t i = g_buffer_count - 1; i > 0; i--) {

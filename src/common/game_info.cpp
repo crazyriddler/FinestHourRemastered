@@ -42,6 +42,9 @@ Settings& Get() {
 }
 }  // namespace cod
 
+namespace cod::jobs {
+void Init();  // jobs.cpp: the title and loading threads share one core
+}
 namespace cod::watch {
 void Dump();  // watch.cpp (tests)
 }
@@ -706,6 +709,7 @@ const app::GameInfo app::kGame = {
         [] {
             cod::wide::Update();
             cod::offline::Init();
+            cod::jobs::Init();
             control::SetCommandHandler(Command);
         },
     .loaded = nullptr,

@@ -187,6 +187,9 @@ struct DrawConstants {
     float trail[2][4];
     float dtl[4];        // Detail Textures: the grain's slice in the detail array (-1 none), its strength; Character Detail's
                          // tiling over the texture; the grain's tile in the texture's texels
+    // the materials' highlight out of the sun's shadow (the last frame's mask, d3d12.cpp BindSunVisibility): the view
+    // space now to the clip space of the frame before, and to this frame's (rows; its pixel moved by the difference)
+    float sunrp[2][16];
 };
 
 }  // namespace gpu

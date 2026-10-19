@@ -47,7 +47,6 @@ brightness = 100
 button_prompts = 0
 display_mode = 'borderless'
 fov = 0
-fps_cap = 60
 fps_counter = false
 invert_mouse = false
 invert_stick_y = false

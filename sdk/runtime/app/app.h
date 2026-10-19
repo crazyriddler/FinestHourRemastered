@@ -19,7 +19,7 @@ struct Settings {
     DisplayMode display_mode = DisplayMode::Borderless;
     uint32_t width = 0, height = 0;  // 0 is the desktop mode
     uint32_t render_percent = 100;   // of the output height
-    uint32_t fps_cap = 60;           // 0 unlimited
+    uint32_t fps_cap = 60;           // 0 unlimited (no setting: the game's speed follows its frame rate)
     bool vsync = true;
     uint32_t aniso = 16;             // 0 as the game asks
     bool smaa = true;                // SMAA on the shown frame

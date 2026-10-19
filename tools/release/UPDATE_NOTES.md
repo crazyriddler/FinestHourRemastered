@@ -56,6 +56,8 @@ The version installed is in `version.txt` beside the game. Unattended:
   taken by the wrong thread. The game's main thread is not the one the XBE starts with (that one only starts main's
   thread and ends), so main and the loading thread still ran at once. Now main's thread takes the turns.
 - The compass rose: each point's base is whole and none of them runs into the centre dot.
+- The game runs at 60 FPS always, as on the console: above it the game itself ran faster. The Max Frame Rate option
+  is gone; V-Sync stays.
 - Fires' lights hold steady: their light and shadows on the walls around a fire no longer jump from frame to frame.
 - The surfaces' highlights by a shadow's edge no longer flicker as the view turns.
 

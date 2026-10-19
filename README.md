@@ -39,7 +39,7 @@ The trailer (2560x1440, 60 FPS) is among the release's downloads: `FinestHourRem
 ## Requirements
 - Windows 10 or 11, 64-bit.
 - A Direct3D 12 GPU with 4 GB of video memory or more. With every effect on at 1440p a recent mid-range GPU holds
-  well over 60 FPS; the frame rate cap goes from 30 to 360 FPS or unlimited.
+  its 60 FPS.
 - About 9 GB of disk: the game's files and the remastered textures.
 - **The game**: Call of Duty: Finest Hour for the original Xbox, **PAL (Europe) release**, title ID `4156002A`,
   version 3 (`default.xbe` SHA-1 `938a7b1e17928de49cb3c5834d61abcd3d9081c8`). Its four languages (English, French,
@@ -77,7 +77,7 @@ Choose **PC Settings** in the main menu (or press **F10** at any time) for every
 ### Display
 - **Display Mode**: fullscreen, borderless or windowed, any **Resolution**.
 - **Render Scale**: 25% to 200% of the output (supersampling above 100%).
-- **Max Frame Rate**: 30 to 360 FPS or unlimited, **V-Sync**. The game runs in real time at any frame rate.
+- **V-Sync**. The game runs at 60 FPS, as on the console.
 - **Widescreen** follows the resolution: wider than 4:3 is Hor+ (the HUD keeps its proportions at the screen's
   edges), 4:3 plays the game's own 4:3 screen.
 - **Television Frame**: on a wide screen the 4:3 menus, briefings and movies play inside a 1940s television, through

@@ -276,19 +276,7 @@ std::vector<Page> BuildPages() {
     }
     display.items.push_back(Slider("Render Scale", &s.render_percent, 25, 200, 5, "%d%%",
                                    "The game is drawn at this share of the screen's resolution: above 100% supersamples."));
-    {
-        static const uint32_t caps[] = {30, 60, 75, 90, 120, 144, 165, 240, 360, 0};
-        std::vector<std::string> names;
-        for (uint32_t v : caps) names.push_back(v ? Fmt("%d FPS", int(v)) : "Unlimited");
-        display.items.push_back(Choice("Max Frame Rate", names,
-                                       [&s] {
-                                           for (int i = 0; i < 10; i++)
-                                               if (caps[i] == s.fps_cap) return i;
-                                           return 1;
-                                       },
-                                       [&s](int i) { s.fps_cap = caps[i]; },
-                                       "The game runs on real time at any frame rate."));
-    }
+    // (no frame rate setting: the game runs at 60 FPS always, its speed follows the frame rate)
     display.items.push_back(Toggle("V-Sync", &s.vsync));
     display.items.push_back(Toggle("Television Frame", &c.tv_frame,
                                    "On a wide screen, the menus and movies play in a 1940s television."));

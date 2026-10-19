@@ -57,7 +57,6 @@ void Load() {
     s.width = t["width"].value_or(s.width);
     s.height = t["height"].value_or(s.height);
     s.render_percent = t["render_percent"].value_or(s.render_percent);
-    s.fps_cap = t["fps_cap"].value_or(s.fps_cap);
     s.vsync = t["vsync"].value_or(s.vsync);
     s.aniso = t["anisotropic_filtering"].value_or(s.aniso);
     s.smaa = t["smaa"].value_or(s.smaa);
@@ -133,7 +132,6 @@ toml::table Table() {
                   {"width", int64_t(s.width)},
                   {"height", int64_t(s.height)},
                   {"render_percent", int64_t(s.render_percent)},
-                  {"fps_cap", int64_t(s.fps_cap)},
                   {"vsync", s.vsync},
                   {"anisotropic_filtering", int64_t(s.aniso)},
                   {"smaa", s.smaa},

@@ -1729,6 +1729,10 @@ std::string MaterialSetup(int i, const std::string& uv) {
     s += F("float4 t%d = tex%d.SampleGrad(smp%d, mUv, mU1, mU2);\n", i, i, i);
     s += F("float3 mBase = t%d.rgb;\nfloat mAlpha = t%d.a;\n", i, i);
     s += F("float4 mMat = mmat.SampleGrad(smp%d, mUv, mU1, mU2);\n", i);
+    // the height and the texture's cover the blend follows (Height Blend): two levels softer, their shapes without the
+    // fine grain (sharpened by the blend, the grain broke the edge of a blended layer into specks)
+    s += F("float mHs = mmat.SampleGrad(smp%d, mUv, mU1 * 4, mU2 * 4).g;\n", i);
+    s += F("float mAs = tex%d.SampleGrad(smp%d, mUv, mU1 * 4, mU2 * 4).a;\n", i, i);
     s += F("float2 mNt = mnrm.SampleGrad(smp%d, mUv, mU1, mU2).rg * 2 - 1;\n", i);
     return s;
 }
@@ -1853,9 +1857,12 @@ std::string MaterialShade(int i) {
         "    float3 shaded = outc.rgb * lerp(1, lf, mtl[0].w) * cav + sp * lit * saturate(dot(mNs, L) * 2 + 0.3);\n"
         "    outc.rgb = lerp(outc.rgb, shaded, saturate(fogin.a));\n"
         "    if (mtl[3].w > 0) {\n"
-        "        float ha = saturate((outc.a * 2 - 1 + mMat.g - 0.5) / 0.45 + 0.5);\n"
-        "        if (mtl[3].x == 4) outc.rgb = float3(1 - outc.a, abs(ha - outc.a) * 4 * saturate(mAlpha * 20 - 19), 0);\n"
-        "        outc.a = lerp(outc.a, ha, mtl[3].w * saturate(fogin.a) * saturate(mAlpha * 20 - 19));\n"
+        // (the layer's cover as drawn, its texture's part taken softer: the vertices' fade times the soft cover; the
+        // blend eased in over the texture's cover from 60% to 85%, not switched on at 95%: blotches with hard edges)
+        "        float sa = saturate(outc.a / max(mAlpha, 0.004) * mAs);\n"
+        "        float ha = saturate((sa * 2 - 1 + mHs - 0.5) / 0.9 + 0.5);\n"
+        "        if (mtl[3].x == 4) outc.rgb = float3(1 - outc.a, abs(ha - outc.a) * 4 * saturate(mAs * 4 - 2.4), 0);\n"
+        "        outc.a = lerp(outc.a, ha, mtl[3].w * saturate(fogin.a) * saturate(mAs * 4 - 2.4));\n"
         "    }\n"
         // the reflection buffer (d3d12.cpp's kSceneSsr): the normal (octahedral), the view depth, reflectivity and
         // roughness (whole and fraction), metal by its sign. Metal is its bare parts: grey and smooth

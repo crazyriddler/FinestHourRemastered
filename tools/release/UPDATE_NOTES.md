@@ -56,8 +56,12 @@ The version installed is in `version.txt` beside the game. Unattended:
   taken by the wrong thread. The game's main thread is not the one the XBE starts with (that one only starts main's
   thread and ends), so main and the loading thread still ran at once. Now main's thread takes the turns.
 - Muzzle Flash Shadows: soldiers and things by a shot or a fire cast their whole shadow, not only below the
-  knees: anything in the way shades now, only the gun firing (or a fire's own heap) is left out. The shadows' edges
-  are smooth, with no extra cost.
+  knees: anything in the way shades now, only the gun firing (or a fire's own heap) is left out. A flash or a fire
+  is a ball of light, not a point: its shadows are sharp at their foot and soft further out, as the sun's.
+- Height Blend: a blended layer's edge (dirt over cobbles, plaster over bricks) is soft, no longer broken into
+  pixel specks and blotches.
+- The light of shots, fires and explosions through smoke and dust: the cloud takes the light itself, softly, instead
+  of showing the sharp edges, shadows and corners of what stands behind it.
 - A freeze fixed (Airfield Ambush coming out of the hangar after the planes, and elsewhere while playing): the
   loading thread, now taking turns with the game's main thread, waited in a loop for the main thread to let go of
   what it was loading, holding its turn all the while. It gives its turn up while it waits.

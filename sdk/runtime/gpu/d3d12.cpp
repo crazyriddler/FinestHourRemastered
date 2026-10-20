@@ -5236,6 +5236,8 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     if (map_on_) CollectMap(s, a, sh, pk, k);
 }
 
+void UnturnedBox(const float* x, const float* y, uint32_t n, Draw2D& d);
+
 void D3D12Backend::Layout2D(const State& s, const Assembled& a, bool prog, GuestExtent size, DrawConstants& c) {
     c.layout[0] = 1;
     c.layout_y[0] = 1;
@@ -5275,6 +5277,8 @@ void D3D12Backend::Layout2D(const State& s, const Assembled& a, bool prog, Guest
         }
         const auto& v = s.viewport;
         uint32_t n = std::min<uint32_t>(a.vertex_count ? a.vertex_count : b->bytes / b->stride, b->bytes / b->stride);
+        float qx[6], qy[6];  // a quad's corners (4, or 6 as two triangles)
+        uint32_t qn = 0;
         for (uint32_t i = 0; i < n; i++) {
             float p[3] = {};
             std::memcpy(p, b->src + size_t(i) * b->stride + e.offset, e.format == DXGI_FORMAT_R32G32_FLOAT ? 8 : 12);
@@ -5290,9 +5294,12 @@ void D3D12Backend::Layout2D(const State& s, const Assembled& a, bool prog, Guest
             d.x0 = std::min(d.x0, x), d.x1 = std::max(d.x1, x);
             d.y0 = std::min(d.y0, y), d.y1 = std::max(d.y1, y);
             d.bounded = true;
+            if (n <= 6) qx[qn] = x, qy[qn] = y, qn++;
         }
+        UnturnedBox(qx, qy, qn, d);
     }
     if (!d.bounded) d.x0 = 0, d.y0 = 0, d.x1 = float(size.w), d.y1 = float(size.h);
+    if (!(d.ux1 > d.ux0)) d.ux0 = d.x0, d.uy0 = d.y0, d.ux1 = d.x1, d.uy1 = d.y1;
     {
         uint32_t color = 0xFFFFFFFF;
         const VertexElement& ce = a.elements[3];
@@ -5313,6 +5320,35 @@ void D3D12Backend::Layout2D(const State& s, const Assembled& a, bool prog, Guest
     if (g_log_draws)
         LOGR("draw:   bounds %d %.0f..%.0f x %.0f..%.0f -> x * %.3f + %.1f, y * %.3f + %.1f", d.bounded, d.x0, d.x1, d.y0, d.y1,
              c.layout[0], c.layout[1], c.layout_y[0], c.layout_y[1]);
+}
+
+// a quad's box as if unturned (Draw2D::ux0..): its corners' centre and its sides' lengths (the four shortest of the six
+// distances between corners, the diagonals the longest two), the same at any angle; a quad square to the screen
+// keeps its bounds
+void UnturnedBox(const float* x, const float* y, uint32_t n, Draw2D& d) {
+    float ux[4], uy[4];
+    uint32_t k = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        bool seen = false;
+        for (uint32_t j = 0; j < k; j++) seen |= std::fabs(ux[j] - x[i]) < 0.01f && std::fabs(uy[j] - y[i]) < 0.01f;
+        if (!seen) {
+            if (k == 4) return;
+            ux[k] = x[i], uy[k] = y[i], k++;
+        }
+    }
+    if (k != 4) return;
+    bool square = true;  // two columns of corners: not turned
+    for (uint32_t i = 0; i < 4; i++)
+        square &= std::fabs(ux[i] - d.x0) < 0.01f || std::fabs(ux[i] - d.x1) < 0.01f;
+    if (square) return;
+    float dist[6];
+    uint32_t m = 0;
+    for (uint32_t i = 0; i < 4; i++)
+        for (uint32_t j = i + 1; j < 4; j++) dist[m++] = std::hypot(ux[i] - ux[j], uy[i] - uy[j]);
+    std::sort(dist, dist + 6);
+    float half = (dist[0] + dist[1] + dist[2] + dist[3]) / 8;  // half the mean side
+    float cx = (ux[0] + ux[1] + ux[2] + ux[3]) / 4, cy = (uy[0] + uy[1] + uy[2] + uy[3]) / 4;
+    d.ux0 = cx - half, d.ux1 = cx + half, d.uy0 = cy - half, d.uy1 = cy + half;
 }
 
 // a guest rect scaled to the target and clamped to it

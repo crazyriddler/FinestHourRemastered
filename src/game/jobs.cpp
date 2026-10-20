@@ -10,6 +10,7 @@
 #endif
 #include <windows.h>
 
+#include "core/log.h"
 #include "kernel/kernel.h"
 #include "xdk/hle.h"
 
@@ -17,6 +18,16 @@ void cod_job_thread_idle(X86Context& ctx, uint8_t* base) {
     (void)ctx, (void)base;
     kernel::CoreYield yield;  // (sharing the title thread's core: its turn while this one rests)
     Sleep(1);
+}
+
+// The job thread's wait for the item the streaming is on to be let go (0x69052, each pass of its loop): the thread
+// letting it go shares the core with it, so the pass gives the turn up (the others take theirs) before looking again.
+// It held the turn and spun while the other waited for it: the game froze (a level 1 report, 2026-10-20).
+void cod_job_thread_wait(X86Context& ctx, uint8_t* base) {
+    (void)ctx, (void)base;
+    LOG_FIRST(4, "jobs: waiting for the streaming's item %08X to be let go", kernel::R32(0x3E1B14));
+    kernel::CoreYield yield;
+    SwitchToThread();
 }
 
 namespace cod::jobs {

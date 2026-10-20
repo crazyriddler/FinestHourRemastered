@@ -138,6 +138,9 @@ struct Draw2D {
     uint64_t frame;   // presents so far: the draws of one frame share it
     uint32_t color;   // the first vertex's colour (ARGB), white when the draw has none
     uint64_t tex = 0; // its first stage's texture (content id, gpu/remaster.h), 0 for none
+    // a quad turned on the screen (a compass's dial): its box as if unturned, about its centre, the same at any angle
+    // (its bounds grow and shrink as it turns); else the bounds
+    float ux0 = 0, uy0 = 0, ux1 = 0, uy1 = 0;
 };
 struct Place2D {
     float sx = 1, ox = 0, sy = 1, oy = 0;

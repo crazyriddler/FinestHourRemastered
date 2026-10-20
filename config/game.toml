@@ -281,3 +281,10 @@ XPP_MemoryUnitType          = 0x2D25C8
 [[hook]]
 at = 0x691CF
 call = "cod_job_thread_idle"
+
+# The job thread waits for the item the streaming is on (0x3E1B14) to be let go, setting its stop flag (0x3E1B18) in
+# a loop of its own (0x69049..0x6905F): on the Xbox the time slices let the thread holding it finish; sharing one core
+# by turns (kernel::ShareOneCore), each pass gives the turn up (src/game/jobs.cpp)
+[[hook]]
+at = 0x69052
+call = "cod_job_thread_wait"

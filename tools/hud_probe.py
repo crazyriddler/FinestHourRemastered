@@ -33,6 +33,7 @@ def main():
     ap.add_argument("--then", default="")
     ap.add_argument("--tag", default="hud")
     ap.add_argument("--env", default="", help='"NAME=value;..." for the game')
+    ap.add_argument("--each", default="", help='control lines before each shot (";" between): "cmd look 60 0"')
     ap.add_argument("--menu", action="store_true", help="no level: the shots from the main menu on (--at its time)")
     ap.add_argument("--mortal", action="store_true", help="the player not made immune (hits: the damage marks)")
     ap.add_argument("--draws", action="store_true", help="every shot's frame's draws in the log, not the first's alone")
@@ -76,6 +77,10 @@ def main():
             send(part)
     time.sleep(1.0)
     for i in range(a.shots):
+        for part in filter(None, (p.strip() for p in a.each.split(";"))):
+            send(part)
+        if a.each:
+            time.sleep(0.25)
         if i == 0 or a.draws:
             send("draws")
         bmp = os.path.join(WORK, "shots", "%s_%d.bmp" % (tag, i)).replace("\\", "/")

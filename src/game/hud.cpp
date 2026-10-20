@@ -269,8 +269,8 @@ void Shrink(const gpu::Draw2D& d, Kind kind, const Box& b, bool text, gpu::Place
         if (Listed(kCrosshairTex, d.tex) || (text && (d.color & 0xFFFFFF) == 0x00FF3F)) ShrinkAbout(p, s, w * 0.5f, h * 0.5f);
         return;
     }
-    if (kind != kPiece || b.x1 - b.x0 > kLargest || b.y1 - b.y0 > kLargest) return;
-    const bool own = !text && Listed(kGroupTex, d.tex);
+    const bool own = !text && Listed(kGroupTex, d.tex);  // the HUD's own pictures, whatever their size
+    if (kind != kPiece || (!own && (b.x1 - b.x0 > kLargest || b.y1 - b.y0 > kLargest))) return;
     // its element: the groups of pictures it is near, grown by any near them. The rest goes with the group it lies
     // inside (the ammunition's numbers): a line beside the HUD (a subtitle's speaker by the stance) keeps its size
     std::vector<Box> now = g_pics;
@@ -322,9 +322,12 @@ bool Layout(const gpu::Draw2D& d, gpu::Place2D& p) {
         else kind = kPiece, truth = {d.x0, d.y0, d.x1, d.y1, !(d.tag & kPixels)};
     }
     bool text = !(d.tag & kPixels);
+    // a picture turned on the screen (the compass's dial as the view turns) by its box unturned: its bounds grow and
+    // shrink as it turns, its element's anchor would move with them
+    if (kind == kPiece && !text) truth.x0 = d.ux0, truth.y0 = d.uy0, truth.x1 = d.ux1, truth.y1 = d.uy1;
     // this frame's pictures, for the elements' groups
     if (kind == kPiece && !text && (d.tag & 0xFF) == kHud && Listed(kGroupTex, d.tex) && truth.x1 - truth.x0 > 0.5f &&
-        truth.y1 - truth.y0 > 0.5f && truth.x1 - truth.x0 <= kLargest && truth.y1 - truth.y0 <= kLargest && g_pics.size() < 256)
+        truth.y1 - truth.y0 > 0.5f && g_pics.size() < 256)
         g_pics.push_back(truth);
     if (!placed) {
         if (kind == kAsPlaced) return false;

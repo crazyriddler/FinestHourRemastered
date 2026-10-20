@@ -232,20 +232,27 @@ bool Place(const gpu::Draw2D& d_in, float& scale, float& offset, Kind& kind, Box
 // The HUD's size: each element drawn smaller (Settings::hud_size: the original's, 80%, 65%) where it was. Its pieces
 // go together about one point of the whole element (the frame before's group of pictures it is in, with this
 // frame's so far): its edge nearest the screen's side and its top or bottom by its third of the screen, so it keeps
-// its distance to the screen's edges and none of its pieces moves against the others. The crosshair, its spread and the
-// name of the friend under it go about the screen's centre. The elements are the HUD's own pictures (kGroupTex); the
-// rest goes with them only lying inside one (the health bar's fill, the ammunition's numbers and pictures): lines of
-// text on their own (subtitles, hints, messages), the names over the squad's heads, the hit markers, overlays and
-// anything larger than kLargest (a sight) keep their size.
+// its distance to the screen's edges and none of its pieces moves against the others. The crosshair, its spread and
+// the name of the friend under it go about the screen's centre. The elements are the HUD's own pictures (kGroupTex,
+// and kFollowTex's moving on them); the rest goes with them only lying inside one (the health bar's fill, the
+// ammunition's numbers and pictures): lines of text on their own (subtitles, hints, messages), the names over the
+// squad's heads, the hit markers, overlays and anything larger than kLargest (a sight) keep their size.
 constexpr float kHudSizes[] = {1.0f, 0.8f, 0.65f};
 constexpr float kLargest = 220;  // console pixels
 constexpr uint64_t kGroupTex[] = {
-    0xdec48f377e5b4684, 0x3b85684838815a71, 0x92c1dfb682b56d5d,  // the compass: dial, glass, arrow
-    0x6dbbaae5119e1354, 0xcb0a77345ca0e523, 0xc0c3891843e894c3,  // its objective star, the star's arrow, its pulse
+    0xdec48f377e5b4684, 0x3b85684838815a71,                      // the compass: dial, glass
     0xe67bb8cbd91d5674, 0x78aa5a7bf1a08670, 0xa4db31f92c1ea1a4,  // the stance: standing, crouching, lying down
-    0x3ee2fae9df22de54, 0xe20acc81a8340380, 0xffd28878363403c3,  // a tank's: its ring, hull, turret
+    0x3ee2fae9df22de54,                                          // a tank's ring
     0x7c691e4b5741194e, 0x0b41acaa2b79af57, 0xf62d1fded3b3cc9a,  // health's bar, the medkits, the ammunition's box
     0xb4b1dc60d65eed4d,                                          // a tank's health and reload bars
+};
+// the pieces that move on an element (the objective star round the dial, its pulse growing past it, the arrows, a
+// tank's hull and turret turning in its ring): smaller with the element they lie on, not part of its measure (its
+// anchor would follow them)
+constexpr uint64_t kFollowTex[] = {
+    0x92c1dfb682b56d5d, 0x6dbbaae5119e1354, 0xcb0a77345ca0e523,  // the compass's arrow, objective star, star's arrow
+    0xc0c3891843e894c3,                                          // the star's pulse
+    0xe20acc81a8340380, 0xffd28878363403c3,                      // a tank's hull, turret
 };
 constexpr uint64_t kCrosshairTex[] = {0xa56bd892e4cb0adf, 0x4b85d789cdfe022d, 0x8bf20f88516e996b, 0x2d613c78def6368e};
 
@@ -278,10 +285,12 @@ void Shrink(const gpu::Draw2D& d, Kind kind, const Box& b, bool text, gpu::Place
     Box e = b;
     if (!own) {
         constexpr float kIn = 4;
+        const bool follow = !text && Listed(kFollowTex, d.tex);  // on its element: touching it is enough
         bool inside = false;
         for (const std::vector<Box>* list : {&g_groups, &now})
             for (const Box& g : *list)
-                if (!inside && b.x0 >= g.x0 - kIn && b.x1 <= g.x1 + kIn && b.y0 >= g.y0 - kIn && b.y1 <= g.y1 + kIn)
+                if (!inside && (follow ? Near(b, g, 0)
+                                       : b.x0 >= g.x0 - kIn && b.x1 <= g.x1 + kIn && b.y0 >= g.y0 - kIn && b.y1 <= g.y1 + kIn))
                     e = g, inside = true;
         if (!inside) return;
     }

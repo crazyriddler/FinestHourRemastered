@@ -59,7 +59,8 @@ The version installed is in `version.txt` beside the game. Unattended:
   loading thread, now taking turns with the game's main thread, waited in a loop for the main thread to let go of
   what it was loading, holding its turn all the while. It gives its turn up while it waits.
 - HUD Size: the compass no longer grows back and wobbles as the view turns (its dial turns with the view and was
-  measured by its turning outline).
+  measured by its turning outline); nor does it shift when the objective star's pulse or a tank's turning
+  hull reaches past it.
 - The compass rose: each point's base is whole and none of them runs into the centre dot.
 - New HUD Size option (PC Settings, Display): Original, Small or Smaller. The compass with the stance, the
   crosshair, health with the medkits, the ammunition and a tank's bars are drawn smaller where they were, each

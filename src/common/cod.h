@@ -1,6 +1,7 @@
 #pragma once
 // Call of Duty: Finest Hour settings beyond the runtime's display ones, kept in the settings file
 #include <cstdint>
+#include <string>
 
 namespace cod {
 
@@ -19,6 +20,7 @@ struct Settings {
     bool hud_compass = true;
     bool hud_stance = true;       // standing, crouching, lying down
     bool hud_crosshair = true;
+    uint32_t hud_size = 0;        // 0 the original's, 1 small, 2 smaller: each element where it was (game/hud.cpp)
     // input
     bool keyboard_mouse = true;
     uint32_t mouse_sensitivity = 100;  // percent
@@ -41,6 +43,13 @@ bool OverlayOpen();  // the settings overlay (F10) is up: the game gets no keys 
 bool InMovie();      // a movie plays (hud.cpp)
 bool InMenu();       // a menu has the controller: the front end, the pause screen or a movie (game_info.cpp)
 bool Paused();       // the pause screen is up (hud.cpp)
+
+// Portuguese: the game's text from lang/pt.txt as it reads its files (game/language.cpp)
+namespace lang {
+void Init();
+bool Portuguese();
+void Patch(const std::string& xbox_path, uint64_t pos, uint8_t* data, uint32_t n);
+}  // namespace lang
 
 // tests: the level scripts' checkpoint register read as n the next time (game/checkpoint.cpp)
 void ForceCheckpoint(int n);

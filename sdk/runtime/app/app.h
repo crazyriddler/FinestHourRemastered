@@ -75,8 +75,9 @@ struct Settings {
     uint32_t specular = 100;         // percent
     uint32_t brightness = 100;       // percent: the frame's gamma (the game was tuned on CRT televisions)
     float normal_green = 1;          // the normal maps' green: 1 up, -1 down
-    uint32_t language = 1;           // the console's (XC_LANGUAGE): 1 English, 3 German, 4 French, 5 Spanish, 6 Italian;
-                                     // without a setting, Windows' own when the game has it (Load)
+    uint32_t language = 1;           // the console's (XC_LANGUAGE): 1 English, 3 German, 4 French, 5 Spanish, 6 Italian,
+                                     // 9 Portuguese; without a setting, Windows' own (Load). The title sees
+                                     // ConsoleLanguage()
     std::string join_ip;                   // co-op: a host past the LAN the system link search also asks
 };
 
@@ -148,8 +149,16 @@ struct GameInfo {
     void (*ui)(double fps);        // each frame inside the ImGui frame, UiLock held
     void (*pad)(int port, input::Pad& pad);  // a polled pad before the game gets it
     void (*rumble)(int port, uint16_t& left, uint16_t& right);
+    // the console's language the title is told for the setting's (a language the port gives the title's text in and
+    // the title lacks: one it has underneath), null for the setting's own
+    uint32_t (*console_language)(uint32_t language);
 };
 extern const GameInfo kGame;
+
+// the language the title sees (XC_LANGUAGE)
+inline uint32_t ConsoleLanguage() {
+    return kGame.console_language ? kGame.console_language(Get().language) : Get().language;
+}
 
 // sleeps out the rest of the frame for the fps cap
 void Pace();

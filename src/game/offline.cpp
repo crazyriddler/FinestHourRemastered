@@ -70,7 +70,14 @@ bool Rewrite(char* line, size_t len, const Row& row) {
     return true;
 }
 
-void PatchStrings(const std::string& path, uint64_t, uint8_t* data, uint32_t n) {
+void PatchStrings(const std::string& path, uint64_t pos, uint8_t* data, uint32_t n) {
+    struct Then {  // Portuguese after this file's rows (language.cpp)
+        const std::string& path;
+        uint64_t pos;
+        uint8_t* data;
+        uint32_t n;
+        ~Then() { cod::lang::Patch(path, pos, data, n); }
+    } then{path, pos, data, n};
     if (path.size() < 7) return;
     std::string tail = path.substr(path.size() - 7);
     std::transform(tail.begin(), tail.end(), tail.begin(), [](unsigned char c) { return char(std::tolower(c)); });
@@ -94,6 +101,7 @@ void Init() {
     // the keyboard's prompts if they are chosen, or chosen by the device and no controller is plugged in
     const Settings& s = Get();
     g_keyboard_title = s.button_prompts == 2 || (s.button_prompts == 0 && s.keyboard_mouse && !input::AnyController());
+    cod::lang::Init();
     kernel::SetReadHook(PatchStrings);
 }
 }  // namespace cod::offline

@@ -239,8 +239,9 @@ const char* Text(int which) {
     static const char* fr[] = {"Quitter le jeu", "Quitter vers Windows ?", "Non", "Oui"};
     static const char* it[] = {"Esci dal gioco", "Uscire a Windows?", "No", "S\xC3\xAC"};
     static const char* es[] = {"Salir del juego", "\xC2\xBFSalir a Windows?", "No", "S\xC3\xAD"};
+    static const char* pt[] = {"Sair do jogo", "Sair para o Windows?", "N\xC3\xA3o", "Sim"};
     uint32_t l = Language();
-    const char** t = l == 4 ? fr : l == 6 ? it : l == 5 ? es : en;
+    const char** t = l == 4 ? fr : l == 6 ? it : l == 5 ? es : l == 9 ? pt : en;
     return t[which];
 }
 

@@ -76,6 +76,7 @@ const char* kCommonTail = R"(    float4 spread[4];
     float4 dtl;  // Detail Textures: the grain's slice in t6 (-1 none), its strength, Character Detail's tiling, the grain's texels per tile
     row_major float4x4 sunprev;  // the view space now to the frame before's clip space, and to this frame's (sunvis)
     row_major float4x4 sunnow;
+    float4 layout2y;  // 2D placed by the game: y * layout2y.x + layout2y.y, console pixels (layout2d.xy for x)
 };
 )";
 
@@ -290,6 +291,7 @@ const char* kVsEpilogue = R"(
         p.y += sin(ph * 2.3 + 0.5) * tip * mrefl.w * 0.25 / max(p.w, 1);
     }
     p.x = p.x * layout2d.x + layout2d.y;
+    p.y = p.y * layout2y.x + layout2y.y;
     q.x = p.x * 2 / surf.x - 1;
     q.y = 1 - p.y * 2 / surf.y;
     q.z = p.z * surf.z;
@@ -1197,6 +1199,7 @@ float4 Screen(float3 P) {
     float w = magclamp(h.w);
     float3 p = h.xyz * (1.0 / w) + c[(int)tess2.x].xyz;
     p.x = p.x * layout2d.x + layout2d.y;
+    p.y = p.y * layout2y.x + layout2y.y;
     float4 q = float4(p.x * 2 / surf.x - 1, 1 - p.y * 2 / surf.y, p.z * surf.z, 1);
     q.xy += jitter.xy;
     q.xyz *= w;
@@ -1633,9 +1636,10 @@ std::string FixedVertexHlsl(uint16_t regs, bool pretransformed, uint64_t decode,
     if (abs(sp.y - (surf.y - 0.5)) < 1e-3) cp.y = -cp.w;
     o.pos = cp;
     o.cpos = cp;
-    // 2D placed on a widened screen, x * layout2d.x + layout2d.y in console pixels, here in clip space; after the
-    // quad variant took its positions, which its texture coordinates follow
+    // 2D placed by the game, x * layout2d.x + layout2d.y and y * layout2y.x + layout2y.y in console pixels, here in
+    // clip space (y down the screen); after the quad variant took its positions, which its texture coordinates follow
     o.pos.x = (cp.x + cp.w) * layout2d.x - cp.w + 2 * layout2d.y / surf.x * cp.w;
+    o.pos.y = cp.w - (cp.w - cp.y) * layout2y.x - 2 * layout2y.y / surf.y * cp.w;
     if (jitter.w > 0) o.pos.z = o.pos.w * jitter.w;  // a sky piece's own depth (d3d12.cpp sky_phase_)
     o.d0 = saturate(oD0);
     o.d1 = saturate(oD1);

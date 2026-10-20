@@ -32,12 +32,13 @@ Settings& Get() {
     return s;
 }
 
-// Windows' display language as the console's: the game's own (English, French, Spanish, Italian), else English
+// Windows' display language as the console's: English, French, Spanish, Italian or Portuguese, else English
 uint32_t SystemLanguage() {
     switch (PRIMARYLANGID(GetUserDefaultUILanguage())) {
         case LANG_FRENCH: return 4;
         case LANG_SPANISH: return 5;
         case LANG_ITALIAN: return 6;
+        case LANG_PORTUGUESE: return 9;
         default: return 1;
     }
 }

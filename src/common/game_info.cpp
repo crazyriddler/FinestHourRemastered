@@ -689,6 +689,7 @@ const app::GameInfo app::kGame = {
             {"hud_compass", &cod::Get().hud_compass, nullptr},
             {"hud_stance", &cod::Get().hud_stance, nullptr},
             {"hud_crosshair", &cod::Get().hud_crosshair, nullptr},
+            {"hud_size", nullptr, &cod::Get().hud_size},
             {"keyboard_mouse", &cod::Get().keyboard_mouse, nullptr},
             {"mouse_sensitivity", nullptr, &cod::Get().mouse_sensitivity},
             {"invert_mouse", &cod::Get().invert_mouse, nullptr},
@@ -722,4 +723,6 @@ const app::GameInfo app::kGame = {
     .ui = Ui,
     .pad = Pad,
     .rumble = nullptr,
+    // Portuguese: the game in English underneath, its text from lang/pt.txt (game/language.cpp)
+    .console_language = [](uint32_t l) { return l == 9 ? 1u : l; },
 };

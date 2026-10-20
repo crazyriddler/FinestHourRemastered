@@ -114,6 +114,9 @@ def stage_list(cache_all):
                      (os.path.join(ROOT, "sdk", "LICENSE"), "LICENSE.txt")):
         if os.path.exists(src):
             items.append((src, dst))
+    # the port's translations (lang/pt.txt: Portuguese, src/game/language.cpp)
+    lang = os.path.join(ROOT, "lang")
+    items += [(os.path.join(lang, f), os.path.join("lang", f)) for f in sorted(os.listdir(lang))]
     return items
 
 

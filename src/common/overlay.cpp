@@ -283,6 +283,10 @@ std::vector<Page> BuildPages() {
     // (no field of view setting for now: a wider one broke the first person view; the game's always)
     display.items.push_back(Slider("Brightness", &s.brightness, 50, 200, 5, "%d%%", "100% is the original picture."));
     display.items.push_back(Toggle("FPS Counter", &c.fps_counter));
+    display.items.push_back(Choice("HUD Size", {"Original", "Small", "Smaller"},
+                                   [&c] { return int(std::min<uint32_t>(c.hud_size, 2)); },
+                                   [&c](int i) { c.hud_size = uint32_t(i); },
+                                   "The compass, the stance, the crosshair, health and ammunition smaller, each in its place."));
     display.items.push_back(Toggle("Hit Markers", &c.hud_hit_markers,
                                    "The marks when your shots hit and from where you are being hit."));
     display.items.push_back(Toggle("Compass", &c.hud_compass, "The compass and its objective star."));
@@ -431,12 +435,13 @@ std::vector<Page> BuildPages() {
     Page general{"GENERAL", {}};
     general.items.push_back(Toggle("Skip Intros", &c.skip_intros, "Straight to the title screen."));
     {
-        static const uint32_t codes[] = {1, 4, 6, 5};
+        static const uint32_t codes[] = {1, 4, 6, 5, 9};
         BootLanguage();
         // UTF-8, as ImGui takes text
-        general.items.push_back(Choice("Language", {"English", "Fran\xC3\xA7" "ais", "Italiano", "Espa\xC3\xB1ol"},
+        general.items.push_back(Choice("Language", {"English", "Fran\xC3\xA7" "ais", "Italiano", "Espa\xC3\xB1ol",
+                                                    "Portugu\xC3\xAA" "s"},
                                        [&s] {
-                                           for (int i = 0; i < 4; i++)
+                                           for (int i = 0; i < 5; i++)
                                                if (codes[i] == s.language) return i;
                                            return 0;
                                        },

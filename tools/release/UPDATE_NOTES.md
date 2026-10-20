@@ -56,6 +56,12 @@ The version installed is in `version.txt` beside the game. Unattended:
   taken by the wrong thread. The game's main thread is not the one the XBE starts with (that one only starts main's
   thread and ends), so main and the loading thread still ran at once. Now main's thread takes the turns.
 - The compass rose: each point's base is whole and none of them runs into the centre dot.
+- New HUD Size option (PC Settings, Display): Original, Small or Smaller. The compass with the stance, the
+  crosshair, health with the medkits, the ammunition and a tank's bars are drawn smaller where they were, each
+  keeping its distance to the screen's edges; subtitles, hints and the hit markers keep their size.
+- New language: Portuguese (for Brazil and Portugal). The menus, the objectives, the hints and the subtitles in
+  Portuguese, a translation of the port's own, with the game's English speech. PC Settings, General, Language; a
+  Windows in Portuguese starts the game and the installer in it.
 - The game runs at 60 FPS always, as on the console: above it the game itself ran faster. The Max Frame Rate option
   is gone; V-Sync stays.
 - Fires' lights hold steady: their light and shadows on the walls around a fire no longer jump from frame to frame.

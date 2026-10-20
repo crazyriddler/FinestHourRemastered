@@ -4,7 +4,7 @@
 // ships beside the installer (FinestHourRemastered.index and its .data.NNN parts, the v1.0 release's, fixed), then
 // the latest update carried inside this exe (every change since that base), shortcuts.
 // Named ...Update.exe it is the updater: it brings an installation of any earlier version to the update inside it.
-// Its text in the game's languages (English, French, Italian, Spanish), by Windows' own.
+// Its text in the game's languages (English, French, Italian, Spanish, Portuguese), by Windows' own.
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -55,7 +55,7 @@ constexpr char kRequired[] =
 
 // --- text in the game's languages -----------------------------------------------------------------------------------
 
-int g_lang = 0;  // 0 English, 1 French, 2 Italian, 3 Spanish: Windows' language, else English
+int g_lang = 0;  // 0 English, 1 French, 2 Italian, 3 Spanish, 4 Portuguese: Windows' language, else English
 struct Row {
     const char *en, *fr, *it, *es;
 };
@@ -208,8 +208,144 @@ constexpr Row kStrings[] = {
      "No se puede crear la carpeta: "},
 };
 
+// Portuguese (UTF-8)
+constexpr struct {
+    const char *en, *pt;
+} kPortuguese[] = {
+    {"A native PC port of Call of Duty: Finest Hour  -  by crazyriddler",
+     "Um port nativo para PC de Call of Duty: Finest Hour  -  por crazyriddler"},
+    {"Before installing, the release's other downloads are needed in this installer's folder:",
+     "Antes de instalar, os outros downloads da versão precisam estar na pasta deste instalador:"},
+    {"Missing:",
+     "Faltando:"},
+    {"Download them from the release page into that folder, then check again.",
+     "Baixe-os da página da versão para essa pasta e verifique de novo."},
+    {"Release page",
+     "Página da versão"},
+    {"Check again",
+     "Verificar de novo"},
+    {"Welcome. This installs Finest Hour Remastered, a native Windows port of the original Xbox game "
+     "with a remastered renderer, from your own copy of the game.",
+     "Bem-vindo. Este programa instala o Finest Hour Remastered, um port nativo para Windows do jogo "
+     "original do Xbox com gráficos remasterizados, a partir da sua própria cópia do jogo."},
+    {"You need:",
+     "Você precisa de:"},
+    {"Call of Duty: Finest Hour for the original Xbox, PAL (Europe) release, title ID 4156002A, "
+     "version 3.",
+     "Call of Duty: Finest Hour para o Xbox original, versão PAL (Europa), title ID 4156002A, versão "
+     "3."},
+    {"Its files (a folder with default.xbe), a disc image (.iso) or an XISO. No game files are "
+     "included: they are read from your copy.",
+     "Seus arquivos (uma pasta com default.xbe), uma imagem de disco (.iso) ou um XISO. Nenhum "
+     "arquivo do jogo vem incluído: eles são lidos da sua cópia."},
+    {"Continue",
+     "Continuar"},
+    {"Back",
+     "Voltar"},
+    {"Install",
+     "Instalar"},
+    {"Update",
+     "Atualizar"},
+    {"Cancel",
+     "Cancelar"},
+    {"Close",
+     "Fechar"},
+    {"Play now",
+     "Jogar agora"},
+    {"Browse...",
+     "Procurar..."},
+    {"Where is your copy of the game?",
+     "Onde está a sua cópia do jogo?"},
+    {"Game folder...",
+     "Pasta do jogo..."},
+    {"Disc image / XISO...",
+     "Imagem de disco / XISO..."},
+    {"The image has no default.xbe: it is not this game's disc.",
+     "A imagem não tem default.xbe: não é o disco deste jogo."},
+    {"The folder has no default.xbe: choose the folder that holds the game's files\n(default.xbe, "
+     "COD.PAK, AUDIO, SHELL, SB_AGD, ...).",
+     "A pasta não tem default.xbe: escolha a pasta com os arquivos do jogo\n(default.xbe, COD.PAK, "
+     "AUDIO, SHELL, SB_AGD, ...)."},
+    {"This copy is a different release of the game. The port only runs the PAL (Europe) release, "
+     "version 3.",
+     "Esta cópia é outra versão do jogo. O port só funciona com a versão PAL (Europa), versão 3."},
+    {"Your copy is the right release.",
+     "Sua cópia é a versão certa."},
+    {"Install to:",
+     "Instalar em:"},
+    {"About 9 GB: the game's files and the remastered textures.",
+     "Cerca de 9 GB: os arquivos do jogo e as texturas remasterizadas."},
+    {"Desktop shortcut",
+     "Atalho na área de trabalho"},
+    {"Start menu shortcut",
+     "Atalho no menu Iniciar"},
+    {"Copying the game's files...",
+     "Copiando os arquivos do jogo..."},
+    {"Installing Finest Hour Remastered...",
+     "Instalando o Finest Hour Remastered..."},
+    {"Applying the latest update...",
+     "Aplicando a última atualização..."},
+    {"Checking the installed files...",
+     "Verificando os arquivos instalados..."},
+    {"Making shortcuts...",
+     "Criando os atalhos..."},
+    {"Done.",
+     "Pronto."},
+    {"Finest Hour Remastered is installed.",
+     "O Finest Hour Remastered está instalado."},
+    {"In the game, choose PC Settings in the main menu (or press F10) for the display, graphics and "
+     "control options. The first start prepares the shaders for your graphics card.",
+     "No jogo, escolha Opções do PC no menu principal (ou pressione F10) para as opções de tela, "
+     "gráficos e controles. A primeira execução prepara os shaders para a sua placa de vídeo."},
+    {"The installation did not finish.",
+     "A instalação não foi concluída."},
+    {"Not affiliated with Activision. Call of Duty is a trademark of Activision.",
+     "Sem vínculo com a Activision. Call of Duty é uma marca registrada da Activision."},
+    {"Cancelled.",
+     "Cancelado."},
+    {"This updates an installed Finest Hour Remastered to the latest version, whatever version it has "
+     "now. Your settings and saved games are kept.",
+     "Este programa atualiza uma instalação do Finest Hour Remastered para a última versão, seja qual "
+     "for a versão atual. Suas configurações e jogos salvos são mantidos."},
+    {"Update:",
+     "Atualização:"},
+    {"Installed:",
+     "Instalada:"},
+    {"an earlier version",
+     "uma versão anterior"},
+    {"Where is Finest Hour Remastered installed?",
+     "Onde o Finest Hour Remastered está instalado?"},
+    {"This folder has no Finest Hour Remastered installation.",
+     "Esta pasta não tem uma instalação do Finest Hour Remastered."},
+    {"Updating Finest Hour Remastered...",
+     "Atualizando o Finest Hour Remastered..."},
+    {"Finest Hour Remastered is up to date.",
+     "O Finest Hour Remastered está atualizado."},
+    {"The update did not finish.",
+     "A atualização não foi concluída."},
+    {"Some installed files differ from the release and are not in this update. If the game "
+     "misbehaves, install it again with the full release.",
+     "Alguns arquivos instalados são diferentes da versão e não estão nesta atualização. Se o jogo "
+     "apresentar problemas, instale-o de novo com a versão completa."},
+    {"This program has no update inside: download it again.",
+     "Este programa não contém nenhuma atualização: baixe-o de novo."},
+    {"Cannot write ",
+     "Não foi possível gravar "},
+    {"Closing Finest Hour Remastered...",
+     "Fechando o Finest Hour Remastered..."},
+    {"Finest Hour Remastered is running from this folder: close it, then try again.",
+     "O Finest Hour Remastered está aberto a partir desta pasta: feche-o e tente de novo."},
+    {"The folder cannot be made: ",
+     "Não foi possível criar a pasta: "},
+};
+
 // the text in the player's language (English as written when it has none)
 const char* T(const char* en) {
+    if (g_lang == 4) {
+        for (const auto& r : kPortuguese)
+            if (std::strcmp(r.en, en) == 0) return r.pt;
+        return en;
+    }
     for (const Row& r : kStrings)
         if (std::strcmp(r.en, en) == 0) {
             const char* t[] = {r.en, r.fr, r.it, r.es};
@@ -218,19 +354,20 @@ const char* T(const char* en) {
     return en;
 }
 
-// Windows' language: French, Italian or Spanish, else English
+// Windows' language: French, Italian, Spanish or Portuguese, else English
 int SystemLanguage() {
     switch (PRIMARYLANGID(GetUserDefaultUILanguage())) {
         case LANG_FRENCH: return 1;
         case LANG_ITALIAN: return 2;
         case LANG_SPANISH: return 3;
+        case LANG_PORTUGUESE: return 4;
         default: return 0;
     }
 }
 
-// the game's language codes (XC_LANGUAGE): 1 English, 4 French, 6 Italian, 5 Spanish
+// the game's language codes (XC_LANGUAGE): 1 English, 4 French, 6 Italian, 5 Spanish, 9 Portuguese (the port's)
 uint32_t GameLanguage() {
-    const uint32_t codes[] = {1, 4, 6, 5};
+    const uint32_t codes[] = {1, 4, 6, 5, 9};
     return codes[g_lang];
 }
 

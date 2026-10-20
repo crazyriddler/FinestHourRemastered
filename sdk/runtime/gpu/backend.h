@@ -126,8 +126,9 @@ inline std::atomic<int> g_map_frames{0};
 // matrix as the bone it sits on, which the flinch may have moved. The game's hook gives the matrix
 // as drawn (rows: right, up, at, position, 4 floats each), true when it changed it.
 inline std::atomic<bool (*)(float world[16])> g_carry{nullptr};
-// 2D on a widened screen: a draw in screen space (pretransformed vertices) to the screen, its bounds in console pixels.
-// The game's g_layout_2d says where it goes, x' = x * scale + offset, or false to leave it stretched with the screen.
+// 2D placed by the game: a draw in screen space (pretransformed vertices) to the screen, its bounds in console pixels.
+// The game's g_layout_2d says where it goes (on a widened screen, and at any width for its own reasons: the HUD's
+// size), x' = x * sx + ox and y' = y * sy + oy, or false to leave it as drawn (stretched with a widened screen).
 struct Draw2D {
     float x0, y0, x1, y1;
     uint32_t gw, gh;  // the screen in console pixels
@@ -136,8 +137,12 @@ struct Draw2D {
     bool bounded;     // the bounds are known (else the whole screen)
     uint64_t frame;   // presents so far: the draws of one frame share it
     uint32_t color;   // the first vertex's colour (ARGB), white when the draw has none
+    uint64_t tex = 0; // its first stage's texture (content id, gpu/remaster.h), 0 for none
 };
-inline std::atomic<bool (*)(const Draw2D&, float& scale, float& offset)> g_layout_2d{nullptr};
+struct Place2D {
+    float sx = 1, ox = 0, sy = 1, oy = 0;
+};
+inline std::atomic<bool (*)(const Draw2D&, Place2D&)> g_layout_2d{nullptr};
 inline std::atomic<int> g_log_draws{0};
 // tests (control line "drawstack <texture name>"): guest addresses whose draws (a stage's D3D texture one of them)
 // log their callers and the stages' texture transforms, each distinct caller once

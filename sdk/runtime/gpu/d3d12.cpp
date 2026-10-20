@@ -1495,7 +1495,7 @@ private:
     uint32_t bb_h_ = 0;
     float scale_ = 1.0f;
     float widen_ = 1.0f;  // g_screen_widen when the targets were made
-    float layout_[2] = {1, 0};  // the draw's 2D placement (Layout2D), its scissor goes with it
+    float layout_[4] = {1, 0, 1, 0};  // the draw's 2D placement (Layout2D): x scale, offset, y's; its scissor goes with it
     // surfaces locked without a wait: copies in flight, the newest finished one goes to guest memory
     struct Late {
         ComPtr<ID3D12Resource> rb[kFrames];
@@ -2607,6 +2607,7 @@ const wchar_t* CompilingText() {
         case 4: return L"Compilation des shaders";
         case 5: return L"Compilando shaders";
         case 6: return L"Compilazione degli shader";
+        case 9: return L"Compilando shaders";
         default: return L"Compiling shaders";
     }
 }
@@ -3989,6 +3990,7 @@ void FillSurfaceConstants(const State& s, GuestExtent size, DrawConstants& c) {
     c.misc[2] = float(Cmp(s.rs[kRsShadowFunc]) - 1);
     c.misc[3] = s.rs[kRsSpecularEnable] ? 1.0f : 0.0f;
     if (c.layout[0] == 0) c.layout[0] = 1;  // Layout2D's, else as drawn
+    if (c.layout_y[0] == 0) c.layout_y[0] = 1;
 }
 
 void FillCombinerConstants(const State& s, DrawConstants& c) {
@@ -4515,15 +4517,16 @@ void D3D12Backend::SetViewportScissor(const State& s, uint32_t gw) {
     float sx = W / gw, sy = bt->gh ? H / bt->gh : sx;
     // a 2D draw moved by its layout is clipped where it went
     LONG x0 = LONG((s.viewport.x * layout_[0] + layout_[1]) * sx);
-    LONG y0 = LONG(s.viewport.y * sy);
+    LONG y0 = LONG((s.viewport.y * layout_[2] + layout_[3]) * sy);
     LONG x1 = LONG(((s.viewport.x + s.viewport.w) * layout_[0] + layout_[1]) * sx);
-    LONG y1 = LONG((s.viewport.y + s.viewport.h) * sy);
+    LONG y1 = LONG(((s.viewport.y + s.viewport.h) * layout_[2] + layout_[3]) * sy);
     if (s.scissor_count) {
         float lx0 = s.scissors[0] * layout_[0] + layout_[1], lx1 = s.scissors[2] * layout_[0] + layout_[1];
+        float ly0 = s.scissors[1] * layout_[2] + layout_[3], ly1 = s.scissors[3] * layout_[2] + layout_[3];
         x0 = std::max(x0, LONG(lx0 * sx));
-        y0 = std::max(y0, LONG(s.scissors[1] * sy));
+        y0 = std::max(y0, LONG(ly0 * sy));
         x1 = std::min(x1, LONG(lx1 * sx));
-        y1 = std::min(y1, LONG(s.scissors[3] * sy));
+        y1 = std::min(y1, LONG(ly1 * sy));
     }
     D3D12_RECT rect{std::clamp<LONG>(x0, 0, LONG(W)), std::clamp<LONG>(y0, 0, LONG(H)),
                     std::clamp<LONG>(x1, 0, LONG(W)), std::clamp<LONG>(y1, 0, LONG(H))};
@@ -5235,7 +5238,8 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
 
 void D3D12Backend::Layout2D(const State& s, const Assembled& a, bool prog, GuestExtent size, DrawConstants& c) {
     c.layout[0] = 1;
-    layout_[0] = 1, layout_[1] = 0;
+    c.layout_y[0] = 1;
+    layout_[0] = 1, layout_[1] = 0, layout_[2] = 1, layout_[3] = 0;
     recolor_ = false;
     auto layout = g_layout_2d.load();
     const Target* t = bound_rt_ ? bound_rt_ : bound_ds_;
@@ -5254,8 +5258,8 @@ void D3D12Backend::Layout2D(const State& s, const Assembled& a, bool prog, Guest
     }
     auto seen = g_seen_2d.load();
     if (!(a.pretransformed || s.layout2d) || !screen) return;
-    if ((!layout || widen_ <= 1.0f) && !seen) return;
-    Draw2D d{1e9f, 1e9f, -1e9f, -1e9f, size.w, size.h, widen_, a.pretransformed ? 0 : s.layout2d, false, presents_, 0xFFFFFFFF};
+    if (!layout && !seen) return;
+    Draw2D d{1e9f, 1e9f, -1e9f, -1e9f, size.w, size.h, widen_, a.pretransformed ? 0 : s.layout2d, false, presents_, 0xFFFFFFFF, draw_tex0_};
     // the bounds in console pixels: pretransformed positions as they are, fixed function ones through world, view,
     // projection and the viewport; a vertex program's are not known
     bool floats = e.format == DXGI_FORMAT_R32G32B32A32_FLOAT || e.format == DXGI_FORMAT_R32G32B32_FLOAT ||
@@ -5302,12 +5306,13 @@ void D3D12Backend::Layout2D(const State& s, const Assembled& a, bool prog, Guest
             recolor({d.x0, d.y0, d.x1, d.y1, draw_tex0_, color, s.layout2d, presents_}, argb))
             recolor_ = true, recolor_argb_ = argb, recolor_elem_ = ce;
     }
-    if (!layout || widen_ <= 1.0f) return;
-    float scale = 1, offset = 0;
-    if (layout(d, scale, offset)) c.layout[0] = scale, c.layout[1] = offset;
-    layout_[0] = c.layout[0], layout_[1] = c.layout[1];
+    if (!layout) return;
+    Place2D place;
+    if (layout(d, place)) c.layout[0] = place.sx, c.layout[1] = place.ox, c.layout_y[0] = place.sy, c.layout_y[1] = place.oy;
+    layout_[0] = c.layout[0], layout_[1] = c.layout[1], layout_[2] = c.layout_y[0], layout_[3] = c.layout_y[1];
     if (g_log_draws)
-        LOGR("draw:   bounds %d %.0f..%.0f x %.0f..%.0f -> x * %.3f + %.1f", d.bounded, d.x0, d.x1, d.y0, d.y1, c.layout[0], c.layout[1]);
+        LOGR("draw:   bounds %d %.0f..%.0f x %.0f..%.0f -> x * %.3f + %.1f, y * %.3f + %.1f", d.bounded, d.x0, d.x1, d.y0, d.y1,
+             c.layout[0], c.layout[1], c.layout_y[0], c.layout_y[1]);
 }
 
 // a guest rect scaled to the target and clamped to it

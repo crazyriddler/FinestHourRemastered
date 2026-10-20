@@ -43,8 +43,8 @@ The trailer (2560x1440, 60 FPS) is among the release's downloads: `FinestHourRem
 - About 9 GB of disk: the game's files and the remastered textures.
 - **The game**: Call of Duty: Finest Hour for the original Xbox, **PAL (Europe) release**, title ID `4156002A`,
   version 3 (`default.xbe` SHA-1 `938a7b1e17928de49cb3c5834d61abcd3d9081c8`). Its four languages (English, French,
-  Italian and Spanish, text and speech) are all supported. Other releases are not supported: the port is the code of
-  this one.
+  Italian and Spanish, text and speech) are all supported, and Portuguese (text, with the English speech) is added by
+  the port. Other releases are not supported: the port is the code of this one.
 
 ## Installation
 1. Download the [1.0 release](https://github.com/crazyriddler/FinestHourRemastered/releases/tag/v1.0):
@@ -83,7 +83,8 @@ Choose **PC Settings** in the main menu (or press **F10** at any time) for every
 - **Television Frame**: on a wide screen the 4:3 menus, briefings and movies play inside a 1940s television, through
   a curved CRT tube with scan lines (the PC settings too, wherever they open).
 - **Brightness**, **FPS Counter**, **Anisotropic Filtering** up to 16x, **Sharpening**.
-- **HUD**: the **Hit Markers**, the **Compass**, the **Stance** and the **Crosshair** can each be hidden.
+- **HUD**: its **Size** (Original, Small, Smaller: each element in its place), and the **Hit Markers**, the
+  **Compass**, the **Stance** and the **Crosshair** can each be hidden.
 
 ### Graphics presets
 **Very High** (everything on), **High**, **Medium**, **Low** and **Original** set every graphics setting at once; any
@@ -142,7 +143,7 @@ game's own look and textures. The render scale is never part of a preset: it sta
 - **Controllers**: Xbox, PlayStation and Switch, hot plugging and rumble, a modern layout or the original's, dead
   zone, sensitivity and look acceleration settings.
 - **Button Prompts** follow the device in hand: keys, Xbox, PlayStation or Switch buttons.
-- **Skip Intros**, **Language** (English, French, Italian, Spanish).
+- **Skip Intros**, **Language** (English, French, Italian, Spanish, Portuguese).
 
 ## Controls
 

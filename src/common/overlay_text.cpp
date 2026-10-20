@@ -80,6 +80,13 @@ constexpr Row kRows[] = {
     {"Brightness", "Luminosité", "Luminosità", "Brillo"},
     {"100% is the original picture.", "100 % est l'image d'origine.", "100% è l'immagine originale.", "100% es la imagen original."},
     {"FPS Counter", "Compteur d'images/s", "Contatore FPS", "Contador de FPS"},
+    {"HUD Size", "Taille de l'interface", "Dimensione HUD", "Tamaño del HUD"},
+    {"Small", "Petite", "Piccola", "Pequeño"},
+    {"Smaller", "Plus petite", "Più piccola", "Más pequeño"},
+    {"The compass, the stance, the crosshair, health and ammunition smaller, each in its place.",
+     "La boussole, la posture, le réticule, la santé et les munitions plus petits, chacun à sa place.",
+     "La bussola, la postura, il mirino, la salute e le munizioni più piccoli, ognuno al suo posto.",
+     "La brújula, la postura, la mira, la salud y la munición más pequeños, cada uno en su sitio."},
     {"Hit Markers", "Marqueurs d'impact", "Indicatori di colpo", "Marcadores de impacto"},
     {"The marks when your shots hit and from where you are being hit.",
      "Les marques quand vos tirs touchent et d'où viennent ceux qui vous touchent.",
@@ -399,6 +406,15 @@ uint32_t Lang() {
 const char* Tr(const char* en) {
     if (!en) return en;
     uint32_t l = Lang();
+    if (l == 9) {
+        static const std::unordered_map<std::string, const char*> pt = [] {
+            std::unordered_map<std::string, const char*> m;
+            for (size_t i = 0; i < kPtRowCount; i++) m.emplace(kPtRows[i].en, kPtRows[i].pt);
+            return m;
+        }();
+        auto it = pt.find(en);
+        return it == pt.end() ? en : it->second;
+    }
     int col = l == 4 ? 1 : l == 6 ? 2 : l == 5 ? 3 : 0;
     if (!col) return en;
     static const std::unordered_map<std::string, const Row*> index = [] {

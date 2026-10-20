@@ -1,0 +1,1254 @@
+# Finest Hour Remastered: the game's text in Portuguese (src/game/language.cpp). The port's own translation:
+# "$key<tab>text" for the string tables' rows, "@<hash><tab>text" for the subtitles (the hash of the English
+# line they replace), \n a line break. UTF-8.
+
+$1_1a	Nem um passo atrás
+$1_1b	A bandeira vai cair
+$1_2a	Morte na mira dela
+$1_2b	Defender a fábrica
+$1_3a	Pane
+$1_3b	Rumo à Praça Vermelha
+$1_5a	Op. Pequeno Saturno
+$1_5b	Emboscada no aeródromo
+$2_1a	Missão: Matmata
+$2_1b	Sabotadores do depósito
+$2_2a	Travessia do deserto
+$2_2b	Ataque à fortaleza
+$3_1a	A primeira cidade a cair
+$3_1b	Passagem subterrânea
+$3_1c	Rendição em Aachen
+$3_3a	Sair lutando
+$3_5a	Rumo a Remagen
+$3_5b	A última ponte de pé
+$3_5c	No coração da Alemanha
+$L3Button	Botão L3
+$MCAutosaveDisabled	O salvamento automático foi desativado. Salve o jogo manualmente para reativar o salvamento automático.
+$MCAutosaveFailed	Não foi possível salvar o jogo! O salvamento automático foi desativado. Salve o jogo manualmente para reativá-lo.
+$MCAutosaveReconfirm	N/D
+$MCAutosaving	Salvando automaticamente.
+$MCCancel	Cancelar
+$MCCardChanged	O memory card (8MB) (para PlayStation 2) no slot de MEMORY CARD 1 foi trocado.
+$MCCardRemoved	Não há memory card (8MB) (para PlayStation 2) no slot de MEMORY CARD 1.
+$MCCheckFailed	Falha na verificação!
+$MCCheckFailedContinue	Falha na verificação! Continuar sem salvar?
+$MCCheckOK	Memory card verificado com sucesso.
+$MCChecking	Verificando espaço livre. Não desligue o console Xbox.
+$MCConfirmFormat	N/D
+$MCConfirmSave	Deseja salvar os dados do jogo atual?
+$MCContinue	Continuar
+$MCContinueWOSaving	Continuar
+$MCCorrupted	O jogo salvo de Finest Hour não pode ser usado.
+$MCCorruptedNew	O jogo salvo de Finest Hour está danificado e não pode ser usado. Deseja criar um novo arquivo salvo de Finest Hour?
+$MCCreateFailed	Falha ao criar!
+$MCCreateFailedContinue	Falha ao criar! Continuar sem salvar?
+$MCCreateOK	Criado com sucesso.
+$MCCreateSaveFile	Não há jogos salvos de Finest Hour no console Xbox. Deseja criar um jogo salvo de Finest Hour?
+$MCCreating	Salvando.
+$MCDataRequired	Não há jogo salvo de Finest Hour.
+$MCDelete	Apagar
+$MCDupProfileNameEntered	Já existe um perfil com o nome '%name%'. Digite um nome de perfil diferente.
+$MCDupProfilesNotAllowed	Já existe um perfil com o nome '%name%'. Deseja sobrescrever o perfil existente com este nome?
+$MCEmptySlot	<Vazio>
+$MCFormat	Formatar
+$MCFormatCancel	N/D
+$MCFormatFailed	N/D
+$MCFormatFailedContinue	N/D
+$MCFormatOK	N/D
+$MCFormattedRequired	N/D
+$MCFormatting	N/D
+$MCGameCorrupt	Não foi possível carregar o jogo salvo. Pressione A para continuar.
+$MCLoadFailed	Não foi possível carregar o conteúdo.
+$MCLoadNewGame	O jogo salvo selecionado está vazio. Deseja iniciar um novo jogo?
+$MCLoadOK	Carregado com sucesso.
+$MCLoadProfileWarning	Deseja continuar e substituir todos os dados de jogo não salvos?
+$MCLoading	Carregando.
+$MCMenuButtonCancel	$mc$ Cancelar
+$MCMenuButtonChangeOption	$lr$ Alterar opção
+$MCMenuButtonNavigate	$ud$ Navegar no menu
+$MCMenuButtonSelect	$ms$ Selecionar
+$MCMenuButtonUnPause	$pa$ Retomar
+$MCNewGameOKAutosave	Novo jogo salvo. Enquanto este ícone estiver na tela, não desligue o console Xbox.
+$MCNo	Não
+$MCNoCard	Não foi possível carregar o conteúdo.
+$MCNoCardContinue	Continuar sem salvar?
+$MCNoCardLoad	Carregar.
+$MCNoControllerLine	Nenhum controle detectado.\n\nConecte um controle à porta de controle 1.
+$MCNoSpace	Seu Xbox não tem blocos livres suficientes para salvar jogos. Você precisa liberar mais ${SaveGameSize} blocos. Deseja continuar sem salvar?
+$MCNoSpaceContinue	Seu Xbox não tem blocos livres suficientes para salvar jogos. Você precisa liberar mais ${SaveGameSize} blocos. Deseja continuar sem salvar?
+$MCOverwriteContinue	Tem certeza de que deseja sobrescrever este jogo salvo?
+$MCOverwriteFailed	Falha ao sobrescrever!
+$MCOverwriteFailedContinue	Falha ao sobrescrever! Continuar sem salvar?
+$MCOverwriteNewContinue	Tem certeza de que deseja sobrescrever este jogo salvo com um novo jogo?
+$MCOverwriteOK	Sobrescrito com sucesso.
+$MCOverwriting	Salvando.
+$MCResetDataWarning	Deseja continuar e redefinir todos os dados de jogo não salvos?
+$MCRetry	Tentar de novo
+$MCSaveFailed	Não foi possível salvar o jogo!
+$MCSaveFailedContinue	Não foi possível salvar o jogo! Continuar sem salvar?
+$MCSaveOK	Jogo salvo com sucesso.
+$MCSaving	Salvando.
+$MCSelectCreateNewSlot	Selecione um espaço de perfil
+$MCSelectLoadSlot	Selecione um  perfil para carregar
+$MCSelectSaveSlot	Selecione um espaço para salvar
+$MCUnformatted	N/D
+$MCWarning	Atenção
+$MCWrongVersion	O arquivo salvo é de outra versão. Sobrescrever?
+$MCYes	Sim
+$NGC_ControllerSetupInfo	Para entrar no jogo, conecte um controle e pressione $Accept. Para sair do jogo, pressione $Accept em qualquer controle ativo.
+$NGC_ControllerText	Controle 1
+$NGC_ControlsAction	Ação
+$NGC_ControlsAttack	Ataque
+$NGC_ControlsJump	Pular
+$NGC_ControlsNext	Próximo personagem
+$NGC_ControlsPrev	Personagem anterior
+$NGC_ControlsSpecial	Habilidade especial
+$NGC_CorruptedText	Dados salvos danificados
+$NGC_MCAutosaveDisabled	O Memory Card do Slot A foi removido. O salvamento automático foi desativado. Salve o jogo manualmente para reativar o salvamento automático.
+$NGC_MCAutosaveFailed	Falha ao salvar! O salvamento automático foi desativado. Verifique o Memory Card do Slot A e salve o jogo manualmente para reativar o salvamento automático.
+$NGC_MCAutosaveReconfirm	O Memory Card do Slot A foi removido desde o último salvamento. 
+$NGC_MCAutosaving	Salvando dados automaticamente. Não toque no Memory Card nem no botão POWER.
+$NGC_MCCancel	Cancelar
+$NGC_MCCardChanged	O Memory Card do Slot A foi trocado.
+$NGC_MCCardRemoved	O Memory Card do Slot A foi removido.
+$NGC_MCCheckFailed	Falha na verificação. Verifique o Memory Card do Slot A. 
+$NGC_MCCheckFailedContinue	Falha na verificação. Verifique o Memory Card do Slot A. 
+$NGC_MCChecking	Verificando o Memory Card do Slot A. Não toque no Memory Card do Slot A nem no botão POWER.
+$NGC_MCConfirmFormat	Formatar o Memory Card do Slot A apagará todos os dados salvos anteriormente. Deseja continuar com a formatação? 
+$NGC_MCContinue	Continuar
+$NGC_MCContinueWOSaving	$TextHSize(55)Continuar sem salvar
+$NGC_MCCorrupted	Os dados de Finest Hour no Memory Card do Slot A estão danificados.
+$NGC_MCCorruptedNew	O arquivo de Finest Hour no Memory Card do Slot A está danificado. Este arquivo precisa ser apagado. Continuar sem carregar 
+$NGC_MCCreateFailed	Falha ao criar. Verifique o Memory Card do Slot A 
+$NGC_MCCreateFailedContinue	Falha ao criar. Verifique o Memory Card do Slot A 
+$NGC_MCCreateOK	Criado com sucesso.
+$NGC_MCCreateSaveFile	Não há dados de Finest Hour no Memory Card do Slot A. Deseja criar um arquivo salvo de Finest Hour?
+$NGC_MCCreating	Salvando no Memory Card do Slot A. Não toque no Memory Card do Slot A nem no botão POWER.
+$NGC_MCDataRequired	Não há dados salvos de Finest Hour no Memory Card do Slot A.
+$NGC_MCDelete	Apagar
+$NGC_MCExitFree	$TextHSize(67)Gerenciar Memory Card
+$NGC_MCFormat	$TextHSize(67)Formatar Memory Card
+$NGC_MCFormatCancel	Cancelar formatação?
+$NGC_MCFormatFailed	O Memory Card do Slot A está danificado e não pode ser usado. 
+$NGC_MCFormatFailedContinue	Falha ao formatar! Verifique o Memory Card do Slot A. Continuar sem salvar 
+$NGC_MCFormatOK	Formatado com sucesso.
+$NGC_MCFormattedRequired	Não há dados salvos de Finest Hour no Memory Card do Slot A.
+$NGC_MCFormatting	Formatando o Memory Card do Slot A. Não toque no Memory Card nem no botão POWER.
+$NGC_MCLoadFailed	Falha ao carregar. Verifique o Memory Card do Slot A. Tente de novo.
+$NGC_MCLoadNewGame	Os dados de jogo selecionados estão vazios. Deseja iniciar um novo jogo?
+$NGC_MCLoadOK	Carregado com sucesso.
+$NGC_MCLoading	Carregando dados. Não toque no Memory Card do Slot A nem no botão POWER.
+$NGC_MCNewGameOKAutosave	Enquanto este ícone estiver na tela, não toque no Memory Card do Slot A nem no botão POWER.
+$NGC_MCNo	Não
+$NGC_MCNoCard	Nenhum Memory Card encontrado no Slot A.
+$NGC_MCNoCardContinue	Continuar sem salvar?
+$NGC_MCNoCardLoad	Nenhum Memory Card encontrado no Slot A.
+$NGC_MCNoSpace	Não há espaço livre suficiente no Memory Card do Slot A. Para salvar Finest Hour, você precisa de pelo menos 1 arquivo e 2 blocos. Para gerenciar o conteúdo do Memory Card, use a tela do Memory Card.
+$NGC_MCNoSpaceContinue	Não há espaço livre suficiente no Memory Card do Slot A. Para salvar Finest Hour, você precisa de pelo menos 1 arquivo e 2 blocos. 
+$NGC_MCOverwriteContinue	Sobrescrever o arquivo salvo do Slot A?
+$NGC_MCOverwriteFailed	Falha ao sobrescrever! Verifique o Memory Card do Slot A 
+$NGC_MCOverwriteFailedContinue	Falha ao sobrescrever! Memory Card do Slot A. Continuar sem salvar 
+$NGC_MCOverwriteNewContinue	Sobrescrever o arquivo salvo do Slot A?
+$NGC_MCOverwriteOK	Sobrescrito com sucesso.
+$NGC_MCOverwriting	Sobrescrevendo dados. Não toque no Memory Card do Slot A nem no botão POWER.
+$NGC_MCRetry	Tentar de novo
+$NGC_MCSaveCorrupt	O arquivo de Finest Hour no Memory Card do Slot A está danificado. Este arquivo precisa ser apagado.
+$NGC_MCSaveFailed	Falha ao salvar! Verifique o Memory Card do Slot A 
+$NGC_MCSaveFailedContinue	Falha ao salvar! Verifique o Memory Card do Slot A 
+$NGC_MCSaveOK	Jogo salvo com sucesso.
+$NGC_MCSaving	Salvando no Memory Card do Slot A. Não toque no Memory Card do Slot A nem no botão POWER.
+$NGC_MCUnformatted	O Memory Card do Slot A está danificado e precisa ser formatado. Deseja formatar?
+$NGC_MCUnknownDevice	Dispositivo incorreto no Slot A. Insira um Memory Card.
+$NGC_MCWrongVersion	O arquivo salvo é de outra versão. Sobrescrever?
+$NGC_MCYes	Sim
+$NGC_VibrationSet	Vibração:
+$OPMmovie1	Atendendo ao chamado 
+$OPMmovie2	Sons da guerra
+$OPMmovie3	Épico por natureza
+$OPMmovie4	Muitos que lutaram
+$OPMmovie5	Vozes da guerra 
+$PS2_ControllerSetupInfo	Para entrar no jogo, conecte um controle analógico DUALSHOCK 2 e pressione $Accept.  Para sair do jogo, pressione $Accept em qualquer controle analógico DUALSHOCK 2 ativo.
+$PS2_ControllerText	Porta de controle 1-A
+$PS2_CorruptedText	Dados salvos corrompidos
+$PS2_MCAutosaveDisabled	O memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1 foi removido.  O salvamento automático foi desativado.  Salve o jogo manualmente para reativar o salvamento automático.
+$PS2_MCAutosaveFailed	Falha no salvamento automático!  O salvamento automático foi desativado.  Verifique o memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1 e salve o jogo manualmente para reativar o salvamento automático.
+$PS2_MCAutosaveReconfirm	O memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1 foi removido desde o último salvamento. 
+$PS2_MCAutosaving	Salvando dados automaticamente. Não remova o memory card (8MB) (para PlayStation 2) da entrada para MEMORY CARD 1 nem o controle, e não reinicie nem desligue o console.
+$PS2_MCCancel	Cancelar
+$PS2_MCCardChanged	O memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1 foi trocado.
+$PS2_MCCardRemoved	Não há memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1.
+$PS2_MCCheckFailed	Falha na verificação! Verifique o memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1 e tente novamente.
+$PS2_MCCheckFailedContinue	Falha na verificação! Verifique o memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1 e tente novamente.  Continuar sem salvar?
+$PS2_MCChecking	Verificando o memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1. Não remova o memory card (8MB) (para PlayStation 2) nem o controle, e não reinicie nem desligue o console.
+$PS2_MCConfirmFormat	Tem certeza de que deseja formatar o memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1?
+$PS2_MCContinue	Continuar
+$PS2_MCContinueWOSaving	Continuar
+$PS2_MCCorrupted	Os dados salvos de Finest Hour no memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1 estão corrompidos!
+$PS2_MCCorruptedNew	Os dados salvos de Finest Hour no memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1 estão corrompidos!  Deseja criar um novo arquivo de dados de Finest Hour?
+$PS2_MCCreateFailed	Falha na criação! Verifique o memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1 e tente novamente.
+$PS2_MCCreateFailedContinue	Falha na criação! Verifique o memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1 e tente novamente.  Continuar sem salvar?
+$PS2_MCCreateOK	Criado com sucesso.
+$PS2_MCCreateSaveFile	Não há dados salvos de Finest Hour no memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1.  Deseja criar um arquivo de dados de Finest Hour?
+$PS2_MCCreating	Criando arquivo de jogo salvo. Não remova o memory card (8MB) (para PlayStation 2) nem o controle, e não reinicie nem desligue o console.
+$PS2_MCDataRequired	Não há dados salvos de Finest Hour no memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1.
+$PS2_MCDelete	Apagar
+$PS2_MCFormat	Formatar
+$PS2_MCFormatCancel	Cancelar formatação?
+$PS2_MCFormatFailed	Falha na formatação! Verifique o memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1 e tente novamente.
+$PS2_MCFormatFailedContinue	Falha na formatação! Verifique o memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1 e tente novamente.  Continuar sem salvar?
+$PS2_MCFormatOK	Formatado com sucesso.
+$PS2_MCFormattedRequired	Não há dados salvos de Finest Hour no memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1.
+$PS2_MCFormatting	Formatando o memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1. Não remova o memory card nem o controle, e não reinicie nem desligue o console.
+$PS2_MCGameCorrupt	Os dados salvos selecionados estão corrompidos e não podem ser carregados.
+$PS2_MCLoadFailed	Falha ao carregar! Verifique o memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1 e tente novamente.
+$PS2_MCLoadNewGame	Os dados salvos selecionados estão vazios.  Deseja começar um novo jogo?
+$PS2_MCLoadOK	Carregado com sucesso.
+$PS2_MCLoading	Carregando dados. Não remova o memory card (8MB) (para PlayStation 2) nem o controle, e não reinicie nem desligue o console.
+$PS2_MCNewGameOKAutosave	Enquanto este ícone estiver na tela, não remova o memory card (8MB) (para PlayStation 2) nem o controle, e não reinicie nem desligue o console.
+$PS2_MCNo	Não
+$PS2_MCNoCard	Não há memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1.  Finest Hour requer ${SaveGameSize}KB de espaço livre para salvar os dados.  Insira um memory card (8MB) (para PlayStation 2) com espaço suficiente ou não será possível salvar os dados do jogo.
+$PS2_MCNoCardContinue	Continuar sem salvar?
+$PS2_MCNoCardLoad	Não há memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1.
+$PS2_MCNoSpace	Espaço livre insuficiente no memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1.  Finest Hour requer ${SaveGameSize}KB de espaço livre para salvar os dados.
+$PS2_MCNoSpaceContinue	Espaço livre insuficiente no memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1.  Finest Hour requer ${SaveGameSize}KB de espaço livre para salvar os dados.
+$PS2_MCOverwriteContinue	Tem certeza de que deseja sobrescrever este arquivo salvo?
+$PS2_MCOverwriteFailed	Falha ao sobrescrever! Verifique o memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1 e tente novamente.
+$PS2_MCOverwriteFailedContinue	Falha ao sobrescrever! Verifique o memory card (8MB) (para PlayStation 2) na entrada para MEMORY CARD 1 e tente novamente.  Continuar sem salvar?
+$PS2_MCOverwriteNewContinue	Tem certeza de que deseja sobrescrever este arquivo salvo?
+$PS2_MCOverwriteOK	Sobrescrito com sucesso.
+$PS2_MCOverwriting	Sobrescrevendo dados. Não remova o memory card (8MB) (para PlayStation 2) nem o controle, e não reinicie nem desligue o console.
+$PS2_MCRetry	Tentar novamente
+$PS2_MCSaveFailed	Falha ao salvar! Verifique o memory card (8MB) (para PlayStation 2) no slot de MEMORY CARD 1 e tente novamente.
+$PS2_MCSaveFailedContinue	Falha ao salvar! Verifique o memory card (8MB) (para PlayStation 2) no slot de MEMORY CARD 1 e tente novamente. Continuar sem salvar?
+$PS2_MCSaveOK	Jogo salvo com sucesso.
+$PS2_MCSaving	Salvando dados. Não remova o memory card (8MB) (para PlayStation 2) nem o controle. Não reinicie nem desligue o console.
+$PS2_MCUnformatted	O memory card (8MB) (para PlayStation 2) no slot de MEMORY CARD 1 não está formatado. Formatar o memory card (8MB) (para PlayStation 2)?
+$PS2_MCWrongVersion	O arquivo salvo é de outra versão. Sobrescrever?
+$PS2_MCYes	Sim
+$PS2_NoControllerText	O controle analógico DUALSHOCK 2 não foi detectado. Conecte um controle analógico DUALSHOCK 2 à porta de controle 1 e pressione $JumpButton para continuar.
+$PS2_NoControllerTitle	Sem controle
+$PS2_ProgressiveTest	O modo de tela foi alterado para varredura progressiva. Selecione OK para manter esta alteração. A alteração será desfeita em $ProgressiveCountdown segundos.
+$PS2_ProgressiveTestCancel	Cancelar
+$PS2_ProgressiveWarning	Na próxima página será feito um teste para ver se sua televisão é compatível com varredura progressiva. Se a tela ficar em branco, aguarde 15 segundos até o teste terminar.
+$PS2_SoloController1Text	Porta de controle 1
+$PS2_SoloController2Text	Porta de controle 2
+$PS2_VibrationSet	Vibração:
+$PS2_YankControllerText	Um controle analógico DUALSHOCK 2 foi removido. Pressione $JumpButton para continuar jogando.
+$PS2_YankControllerTitle	Controle removido
+$R3Button	Botão R3
+$XBX_ControllerSetupInfo	Para entrar no jogo, conecte um controle e pressione $Accept. Para sair do jogo, pressione $Accept em qualquer controle ativo.
+$XBX_ControllerText	Controle 1
+$XBX_CorruptedText	Jogo salvo danificado
+$XBX_DirtyDisc	Há um problema com o disco que você está usando. Ele pode estar sujo ou danificado.
+$XBX_MCAutosaveDisabled	O salvamento automático foi desativado. Salve o jogo manualmente para reativar o salvamento automático.
+$XBX_MCAutosaveFailed	Não foi possível salvar o jogo! O salvamento automático foi desativado. Salve o jogo manualmente para reativá-lo.
+$XBX_MCAutosaveReconfirm	N/D
+$XBX_MCAutosaving	Salvando automaticamente.
+$XBX_MCCancel	Cancelar
+$XBX_MCCheckFailed	Falha na verificação!
+$XBX_MCCheckFailedContinue	Falha na verificação! Continuar sem salvar?
+$XBX_MCChecking	Verificando espaço livre. Não desligue o console Xbox.
+$XBX_MCConfirmFormat	N/D
+$XBX_MCContinue	Continuar
+$XBX_MCCorrupted	O jogo salvo de Finest Hour não pode ser usado.
+$XBX_MCCorruptedNew	O jogo salvo de Finest Hour está danificado e não pode ser usado. Deseja criar um novo arquivo salvo de Finest Hour?
+$XBX_MCCreateFailed	Falha ao criar!
+$XBX_MCCreateFailedContinue	Falha ao criar! Continuar sem salvar?
+$XBX_MCCreateOK	Criado com sucesso.
+$XBX_MCCreateSaveFile	Não há jogos salvos de Finest Hour no console Xbox. Deseja criar um jogo salvo de Finest Hour?
+$XBX_MCCreating	Salvando.
+$XBX_MCDataRequired	Não há jogo salvo de Finest Hour.
+$XBX_MCDelete	Apagar
+$XBX_MCExitFree	Liberar mais blocos
+$XBX_MCFormat	Formatar
+$XBX_MCFormatCancel	N/D
+$XBX_MCFormatFailed	N/D
+$XBX_MCFormatFailedContinue	N/D
+$XBX_MCFormatOK	N/D
+$XBX_MCFormattedRequired	N/D
+$XBX_MCFormatting	N/D
+$XBX_MCGameCorrupt	Não foi possível carregar o jogo salvo. Pressione A para continuar.
+$XBX_MCLoadFailed	Não foi possível carregar o conteúdo.
+$XBX_MCLoadNewGame	O jogo salvo selecionado está vazio. Deseja iniciar um novo jogo?
+$XBX_MCLoadOK	Carregado com sucesso.
+$XBX_MCLoading	Carregando.
+$XBX_MCNewGameOKAutosave	Novo jogo salvo. Enquanto este ícone estiver na tela, não desligue o console Xbox.
+$XBX_MCNo	Não
+$XBX_MCNoCard	Não foi possível carregar o conteúdo.
+$XBX_MCNoCardContinue	Continuar sem salvar?
+$XBX_MCNoCardLoad	Carregar.
+$XBX_MCNoSpace	Seu Xbox não tem blocos livres suficientes para salvar jogos. Você precisa liberar mais ${SaveGameSize} blocos. Deseja continuar sem salvar?
+$XBX_MCNoSpaceContinue	Seu Xbox não tem blocos livres suficientes para salvar jogos. Você precisa liberar mais ${SaveGameSize} blocos. Deseja continuar sem salvar?
+$XBX_MCOverwriteContinue	Tem certeza de que deseja sobrescrever este jogo salvo?
+$XBX_MCOverwriteFailed	Falha ao sobrescrever!
+$XBX_MCOverwriteFailedContinue	Falha ao sobrescrever! Continuar sem salvar?
+$XBX_MCOverwriteNewContinue	Tem certeza de que deseja sobrescrever este jogo salvo com um novo jogo?
+$XBX_MCOverwriteOK	Sobrescrito com sucesso.
+$XBX_MCOverwriting	Salvando.
+$XBX_MCRetry	Tentar de novo
+$XBX_MCSaveFailed	Não foi possível salvar o jogo!
+$XBX_MCSaveFailedContinue	Não foi possível salvar o jogo! Continuar sem salvar?
+$XBX_MCSaveOK	Jogo salvo com sucesso.
+$XBX_MCSaving	Salvando.
+$XBX_MCUnformatted	N/D
+$XBX_MCWrongVersion	O arquivo salvo é de outra versão. Sobrescrever?
+$XBX_MCYes	Sim
+$XBX_NoControllerText	Reconecte o controle e pressione START para continuar.
+$XBX_NoControllerTitle	Sem controle
+$XBX_VibrationSet	Vibração:
+$XBX_YankControllerText	Reconecte o controle e pressione START para continuar.
+$XBX_YankControllerTitle	Controle desconectado
+$accept	Aceitar
+$action	Ação
+$africa	África
+$aim	Mirar
+$aimAssist	Mira assistida
+$alliesLost	Aliados perdidos:
+$altFire	Disparo alt.
+$altFireTank	Disparo alt. (Tanque)
+$animation	   Rolo de animação
+$artwork	   Ilustrações
+$back	Voltar
+$behindTheScenes	Bastidores
+$behindTheScenesCaps	BASTIDORES
+$buildingSpark	O prédio da Spark
+$calibration1	Ajuste a tela da sua televisão até que
+$calibration2	as barras de cor abaixo da linha vermelha
+$calibration3	fiquem quase invisíveis.
+$calibrationCaps	   CALIBRAÇÃO
+$centerView	Centralizar torre
+$change	Alterar
+$changeAct	Alterar ato
+$changeConfig	Alterar config.
+$changeLevel	Alterar fase
+$cheat1	Cabeças grandes
+$cheat2	Ricochete
+$cheat3	Tiros na cabeça
+$cheat4	Ricochete (todos)
+$cheat5	Tiro encolhedor
+$cheat6	Tiro certeiro
+$cheat7	Grande e pequeno
+$cheats	     Códigos
+$cheatsCaps	      CÓDIGOS
+$commando	Comando
+$commandoCaps	COMANDO
+$continueGame	Continuar jogo
+$controls	Controles
+$createNew	Novo
+$createProfileCaps	CRIAR PERFIL
+$credits	    Créditos
+$cycle	Trocar
+$cycleGrenade	Trocar granada
+$cycleItem	Trocar item
+$cycleThrownWeapon	Trocar arma de arremesso
+$cycleWeapon	Trocar arma
+$delete	Apagar
+$deletes	Apagar
+$difficulty	Dificuldade
+$dishonorable	Desonroso
+$dolby	Dolby ProLogic II
+$done	Pronto
+$dossier	Dossiê
+$dossiers	Dossiês
+$dossiersCaps	DOSSIÊS
+$down	Baixo
+$easternFront	   Frente   Oriental
+$easy	Fácil
+$empty	Vazio
+$enemiesEliminated	Inimigos eliminados:
+$enterCheat	Inserir código
+$enterNew	Digitar novo
+$faster	Mais rápido
+$fire	Atirar
+$friendlyFire	Fogo amigo
+$front	Frente
+$gallery	Galeria
+$galleryCaps	GALERIA
+$grenade	Granada
+$hard	Difícil
+$healthPack	Kit médico
+$healthPacksUsed	Kits médicos usados:
+$hintMessages	Mensagens de dica
+$hitAccuracy	Precisão de tiro:
+$hitsTaken	Tiros recebidos:
+$hybrid	Híbrido
+$hybridCaps	   HÍBRIDO
+$iconOff	Ícone desligado
+$iconOn	Ícone ligado
+$invertYaxis	Inverter mira
+$jump	Pular
+$language	Idioma
+$languageCaps	IDIOMA
+$lean	(Pressionar) Inclinar
+$leanLeft	Inclinar esq. (Mira)
+$leanRight	Inclinar dir. (Mira)
+$lefty	Canhoto
+$leftyCaps	       CANHOTO
+$levelCompleteCaps	FASE CONCLUÍDA
+$lifeAtSpark	A vida na Spark
+$load	Carregar
+$loadGame	Carregar jogo
+$loadMission	Carregar missão
+$loadProfile	Carregar perfil
+$loadProfileCaps	CARREGAR PERFIL
+$locked	   Bloqueado
+$lookStrafe	Olhar / Desl. lateral
+$lookTurn	Olhar / Girar
+$makingOf1	    Como foi feito 1
+$makingOf2	    Como foi feito 2
+$makingOf3	    Como foi feito 3
+$medium	Médio
+$melee	Corpo a corpo
+$missionDuration	Duração da missão:
+$more	Mais
+$moveStrafe	Mover / Desl. lateral
+$moveTurn	Mover / Girar
+$movies	Vídeos
+$multiplayer	   Multijogador
+$multiplayerCaps	MULTIJOGADOR
+$music	Música
+$navigate	Navegar
+$newGame	Novo jogo
+$newGameCaps	NOVO JOGO
+$nextPrevious	Próx. / Ant.
+$no	Não
+$northAfrica	     Norte da   África
+$off	Desligado
+$on	Ligado
+$options	 Opções
+$optionsCaps	OPÇÕES
+$page	Página
+$pause	Pausa
+$pauseMenuCaps	MENU DE PAUSA
+$performanceRating	Avaliação de desempenho:
+$play	Jogar
+$playLAN	Jogar em rede local
+$playOnline	Jogar online
+$playerStats	Estatísticas do jogador
+$playerStatsCaps	ESTATÍSTICAS DO JOGADOR
+$posture	Postura
+$postureDown	Baixar postura
+$postureUp	Subir postura
+$preferredWeapon	Arma preferida:
+$pressStart	       Pressione o botão START
+$pressStartNGC	           Pressione START
+$pressStartXbox	           Pressione START
+$profile2	Esmeralda
+$profiles	Perfis
+$profilesCaps	PERFIS
+$quickshooter	Gatilho rápido
+$quickshooterCaps	   GATILHO RÁPIDO
+$quit	Sair
+$recruit	Recruta novato
+$reload	Recarregar
+$reset	Redefinir
+$save	Salvar
+$saveProfile	Salvar perfil
+$screenCalibration	Calibração da tela
+$screenCalibrationCaps	  CALIBRAÇÃO DA TELA
+$seasonedVet	Veterano calejado
+$select	Selecionar
+$selectProfileCaps	SELECIONAR PERFIL
+$shift	Maiúsculas
+$shotsFired	Tiros disparados:
+$showHUD	Mostrar HUD
+$showHelp	Mostrar ajuda
+$showObjectives	Mostrar objetivos
+$singlePlayer	    Um jogador
+$slower	Mais lento
+$sound	Som
+$space	Espaço
+$standard	Padrão
+$standardCaps	 PADRÃO
+$stereo	Estéreo
+$subtitles	Legendas
+$supersoldier	Supersoldado
+$tank	(Tanque)
+$teaser	Trailer
+$throw	Arremessar
+$throwGrenade	Arremessar granada
+$throwWeapon	Arremessar arma
+$toggle	Alternar
+$turnLookSpeed	Vel. giro/visão
+$unlockables	Desbloqueáveis
+$up	Cima / Pular
+$use	Usar
+$useHealthPack	Usar kit médico
+$useItem	Usar item
+$vibration	Vibração
+$view	Ver
+$weapon	Arma
+$westernFront	   Frente  Ocidental
+$yes	Sim
+_Appear_Offline	Aparecer offline
+_Appear_Online	Aparecer online
+_Continue	Continuar
+_Friends_List	Lista de amigos
+_Important_Xbox_Message_1	Você tem uma mensagem importante do Xbox Live
+_Important_Xbox_Message_2	Pressione $ms$ para ler a mensagem
+_Insert_Controller_1	Reconecte o controle %d
+_Insert_Controller_2	e pressione START para continuar.
+_Invert_Aim	Inverter mira
+_Loading	Carregando...
+_No	Não
+_Not_Signed_In	Não conectado
+_Pass_Code_Needed	Código de acesso necessário
+_Quit_Question	Tem certeza de que deseja sair?
+_Restart_Question	Tem certeza de que deseja reiniciar?
+_Sign_In	Entrar
+_Sign_In_Failed	Falha ao conectar
+_Sign_Out	Sair
+_Signed_In	Conectado
+_Signing_In	Conectando...
+_Unsaved_Lost	Todo o progresso não salvo será perdido.
+_Verify_Leave_Session_1	Se você sair do jogo agora, esta sessão será encerrada.
+_Verify_Leave_Session_2	Tem certeza de que deseja sair?
+_Xbox_Live_Cant_Connect_1	Seu console Xbox não consegue se conectar ao Xbox Live
+_Xbox_Live_Cant_Connect_2	Pressione $ms$ para iniciar a solução de problemas ou $mc$ para cancelar
+_Xbox_Live_Options	Opções do Xbox Live
+_Xbox_Multiple_Accounts_1	Sua sessão no Xbox Live foi encerrada porque
+_Xbox_Multiple_Accounts_2	outra pessoa entrou usando a sua conta.
+_Xbox_Multiple_Accounts_3	Pressione $ms$ para continuar.
+_Yes	Sim
+_Yes_No	$ms$ Sim  $mc$ Não
+
+@ecfa938cfe7eeecb	Conecte um controle analógico DUALSHOCK 2
+@526bbd91f56bffae	à porta de controle 1.
+@1242ad692c5bf0a8	O controle analógico DUALSHOCK 2 
+@69ad6f9b8b1e6420	não foi detectado.
+@0ee9faefaba81bcd	Mira assistida
+@9a8bf3208ae6d3b4	Bloqueio de fogo amigo
+@07733503b383d73d	Restaurar padrões
+@96f471f87861c2e8	Gatilho rápido
+@ebf4f8b09995c747	Comando
+@8d4efa71fde7e9be	Legendas
+@cd7c41d8cae354a8	Inverter eixo Y
+@598c7839e7feb2c9	Vibração
+@1483525cec1fc164	Mensagens de dica
+@19e84b851836664f	Rápida
+@437f0bcd51cb33b1	Config. do controle
+@21001f1a8955aaeb	Canhoto
+@6032372e5812d743	Híbrido
+@2593d0c70a1c5074	Som
+@5c73b6a46de9972d	Estéreo
+@2f152931ff1531f7	Vel. giro/visão
+@919e1424f589c498	Lenta
+@463b8c4e92751ba5	Opções
+@45156213b0fb2396	Sair
+@14bec4678c4e60cc	Reiniciar
+@094f56c7513db0d7	Tem certeza de que deseja sair?
+@8d7d0ffaf7c6e525	Tem certeza de que deseja reiniciar?
+@2379a977499c8567	$ms$ Selecionar
+@f6770667f0118331	$mc$ Cancelar
+@296d0c7aea5b3790	$ud$ Navegar no menu
+@f96e6802284b2fcd	$pa$ Continuar
+@c4c47c1dea96d0fe	$lr$ Alterar opção
+@aa329d819ef7a2eb	Jogo pausado
+@302cbb19bf9a174a	Desligado
+@03eb887751fb9840	$mc$ Voltar
+@cb489a1a173ac3f0	Sim
+@09205907b5b56cda	Não
+@091d5807b5b33550	Ligado
+@ce42e774461b5bd8	Pressione $pd$ uma vez para se agachar e duas vezes para deitar. Pressione $pu$ para se levantar.
+@d0ac196df434eebc	Quando o ícone da mão aparecer, pressione $ac$ para pegar a arma ou o item.
+@446c5a2afaa30074	Use a alavanca analógica direita para olhar ao redor
+@393ba5ca9069323c	Use a alavanca analógica esquerda para se mover e a direita para olhar.
+@8d0e230273df737c	Agachar-se ou deitar-se estabiliza a mira e protege você de balas e explosões.
+@45a5c07f7d321d60	Pressione $sh$ para disparar a arma.
+@4c6d8ad8ff1edaec	Pressione $af$ para atacar corpo a corpo.
+@0d9d63f5da90f3d8	Mantenha $am$ pressionado para mirar.
+@9e795e0d91dab7d0	Pressione $he$ para usar um kit médico.
+@97510d68d5b84bd6	Missão fracassada
+@7a3ed147458359df	Siga o Sgt. Puskov.{Objetivo cumprido.
+@c5aaaa1a09d90d21	Pegue um fuzil.{Fuzil encontrado.
+@7f291dbd93476ac9	Pressione $pd$ duas vezes para deitar. (Reduz o dano de balas e explosões){Objetivo cumprido.
+@d8da3c8db3779469	Pressione $ac$ para o esquadrão abrir a porta.{Porta aberta.
+@8b76c122a3140409	Mantenha $am$ pressionado para mirar.{Objetivo cumprido.
+@d1a3fa1e26855c38	Detenha as metralhadoras alemãs.{Metralhadora neutralizada.
+@0a49f6c0eba971b3	Pressione $pa$ para pausar o jogo e ver os objetivos.{Objetivo cumprido.
+@3f20e0afb1d49295	Elimine os alemães em retirada.{Alemães eliminados.
+@a080d9f58ba1d8ce	A estrela da bússola aponta o próximo objetivo.{Objetivo cumprido.
+@228731c833b2a32d	Desative as dicas no menu Opções da tela de pausa.
+@e3533d643163877d	Pressione $sh$ para atirar.{Objetivo cumprido.
+@ca2571d85915922d	Use a alavanca analógica esquerda para se mover e a direita para olhar.{Objetivo cumprido.
+@cdd31363e1dfd64a	Pressione $pa$ para pausar o jogo e ver os objetivos.
+@a859b23ee5e3dcf7	A estrela da bússola aponta o objetivo atual.
+@e6503b6f5280066e	À medida que você se aproxima do objetivo, a estrela se move para o centro da bússola.
+@d473bbb44538da23	Pressione $pd$ de novo para deitar.
+@29a8291b81b60ead	Pressione $he$ para usar o kit médico.
+@7d7da1fd7e3c0e81	Pressione $ue$ para arremessar uma granada.
+@2c7812d0bd81eeab	Você chegou a um ponto de controle.
+@af43262dffb8db79	Com a escotilha fechada, mantenha $am$ pressionado para dar zoom.
+@f1b3db0fccaed0a7	Pressione $rc$ para centralizar a torre.
+@cec4da6f23fc3c1d	Missão fracassada - Você saiu da área do objetivo.
+@66ba60afb032b2b1	Sua saúde já está no máximo.
+@a4a156a0044c8733	Pressione $pu$ para a visão em terceira pessoa.
+@765e97c70068974f	Em terceira pessoa, mantenha $am$ pressionado para mirar a torre.
+@ca1126539c66db55	Use a alavanca analógica esquerda para andar para frente/trás e virar à esquerda/direita.
+@2f5a52916f14da25	Pressione $re$ para recarregar.
+@12a548e4260ab53d	Pressione $pd$ para se agachar.
+@95d1e2546ce5c2a0	Você não pode carregar mais munição para esta arma.
+@9646dc55642862dd	Atenção - Volte ao objetivo atual.
+@4a784d876dea97b6	Missão fracassada - Você morreu em combate.
+@fe52b22188d72f62	De pé, pressione $pu$ para pular.
+@cdd539f0f3034b42	Atenção - Você está longe demais do objetivo atual.
+@4c17d89133de8667	Com a escotilha fechada, pressione $pu$ duas vezes para abri-la.
+@8ce045aca42b4eef	Pressione $ce$ para trocar de equipamento.
+@2ceea80a0caf5ff7	Missão fracassada - Você morreu em combate.
+@8fd36c6b2551cfd1	Pressione $pd$ para fechar a escotilha do tanque.
+@b87b07432b8031c4	Pressione $af$ para disparar a metralhadora coaxial.
+@1954234262e7d12c	Use a alavanca analógica direita para mover a torre.
+@75c76af64f4fb74c	Pressione $sh$ para atirar.
+@6fa33f566670c6e9	Você não pode carregar mais deste item.
+@630af9e3f7538983	Missão fracassada - Você abandonou o objetivo atual.
+@f19079538e5bfd0a	Kit médico recolhido.
+@806f891a968c161d	Munição de Luger recolhida.
+@f50a018cded66e65	Munição de PPSH recolhida.
+@80b88e7a63a0f902	Munição de Thompson recolhida.
+@c94c02381d3b874f	Munição de MP40 recolhida.
+@c0053e5247152f9a	Munição de Sten recolhida.
+@1325811a5d923e17	Munição de BAR recolhida.
+@b0e0509ac3462f76	Munição de DP recolhida.
+@70b487b46e38298c	Munição de MG42 recolhida.
+@b97081664252fd09	Munição de Bren recolhida.
+@3c0550f5381e4387	Munição de Browning .30 recolhida.
+@8f83f8517c892f6f	Munição de Enfield recolhida.
+@8215ee91abbe9e06	Munição de G43 recolhida.
+@b445a1f9438ceaf9	Munição de Kar 98 recolhida.
+@7383ef929508fc9e	Munição de Mosin Nagant de atirador de elite recolhida.
+@f4dc6e0cad6fb9e4	Munição de Gewehr recolhida.
+@dd60284533a51785	Munição de Springfield recolhida.
+@55b551b5b4145d19	Munição de bazuca recolhida.
+@625f8321ef5adc13	Munição de Mosin Nagant recolhida.
+@84f45ec001b0f763	Munição de Panzerschreck recolhida.
+@3199acbbc6521d44	Grease Gun recolhida.
+@c6599b751075fbf3	Munição de M1 Garand recolhida.
+@fdfabffe1b9e4d2a	Granadas Mark 2 recolhidas.
+@987a464703c3992a	Granadas RGD33 recolhidas.
+@63f22c7159547885	Granadas ST74 recolhidas.
+@4d276afb4f11968a	Granadas de cabo recolhidas.
+@900d1c58a1be9d38	Minas Teller recolhidas.
+@bc51fb80c2f2a2d8	Granadas de fumaça recolhidas.
+@1ebd728425e4aa38	O urso é adorável.
+@e09b383ad781de56	O Kaiserbear é explosivo.
+@0e8431f25c2f3d60	O Stickybear é grudento... e explosivo.
+@a8d085d105f11872	PPSH recolhida.
+@49e6a0fa9ebab178	Luger recolhida.
+@615b46bb1a1173bf	Thompson recolhida.
+@d1c54776e3512f54	MP40 recolhida.
+@60244d7cc049dddb	Sten recolhida.
+@8c12a86e3614319e	BAR recolhido.
+@ca4bc59ff1fb3160	DPM recolhida.
+@b2ad0c154a690f65	MG42 recolhida.
+@40ffabcebb5a5cb6	Bren recolhida.
+@3f83cdfdd63b3008	Browning .30 recolhida.
+@d94a500a177280ec	Mosin Nagant recolhido.
+@d1307ac04266a5c2	Kar 98 recolhido.
+@b2269b7a4831d29a	M1 Garand recolhido.
+@7db8d8a6c7a07138	Springfield recolhido.
+@aa42305bbd6c64b0	Bazuca recolhida.
+@5194a436666c0ea6	Panzerschreck recolhido.
+@97a95a9e00c40d3a	Enfield recolhido.
+@f24b018815e7f2b5	G43 recolhido.
+@e5d4bf713c2cced1	Mosin Nagant de atirador de elite recolhido.
+@aacbab9d45f2eb12	Objetivos atualizados
+@7f088047be3376ca	Pressione $ac$ para encerrar a fase
+@4a3f2d5fa50902f9	Pressione $ac$ para usar a metralhadora fixa.
+@56184d98a6441db2	$ac$ é o seu botão de ação.
+@2d2c33b89e87060e	Quando o ícone Avançar aparecer...
+@54556f2cad856733	Vá até o mastro e pressione $ac$ para baixar a bandeira.
+@c7575f0639300230	Incline-se segurando o botão $am$ e o direcional para a esquerda ou a direita.
+@8a48044ce658bf98	Para usar armas com bipé, como a MG42, deite-se e use $af$ para abrir e recolher o bipé.
+@8cc1b82c8cfbf8be	Assegure o edifício.{Edifício assegurado.
+@9cbf1cd9cda048f2	Repila o ataque à metralhadora aliada.{Ataque repelido.
+@cfaec98be38a885c	Chegue ao bunker alemão.{Objetivo cumprido.
+@5f8e27019ac7bd75	Limpe a casamata da esquerda.{Casamata da esquerda limpa.
+@bcfa04c44eb12085	Limpe a casamata central.{Casamata central limpa.
+@c10aafd86878573f	Limpe a casamata da direita.{Casamata da direita limpa.
+@30f6abe0a5b5d4aa	Invada o bunker alemão.{Bunker tomado.
+@f4bdb54170b3046e	Pressione $ac$ para usar a metralhadora fixa.{Objetivo cumprido.
+@25f3aa0278595222	Derrube a bandeira nazista.{Bandeira retirada.
+@e0f50010100e7334	Pressione $ac$ com o ícone de porta para os aliados abrirem a porta.{Porta aberta.
+@44ded3113366f3ba	Segure $am$ para mirar ao usar a metralhadora fixa.{Objetivo cumprido.
+@dafc9023948a0278	Pressione $he$ para usar um kit médico do inventário.{Objetivo cumprido.
+@2ce2e95c4d4e1d5b	Pressione $ac$ perto de uma porta para abri-la.{Porta aberta.
+@c728a501f0c715ff	Abata soldados alemães para atrair o tanque. (Restam # de 8){Tanque alemão atraído.}Restam # de 8 soldados.
+@ecd87b6e96f53edc	Abata os soldados da escolta do tanque. (Restam # de 3){Escolta do tanque neutralizada.}Restam # de 3 soldados.
+@61ba703925057a91	Siga o Sd. Kirelenko.{Objetivo cumprido.
+@aef386ec4b0d0bdf	Use os túneis do esgoto para chegar à Fábrica de Tratores.{Você chegou à Fábrica de Tratores.
+@5d4ad73d8100da43	Use os túneis do esgoto para chegar à Fábrica de Tratores
+@7034da19cc03f141	Missão fracassada - O tanque foi destruído.
+@c1298f21400a17ad	Encontre o comissário na Fábrica de Tratores.{Comissário encontrado.
+@364183de2170453f	Defenda o tanque até a tripulação chegar. (Minutos restantes: #){A tripulação do tanque chegou.}Minutos restantes: #
+@93e00d6055108782	Resistência da porta esquerda: #%{Objetivo cumprido.
+@04ecd5d3c1f4be08	Resistência da porta centro-esquerda: #%{Objetivo cumprido.
+@5df0ea6ff4602213	Resistência da porta centro-direita: #%{Objetivo cumprido.
+@91f10fefd33b0b67	Resistência da porta direita: #%{Objetivo cumprido.
+@43f0c66d659ef68b	Apresente-se ao comissário no térreo.{Objetivo cumprido.
+@37d81a2333d1a826	Abata os alemães que atacam a tripulação. (Restam # de 3){Atacantes da tripulação eliminados.}Restam # de 3 atacantes.
+@2e14166f4cf23e5b	Trate o tripulante ferido do tanque.{Tripulante tratado.
+@56431cf2f72ff0ca	Suba no tanque.{Você subiu no tanque.
+@6645d4602eaaa031	Pressione $he$ para tratar o tripulante ferido.
+@f8ace3b246349dcd	Missão fracassada - O tanque foi destruído.
+@b7dec797351056da	Missão fracassada - O Sgt. Belinki foi morto.
+@ed1562eed49a20b0	Proteja o Sgt. Belinki enquanto ele conserta o tanque.{Reparos do tanque concluídos.
+@397bd708ffe43781	Apresente-se no QG do General Belov.{Você chegou ao QG do General Belov.
+@e477ff095c75c9e8	Destrua os blindados alemães que avançam sobre o QG.{Blindados alemães destruídos.
+@230c7488f1f9e7bb	Repila o ataque ao QG.{Ataque ao QG repelido.
+@0eaf0f5413ff7167	Receba ordens do General Belov.{Ordens recebidas.
+@c4aa8f899b9be887	Pegue o rádio de reserva.{Rádio recolhido.
+@c8169f0b6e8ce1c2	Volte ao seu tanque.{Objetivo cumprido.
+@26852acfa00a3b95	Leve o rádio aos observadores.{Objetivo cumprido.
+@87590475ecbee25d	Missão fracassada - O Sgt. Belinki está morto.
+@8095667f82dee4a2	Pressione $ac$ para pegar o rádio.
+@74e00a7847afe397	Elimine os metralhadores das janelas. (restam # de 6){Metralhadores eliminados.}Restam # de 6 metralhadores.
+@2bff44c0f1107040	Destrua todos os tanques inimigos.{Tanques inimigos destruídos.
+@7524729ed586c0cb	Derrube as portas da estação ferroviária.{Portas da estação ferroviária destruídas.}Derrube as portas da estação ferroviária.
+@caaf1d89bc4d70c6	Entregue o rádio aos observadores.{Rádio entregue.
+@7a258576fc5e4f3a	Siga para a estação ferroviária.{Chegou à estação ferroviária.
+@965832d61d8855c8	Retome a Praça Vermelha.{Praça Vermelha retomada.
+@19928b9a4a129d9f	Derrube as portas da estação ferroviária.
+@49144afc580d0862	Repila os bombardeiros Stuka (restam # de 6).{Os bombardeiros Stuka estão recuando.}Restam # de 6 Stukas.
+@33c5cf8de9cb1a5e	Rompa o perímetro da base inimiga.{Perímetro rompido.
+@5b84544875744a39	Siga até a área do quartel do portão leste.{Área do quartel alcançada.
+@87e96b985be1049d	Destrua as unidades blindadas inimigas (restam # de 3).{Todas as unidades blindadas inimigas destruídas.}Restam # de 3 unidades blindadas.
+@ca6880c03f69aca6	Siga os camaradas até o interior do armazém.{Você entrou no armazém.
+@d0ef20a295e8a457	Elimine os antitanques escondidos no andar de cima (restam # de 4).{Ameaça antitanque eliminada.}Restam # de 4 antitanques.
+@af16c80a61c0db55	Procure documentos de inteligência 
+@2d103a825ff66961	Destrua os aviões na área dos hangares (restam # de 9).{Todos os aviões da área dos hangares destruídos.}Restam # de 9 aviões.
+@faed36f49339e5a3	Siga até o aeródromo principal.{Aeródromo principal alcançado.
+@8565c6850bcb769b	Avance até o extremo norte do aeródromo.{Extremo norte do aeródromo alcançado.
+@0b796df4d2a40002	Encontre os camaradas perto da torre de controle.{Camaradas encontrados.
+@37086291b3e70bd8	Tome a torre de controle.{Torre de controle tomada.
+@9110cea2509d81ec	Procure documentos de inteligência.{Documentos obtidos.
+@95556a3046f0235e	Pressione $ac$ para pegar os documentos de inteligência.
+@9b9ac7f5fc182e31	Junte-se aos outros tanques no depósito ferroviário.{Depósito ferroviário alcançado.
+@76878f7513b981ed	Avance até a área dos hangares.{Área dos hangares alcançada.
+@67f6a058aac4473d	Proteja o posto de comunicações.{Posto de comunicações protegido.
+@87beb3fe18d430bc	Coloque a carga de C4 no gerador.{Carga de C4 colocada.
+@c8a7c56c6e818b51	Objetivos
+@cffab07c0fcc58ca	Pressione $ue$ para lançar uma bomba adesiva.
+@5f3d59d74916f234	Infiltre-se na cidade de Matmata
+@1a6b2d03cea51a6b	Elimine as equipes de metralhadora. (restam # de 3){Equipes de metralhadora eliminadas.}Restam # de 3 equipes de metralhadora.
+@3b44fc0e844d7942	Destrua o tanque Panzer.{Tanque Panzer destruído.
+@e376b51aebdcebab	Encontre e capture o QG alemão.{QG capturado.
+@bfbf71e100b00a3b	Coloque a carga de C4 para destruir a antena.{Antena destruída.
+@ec921eb323d3caed	Capture a fortaleza.{Fortaleza capturada.
+@644455d3dba4d81d	Elimine os defensores alemães do portão.{Área do portão liberada.
+@1dbe504779d709d6	Encontre e proteja o gerador principal.{Gerador principal protegido.
+@677543e3d078523e	Infiltre-se na cidade de Matmata:Você se infiltrou na cidade
+@587987ab9107280f	Você se infiltrou na cidade
+@b41dfaff3cc5677b	Neutralize a patrulha alemã:Patrulha neutralizada
+@59077326c69d5af6	Patrulha neutralizada
+@de7a5527b28d57ce	Chegue ao depósito de combustível.{Você chegou ao depósito de combustível.
+@f793419ec14df2ee	Destrua todos os depósitos de combustível. (restam # de 5){Todo o combustível destruído.}Restam # de 5 depósitos.
+@c42bc705fecea72c	Siga o Sgt. Starkey.{Objetivo cumprido.
+@cfe0b92d3ed4a9d7	Saia do depósito de combustível e suba no jipe.{Você subiu no jipe.
+@ec16c7f98141fe40	Pressione $ue$ para soltar uma mina Teller na frente do tanque.
+@8cf6a8dffffac203	Destrua todos os tanques. (restam # de 3){Tanques destruídos.}Restam # de 3 tanques.
+@508b0318804ce920	Proteja a entrada do depósito de combustível.{Entrada do depósito de combustível protegida.
+@0aa05585f118c36d	Exploda o depósito de combustível
+@9b5670851aa2dd90	Proteja o Sgt. Starkey enquanto ele abastece o jipe.{Jipe abastecido.
+@4122f1ea1c3b206c	Destrua o caminhão que bloqueia a estrada.{Caminhão destruído.
+@87361b6aa241e631	Elimine todos os soldados inimigos.{Soldados inimigos eliminados.
+@9c7dfc6ed72d6afa	Enfrente os inimigos até o jipe ser consertado.{Jipe consertado.
+@40e1ff64871bfc4b	Sobreviva até o jipe chegar ao destino.{Destino alcançado.
+@a46446950f306f3e	Entre no jipe.{Você está no jipe.
+@eb9e9312c8d534f1	O Sgt. Starkey foi atingido.
+@2d7a12b95a9c1a09	Objetivo fracassado.
+@00bd7dd0c42df6a7	O Sgt. Dehart foi atingido. Fique perto de Dehart.
+@5212bee47f3ce01f	Missão fracassada - O Sgt. Dehart foi morto.
+@cc2894c56e26d0a7	Coloque explosivos na entrada alemã.{Entrada destruída.
+@83f152de71fb5de1	Resgate o Sgt. Dehart da torre.{Sgt. Dehart resgatado.
+@d83688b81cef6e0d	Escolte o Sgt. Dehart e o Sd. Rowe até a cisterna. (Dehart deve sobreviver){Cisterna alcançada.
+@b39841f13624b401	Coloque explosivos na meia-lagarta alemã.{Meia-lagarta destruída.
+@8b60d7f13e014c93	Desça ao subterrâneo e resgate o Cb. Snyder, o cartógrafo.{Cb. Snyder resgatado.
+@23126a84f893f9ed	Proteja o Sgt. Dehart até os reforços chegarem. (Dehart deve sobreviver){Os reforços chegaram.
+@ebaf9d00660ab7a4	Missão fracassada - O Sgt. Dehart está morto.{Missão fracassada - O Sgt. Dehart está morto.
+@6076eb8b31d98045	Sgt. Dimitriy Petrov: É isso! A estação de trem. Derrube aquela porta para podermos entrar!
+@bf0bb5a76502f868	Sgt. Dimitriy Petrov: Abra caminho por essas portas, estamos expostos demais aqui fora!
+@dbb6342e3ef3b522	Sgt. Dimitriy Petrov: Nikolai, derrube as portas da entrada!
+@c9c67137d3e67dc6	Sgt. Dimitriy Petrov: Estamos quase lá, senhor. A estação de trem fica logo ali na esquina.
+@ed4b302bd95dcfb3	Sgt. Dimitriy Petrov: Infantaria alemã na varanda!
+@8e9a68e9ba20d98a	Sgt. Dimitriy Petrov: Certo, entramos. Saia e leve aquele rádio até nossos observadores. Eu fico com o tanque.
+@188a436502fa0d55	Com. Viktor Durasov: Bem-vindo a Stalingrado. Você está prestes a viver o maior momento da sua vida.  
+@f85c85226c79a0ea	Com. Viktor Durasov: Nem um passo atrás!  
+@e0def0c83d58f059	Com. Viktor Durasov: Covardes e traidores serão fuzilados!  
+@99940372a857bb62	Com. Viktor Durasov: Os alemães perderam centenas de tanques e aviões.  
+@f3d124347c7365d6	Com. Viktor Durasov: As hordas brutais de Hitler agora avançam sobre Stalingrado por cima de montanhas de seus próprios mortos.  
+@93f5fcb141f1f52e	Com. Viktor Durasov: Nosso Partido Bolchevique, nossa nação, nosso grande país nos deram a missão de não deixar o inimigo chegar ao Volga
+@0d8254097c28df79	Com. Viktor Durasov: Não vacilem! Não esmoreçam! Matem!
+@3ba8b18839251b8f	Com. Viktor Durasov: e de defender a cidade de Stalingrado.  
+@2ddfb135aa208025	Com. Viktor Durasov: Mate o alemão - este é o clamor da sua terra russa.  
+@3497547b56ea5e93	Com. Viktor Durasov: Avante contra o inimigo! 
+@c1623de963ecc104	Com. Viktor Durasov: Mate o alemão - esta é a prece da sua mãe.  
+@f60c9dee800d887c	Com. Viktor Durasov: Avante para a batalha sem trégua, camaradas, por Stalingrado, por nosso grande país!  
+@0f83acd13061ab6d	Com. Viktor Durasov: Não contem os dias, não contem os quilômetros, contem apenas o número de alemães que vocês mataram.  
+@ff0a4b25c9539643	Com. Viktor Durasov: Morte ao invasor alemão!
+@b72a6b07f864e3c6	Sgt. Oleg Puskov: Muito bem, camarada, você vem comigo! Preste atenção e siga minhas ordens, ou eu mesmo atiro em você!
+@cf534b7b57c61d46	Sgt. Oleg Puskov: Você, aqui!
+@876348bfdf25de9c	Sgt. Oleg Puskov: Venha rápido! Estão nos esperando na linha de frente!
+@32ddf158433df676	Sgt. Oleg Puskov: Os fascistas chegaram ao parque e estão prestes a cortar Stalingrado ao meio. Temos de detê-los a qualquer custo!
+@6301fc98dc8ba989	Sgt. Oleg Puskov: Pararam de bombardear os barcos. Estejam prontos para tudo!
+@e5fa44fc68062377	Sgt. Oleg Puskov: Se ouvir o assobio da artilharia chegando, a explosão não estará longe.
+@0052ab0574dc7d5c	Sgt. Oleg Puskov: Lá vem! Abaixem-se!
+@d52829f9a7c57eee	Sgt. Oleg Puskov: A artilharia parou! É a nossa chance! Vamos!
+@5c52f9602ac89c1d	Sgt. Oleg Puskov: Espere aqui! Fique perto de mim!
+@8d053ccd4316dffd	Sgt. Oleg Puskov: As metralhadoras voltaram a atirar!
+@d305339b363cfa1f	Sgt. Oleg Puskov: Agora! Andem!
+@3398a1866f77326e	Sgt. Oleg Puskov: Mexam-se!
+@6617cd5b8062b347	Sgt. Oleg Puskov: Vamos, andando!
+@155e41d84f2506e7	Sgt. Oleg Puskov: Vão, agora!
+@00982569d91706a8	Sgt. Oleg Puskov: Vão! Rápido!
+@9070c93679c83845	Sgt. Oleg Puskov: Estão atirando de novo! Abaixem-se!
+@919986bec499e54a	Sgt. Oleg Puskov: Cuidado! Metralhadoras atirando!
+@f251960b1f9b7f1a	Sgt. Oleg Puskov: Abaixem-se! Fogo inimigo!
+@1a68d2251aa76fac	Sgt. Oleg Puskov: Atenção! Eles recarregaram!
+@e9c8d18315153530	Sgt. Oleg Puskov: Protejam minha retaguarda enquanto eu limpo estes escombros!
+@f551e1dc6c452122	Sgt. Oleg Puskov: Explosivo! Afastem-se!
+@4e8e76cae4938ade	Sgt. Oleg Puskov: Por aqui, camaradas!
+@7fe41c4e6e9491c6	Sgt. Oleg Puskov: Sim, camaradas, vitória!
+@c2c1fdf90d4cb7c4	Sgt. Benny Church: Metralhadora!
+@010dc0fc1364d8db	Sd. Aleksandr Sokolov: Mais atiradores!
+@77d4c12f40eaea0b	Sd. Aleksandr Sokolov: Tanya, fique dentro da fábrica!
+@b46dd0df3a6e7c7c	Sd. Aleksandr Sokolov: Uma das portas acabou de ser destruída!
+@94d7384c73c3fd9f	Sd. Aleksandr Sokolov: Os alemães invadiram a fábrica! Protejam nosso tanque a qualquer custo!
+@0acbfecceb69b473	Sd. Aleksandr Sokolov: Metralhadora à direita!
+@2263a2ec72fcd28b	Sd. Aleksandr Sokolov: Lá está outro grupo de atiradores!
+@7117a81a503dc7fb	Sd. Aleksandr Sokolov: Panzerschrecks à direita! Tanya, acabe com eles!
+@2fed7bd740e9fe25	Sd. Aleksandr Sokolov: Mais Panzerschrecks à direita!
+@a742a2ed080c917e	Sd. Aleksandr Sokolov: Nossos camaradas precisam de ajuda no térreo!
+@ad2f141f547eadba	Sd. Aleksandr Sokolov: Panzerschrecks vindo pela direita!
+@179a5a7ec4a7797b	Sd. Aleksandr Sokolov: Estão vindo pelo lado direito!
+@6359b806c2b683f4	Sgt. Oleg Puskov: Você! Aqui! Pegue o fuzil dele!
+@ed28653cc09ff55a	Sgt. Bob Starkey: Vamos em frente!
+@4fb129ce04d038ac	Sd. Jerry Locke: Granada!
+@d0d080f21ab8cd13	QG alemão: Posto de Comunicações um, qual é a sua situação?
+@4df9bb4119103e53	Sgt. Bob Starkey: Prepare-se, Carlyle!
+@9f596d89551136e3	Sgt. Bob Starkey: Só estávamos caçando uns coelhos para o jantar.
+@dbcc46c8b60186c9	Sd. Jerry Locke: Estes fios devem levar ao posto de comunicações deles.
+@768f086520e50a25	Sd. John Bellomy: então volte para o seu Sherman e fique atento a um contra-ataque alemão.
+@7fa97f4eec442e09	Cb. Joe Robinson: Acabamos com a barreira. Agora vamos atravessar a cidade e bloquear a estrada do outro lado.
+@20ca53bebb068c91	Cb. Joe Robinson: Lá em cima! Panzerschrecks, primeiro andar!
+@1c6c326b6ed9bde2	Sgt. Ike Macoco: Os alemães podem nos atacar pela retaguarda se os deixarmos lá dentro. 
+@4a02a5f775480b9e	Cb. Joe Robinson: Isso aí! A estrada principal que atravessa Tillet está aberta.
+@f6082c4f10558c86	Sgt. Ike Macoco: Você vai ter que entrar e tirar esses desgraçados de lá! Alguns homens da 87 vão entrar com você.
+@c871309803c63396	Cb. Joe Robinson: Vamos ter que entrar lá para acabar com eles! Encontre um lugar para esconder o tanque.
+@c76db567c9e0aa7b	Sd. John Bellomy: Edifício limpo, sargento. A equipe de demolição vai levar alguns minutos para liberar aquela barreira,
+@c13646ddf4491205	Sd. William George: Nós damos cobertura, sargento. Vamos pegar esses chucrutes!
+@b2d954748b61696b	Sd. William George: Sargento, há um caminho que contorna a casa por aqui!
+@0e13705a5a24098e	Sgt. Sam Rivers: Hmmm. Isto pode ser útil.
+@2b3ae24b1845cef5	Sgt. Sam Rivers: Voltem ao tanque e estejam prontos para partir.
+@681db9bbc39b9558	Cb. Joe Robinson: Sam, os chucrutes estão preparando um contra-ataque.
+@5d44b2c692b58dbc	Cb. Joe Robinson: O que você vai fazer?
+@6353de7de4bbeace	Sgt. Sam Rivers: Quero ver se é fácil atirar com essa coisa!
+@6e5a758d2d55eb87	Cb. Joe Robinson: Estamos quase atravessando Tillet! Continuem em cima dos alemães e vamos tomar aquela estrada principal!
+@b8e89f8f2bb0ecfb	Sgt. Benny Church: Nossos homens estão encurralados! Temos que destruir aquelas torres ou estamos todos mortos!
+@c8ba8d7c09a804d8	Cap. Frank Kowalski: Tenente! Não dá para levar estes tanques pela ponte com esse maldito buraco no caminho!  
+@5aa63d35e7971c4a	Cap. Frank Kowalski: Atravesse com seus homens e tome esta ponte antes que os alemães a explodam!
+@3f75d855817fb433	Sgt. Benny Church: Você está louco? Vão nos massacrar!
+@be85753fc7bf4ed2	Cap. Frank Kowalski: Não é uma sugestão, é uma ordem direta! Avance ou eu mesmo o executo por traição!
+@177d8bb11c3910f4	Ten. Chuck Walker: Avançando!
+@a3f8097096fcef7f	Sgt. Benny Church: Uau! Graças aos céus!
+@9ab8e6bd044769f3	Cap. Frank Kowalski: Viram isso? A ponte continua de pé! Agora vão lá antes que eles tentem de novo! Andem! Andem! ANDEM!
+@3bdcb69bffb21622	Sgt. Benny Church: Senhor, por aqui!
+@fda5738d32dad4d7	Sgt. Benny Church: Tenente, temos que cortar os fios desta dinamite.
+@c934a4593cbe9739	Sgt. Benny Church: Devíamos fazer um reconhecimento à frente enquanto os tanques passam por aquele monte.
+@f636712fbc0cfd2d	Sgt. Benny Church: King Tigers! Protejam-se!
+@8361df35f4cbc69f	Sgt. Benny Church: Perdemos um tanque! Vamos ter que tirar aquelas minas da rua! Esperem uma brecha e desarmem-nas!
+@4ea251bea10c79f0	Sgt. Sam Rivers: Muito bem! Onde está aquela maldita ponte?
+@708064a7ecd6fd10	Sgt. Sam Rivers: Mostre o caminho!
+@de5ef3b925b07161	Ten. Chuck Walker: Só alguns quilômetros ao sul daqui.
+@8ff212197018604a	Sgt. Benny Church: Vamos ter que guiar os tanques por aqueles armazéns.
+@44d348e9e34bee2e	Sgt. Benny Church: Ei, sargento, por que é mesmo que estamos indo para essa cidade?
+@12ee746c14921f8c	Ten. Chuck Walker: Essa insígnia significa tenente, sargento Church,
+@a7dd8bb81ea26084	Ten. Chuck Walker: ou já esqueceu aquelas promoções em campo de batalha depois da nossa última missão?  
+@d815abe73ac55d24	Ten. Chuck Walker: Uma ponte sobre o rio Reno nos daria um caminho direto para levar tanques e homens para dentro da Alemanha.  
+@c069d30542a49563	Sgt. Benny Church: Kettenkrad! Protejam-se!
+@b4effd646ece7b05	Ten. Chuck Walker: Esses alemães não são tolos a ponto de deixar isso acontecer.
+@c0cd1b3ef090b449	Ten. Chuck Walker: Eu devia rebaixá-lo de volta a soldado raso...
+@088a182af6942cf6	Sgt. Benny Church: Desculpe, senhor, eu mesmo ainda estou me acostumando com a nova divisa. Então, para onde vamos?
+@c6acf99e345b6e83	Ten. Chuck Walker: Uma cidadezinha chamada Remagen.  
+@ee3851e6f3673499	Ten. Chuck Walker: O QG mandou fazermos um reconhecimento, já que havia uma velha ponte ferroviária atravessando o Reno.
+@6bc7697899787994	Ten. Chuck Walker: O problema é que os alemães têm o hábito de queimar todas as pontes que deixam para trás ao recuar para a pátria.
+@12d57efaa14eab10	Sgt. Benny Church: Então estamos procurando uma ponte que provavelmente nem está mais lá?
+@738f146028bf784a	Cb. Al Martin: Estamos prontos aqui, sargento. Tillet já vai estar enfraquecida quando vocês chegarem!
+@659a351363522a04	Cb. Joe Robinson: Já tiveram o bastante! Os alemães estão fugindo!
+@81fa4e003343c6e0	Cb. Joe Robinson: Vamos andando, Sam.
+@856855569b45d84e	Cb. Joe Robinson: Devíamos continuar seguindo para Tillet.
+@6170c5d1d74db125	Cb. Joe Robinson: Parece que há problemas pela frente.
+@3a6770fcaf3ac0a5	Cb. Joe Robinson: Blindados alemães se aproximando! Estão indo para a artilharia!
+@cc8067d459216416	Cb. Al Martin: Sargento Rivers, mantenha esses Panzers longe da nossa artilharia, ou não vamos conseguir atingir Tillet!
+@0ae2ee0627ac1b80	Cb. Al Martin: Sargento Rivers, vamos nos instalar aqui embaixo. Fique de olho nos chucrutes, pode ser?
+@2e4dd97e464cd98c	Cb. Joe Robinson: Posição de Flak 88 à frente! Fiquem fora da mira dela!
+@fe939fc647e06926	Cb. Joe Robinson: Flak 88 à frente! Fiquem fora da mira deles!
+@cb0dd049e0e47604	Cb. Joe Robinson: Panzers se aproximando!
+@1643fc5e992e7843	Cb. Joe Robinson: Tanques inimigos à frente!
+@bc66b2d6de477e52	Cb. Joe Robinson: Esses já eram, mas haverá mais à nossa espera quando atacarmos a cidade.
+@a7c6b8b6998f91eb	Cap. Frank Kowalski: Companhia Charlie, na escuta? Companhia Charlie, por favor, responda.
+@87aa9b566dda365b	Cap. Frank Kowalski: Rivers, aqui é o QG. O comando analisou o relatório de forças inimigas e as ordens são suspender o ataque a Tillet. 
+@e13e4883c8bc7fe2	Cap. Frank Kowalski: Não entre naquela cidade, sargento, o fogo lá dentro está pesado demais.
+@81940cccdd00b98e	Cb. Joe Robinson: Os alemães estão em retirada total! Estão abandonando Tillet!
+@f6f2a5f6773fb08d	Sgt. Sam Rivers: Trabalho dos diabos, pessoal. Agora os nazistas não recebem mais suprimentos para atacar Bastogne de jeito nenhum.
+@20ff5392a28cda08	Sgt. Sam Rivers: Aqui é o sargento Rivers, Companhia Charlie, câmbio.
+@034d7641bdece503	Sgt. Sam Rivers: Desculpe, senhor, já atravessei essa cidade!
+@9e50bd092d33e272	Cb. Joe Robinson: O ataque principal em Tillet começa assim que enfrentarmos estes alemães. Vamos pegá-los!
+@3b56b8bfb23e346c	Cb. Joe Robinson: Há dois canhões 88 no bloqueio da estrada. Temos que destruí-los antes que os engenheiros possam trabalhar.
+@66169c2a862c59a6	Cb. Joe Robinson: Há alemães escondidos naquele prédio. Vamos ter que limpá-lo antes de derrubar o bloqueio. 
+@720c1d9fe39d7088	Cb. Joe Robinson: Aposto que dá para deixar o tanque lá atrás e pegá-los de surpresa a pé.
+@f743ffa528137d43	Sd. William George: Vamos tirar esses alemães daqui!
+@9c5c24ea4479cc0d	Cb. Joe Robinson: É isso, rapazes! Tillet é nossa! Agora vamos até aquela estrada principal e fechá-la!
+@fdf206c15b23a451	Cb. Joe Robinson: Vamos eliminar esses tanques para avançar mais para dentro da cidade.
+@f16f0411ceb3e25b	Cb. Joe Robinson: Sam, fique de olho em mais blindados alemães patrulhando a área.
+@70ea54495c3e9f55	Cb. Joe Robinson: Vamos até aquela igreja. Se conseguirmos segurar os alemães lá, eles são nossos.
+@6b4944b1eb7997fe	Sd. Aleksandr Sokolov: Isto é horrível.
+@5cb46591d32770ff	Sd. Aleksandr Sokolov: Fique perto. Para sobreviver, temos que trabalhar juntos.
+@55025af42daf7cb2	Sd. Aleksandr Sokolov: Desça pela escada. A fábrica fica logo depois deste buraco na parede.
+@c4639a487f8f0867	Sd. Aleksandr Sokolov: É apertado, mas acho que todos conseguimos passar.
+@fb713a2fe1cafc21	Sd. Mikael Kirelenko: Comece respirando pouco de cada vez. Você vai se acostumar com o cheiro.
+@40ce1e4f49e1a6c2	Sd. Mikael Kirelenko: Há um túnel pequeno mais à frente. Você vai ter que se agachar para passar.
+@0049ab2b8439b5ef	Sd. Mikael Kirelenko: A trincheira que leva à fábrica deve estar por aqui em algum lugar.
+@f678f1f22c95f101	Sd. Aleksandr Sokolov: Tanque inimigo! Panzer IV! Afastem-se das janelas!
+@9b27d1cada0a06e2	Sgt. Fyodor Belinki: Obrigado, senhora, agora me sinto bem melhor.
+@fb69922b27ef3d16	Com. Sergei Konstantinov: A tripulação do tanque voltou. Fogo de cobertura!
+@50819e5b832933f8	Com. Sergei Konstantinov: Tome, pegue este kit médico.
+@6f18d5a580a739e1	Sd. Aleksandr Sokolov: Tanya, você está ferida. Pegue umas ataduras, eu cubro as janelas.
+@5c54df340df487ae	Ten. Nikolai Badanov: Pegue um kit médico e ajude este homem!
+@34a22e34cfe487d1	Sd. Aleksandr Sokolov: Tanya! O comissário precisa de nós lá embaixo, no andar térreo!
+@0c0bce09556fcf07	Ten. Nikolai Badanov: Subam no tanque, vamos partir.
+@cfd9e16724434538	Ten. Nikolai Badanov: Vamos sair daqui!
+@6cd7b014b1a60b4d	Sd. David Coen: QG, QG. Aqui é a Companhia Able.  
+@f489520446a7f1ba	Sd. David Coen: Temos confirmação de que a ponte de Remagen sobre o Reno está intacta.  
+@6daa680a30860d30	Sd. David Coen: Repito, a ponte de Remagen sobre o Reno está intacta. Câmbio.
+@b97ff42191ce2810	Sd. David Coen: Temos novas ordens. Devemos assegurar a ponte.  
+@453402fbd0827494	Sd. David Coen: O QG já enviou o 27º Batalhão de Infantaria Blindada.
+@bd0cf533d9eeb56c	Sgt. Benny Church: Senhor, é a ponte! A ponte ainda está de pé! Não acredito. Temos que avisar o QG!
+@bf7157e297c3db60	Sd. David Tuey: Excelente!
+@6391efc0bd8ad5dd	Sd. Jeffrey Peterson: Flanqueie-os! Vá pelo meio do forte! 
+@b4c723423d6fb581	Sd. Allen Rowe: Ei! Aqui em cima!
+@1ac00ddc4f9fa7c3	Sd. Jeffrey Peterson: Esses chucrutes estão entrincheirados! Temos que flanqueá-los!
+@5098826fb48ebee0	Sgt. Jack DeHart: Stukas! Abaixem-se! Abaixem-se!
+@e23db4f215525301	Cb. Harold Snyder: Já era hora de vocês aparecerem.  
+@b911105fdc9fed7f	Sgt. Jack DeHart: Bem, tivemos umas coisinhas para resolver no caminho.
+@e6dcbb0fee7a0e2a	Sgt. Bob Starkey: Ei! Carlyle! Você ia me deixar lá fora?
+@522a439edf24b0d4	Sgt. Jack DeHart: Nós nos separamos do Cartógrafo. Ele foi capturado e levado para o subsolo. Temos que salvá-lo!
+@9d80e6ba6535a1f7	Sgt. Jack DeHart: Meias-lagartas à frente! Entrincheirem-se!
+@cc564df8dc4f8345	Sgt. Jack DeHart: Estão por todo lado! Protejam-se!
+@43c39836c44f5c31	Sgt. Jack DeHart: Coloque uma carga naquela meia-lagarta. Ela está bloqueando o caminho!
+@58fd24201a43d75e	Sgt. Jack DeHart: Eles acabaram com nossos reforços!
+@99d6f11d49f9a3f1	Sgt. Jack DeHart: Temos que descer para o subsolo agora!
+@b0526003b680b80f	Sgt. Jack DeHart: Cuidado! Não consigo cobrir você daqui!
+@373609901f4e2cb2	Cb. Benny Church: O M12 acabou de ser atingido por um foguete!
+@e0448898d37b6d06	Cb. Benny Church: Estão atingindo o M12!
+@04a0d0912be25454	Cb. Benny Church: O M12 está sofrendo danos!
+@2382d37c246e6998	Cb. Benny Church: Os Panzerschrecks estão mirando no M12!
+@ba04239225ba87fa	Cb. Benny Church: Protejam o M12!
+@dcab95e663333963	Sgt. Benny Church: MG42!
+@9bf1f4a3755790dd	Cb. Benny Church: Menos dois Panzers!
+@ad540fc7b65f8509	Sgt. Chuck Walker: E lá vem a artilharia pesada. Isso não deve demorar.
+@941950c62e4a1a87	Cb. Benny Church: É isso! Eles estão se rendendo! Aachen é nossa!
+@0089161aaf7fe0dc	Cb. Benny Church: A primeira cidade alemã a cair! Agora eles estão fugindo, sargento! Aposto que vamos estar em casa no Natal!
+@31f73485bf0d4460	Sgt. Chuck Walker: Sei. Só acredito vendo.
+@2d07413632033f31	Sgt. Sabir Volok: Senhor, os fascistas se barricaram dentro da torre de controle!
+@0b3e4da5b3aca49d	Sgt. Dimitriy Petrov: Todos para fora do veículo!
+@74fdeaf1912bfd65	Sgt. Dimitriy Petrov: A estrada está bloqueada. Daqui em diante, vamos a pé.
+@b926202a4366a7f4	Sgt. Sabir Volok: Metralhadoras!
+@d54789c81e2652fc	Sgt. Fyodor Belinki: Camaradas! Ataquem!
+@675c2f7d1daa3ee9	Sgt. Oleg Puskov: Abra a porta! Eu cubro você!
+@622b80b09707914b	Sgt. Oleg Puskov: Dê o sinal para avançarmos.
+@30d7138586bf70e6	Sgt. Oleg Puskov: Mamaev Kurgan fica logo à frente. Mas primeiro temos que expulsar os alemães deste prédio.  
+@1470b2c9cdfa8d13	Sgt. Lev Kuznetsov: Camaradas! Precisamos consertar nosso tanque. Vamos parar no armazém para nos proteger.
+@e7a2726d14592eaf	Sd. Pyotr Batyuk: Este prédio está infestado de alemães. Temos que limpá-lo!
+@4830c3b531c41ea2	Sgt. Dimitriy Petrov: Também precisamos fazer uns reparos, major. Siga aquele tanque.
+@03c1819c7b78619f	Sgt. Fyodor Belinki: Ficou novinho em folha, vamos!
+@533e2f7792c814dc	Sgt. Viktor Gavrilov: A todas as unidades! Estamos encurralados por uma equipe antitanque! Não conseguimos chegar ao aeródromo até que alguém a elimine!
+@b1eb3ae9996691b8	Sd. Aleksandr Sokolov: Atire nos metralhadores antes que eles consigam montar a arma!
+@2c4a4d578205cc57	Sd. Aleksandr Sokolov: Aqui em cima! Os alemães estão vindo!
+@a6d7f2b8ce0dbd92	Sd. Aleksandr Sokolov: Tanya, rápido. A fábrica de tratores fica logo à frente!
+@93bda64ff6d9bf77	Sd. Aleksandr Sokolov: Morteiros chegando! Mantenham a cabeça baixa!
+@87ddd0c9b4fc3525	Sd. Aleksandr Sokolov: Não deixe que os foguetes dos Panzerschrecks arrombem as portas da fábrica!
+@9c96a8103035b033	Com. Sergei Konstantinov: Ótimo, você conseguiu. Precisamos de um atirador de elite agora mesmo.  
+@d931e085a1319697	Com. Sergei Konstantinov: Os alemães estão preparando outro ataque à fábrica.  
+@75289cf418784824	Com. Sergei Konstantinov: Precisamos contê-los até a tripulação do tanque chegar.
+@0e56194e07f42d86	Sd. Aleksandr Sokolov: Panzerschrecks à esquerda! Tanya, acabe com eles!
+@7ebf982b418bb324	Sd. Aleksandr Sokolov: Mais Panzerschrecks à esquerda!
+@1c176e2a2e203598	Sd. Aleksandr Sokolov: Metralhadores alemães! Vindo pela esquerda!
+@45dd237c9b26e150	Sd. Aleksandr Sokolov: Panzerschrecks! Flanco esquerdo!
+@f4a844c4214a581a	Sd. Aleksandr Sokolov: Tanya! Alemães à esquerda!
+@76a0ad6fc1badb49	Sd. Aleksandr Sokolov: Os alemães estão dentro da fábrica!
+@bcbb4a854bc1d0f4	Sgt. Bob Starkey: Parece que estamos livres. Na mosca, Carlyle.
+@246b39b5b0962322	Sgt. Bob Starkey: Bem na hora! Entrem!
+@ae62e9f24295af27	Sd. Aleksandr Sokolov: Tanya! Mexa-se!
+@a99c43a9da197a1e	Sd. Aleksandr Sokolov: Não há como passarmos por aquele tanque.
+@8a7e5d38c8b21ccf	Sd. Mikael Kirelenko: Precisamos de ajuda! Os alemães estão avançando sobre nosso depósito de tanques, na antiga fábrica de tratores. Venha comigo!
+@bec9d20b8b771c75	Sd. Mikael Kirelenko: Temos que descer para os esgotos.
+@eaae945d1de44a8d	Sgt. Oleg Puskov: Atirador de elite alemão! Cuidado, camarada!
+@73c84de5cce8d20e	Ten. Tanya Pavelovna: Aí está você!
+@9fccbafba76702d5	Ten. Tanya Pavelovna: Passei o dia todo caçando aquele desgraçado.
+@47c50a55c82c3cb9	Ten. Tanya Pavelovna: Leve os homens morro acima. Comece eliminando as metralhadoras naquelas casamatas.
+@51032da50927d816	Ten. Tanya Pavelovna: Fique nas trincheiras. Eu dou cobertura daqui.  
+@f6e7eb0ba3e1353c	Ten. Tanya Pavelovna: Aquela bandeira nazista tem que cair!  
+@1748d9a970d29bac	Ten. Tanya Pavelovna: Sinto muito pela perda do seu sargento, camarada. Não deixaremos que o sacrifício dele seja em vão.
+@99f4e80c2a330ee9	Ten. Tanya Pavelovna: Tenho uma nova tarefa para você.
+@b5518f1fd45e7c29	Ten. Tanya Pavelovna: Os fascistas estão usando a vista daquele bunker para pedir ataques de artilharia por toda a cidade.
+@3318842d70de9080	Ten. Tanya Pavelovna: Não vamos retomar Stalingrado se não controlarmos aquele bunker!
+@9da44f7a4a5bed56	Sgt. Oleg Puskov: Cuidado com aquela casamata!
+@a6d3bdf605943061	Sgt. Oleg Puskov: Use o fuzil para derrubar o atirador daquela casamata!
+@a31c48b3ec0f7124	Sgt. Oleg Puskov: Você! Vá para a metralhadora!
+@39c39b6a1c2ab259	Sgt. Oleg Puskov: Lá está o parque! Rápido, camaradas, montem a metralhadora nesta janela!
+@42753888a24eefff	Sgt. Oleg Puskov: Camarada! Assuma a metralhadora!
+@8894bfe6350da999	Sgt. Oleg Puskov: Rápido! Use a metralhadora!
+@9047d8d491ccfb4b	Sgt. Bob Starkey: Elimine o atirador daquela torre!
+@4c2228171261b051	Sgt. Bob Starkey: Rápido, atire!
+@3a8f78a4c63e575f	Sgt. Bob Starkey: Stukas chegando!
+@a0c5c2d7fbe20ad0	Sgt. Bob Starkey: Vamos, liga! Liga!
+@13fdc6ab6213dea1	QG: Starkey, destacamento inimigo às 12 horas! Destrua-o a qualquer custo antes de prosseguir!
+@839eeed3b22a5487	QG: Cuidado! Avistamos Panzers indo na sua direção!
+@8f03cce7f75232d0	QG: Comboio de suprimentos carregado de munição logo à frente! Destrua esses caminhões e vamos dar um show de fogos de artifício para o Fritz!
+@8ea50d0570181013	QG: Starkey, nossos homens precisam de apoio. Dê fogo de cobertura e destrua qualquer veículo inimigo.
+@f73dd36f53827e19	Sgt. Bob Starkey: O melhor da engenharia ianque.
+@65b3ad9b35c04656	Sgt. Bob Starkey: Droga!
+@3a4ad026e93f977b	Sgt. Bob Starkey: Ao ataque!
+@f645a46749932377	Sgt. Bob Starkey: Segurem-se! Curva fechada à frente!
+@a734107b713227da	Sgt. Bob Starkey: Nem viu o que o acertou!
+@6fb0de11121ec05a	Sgt. Bob Starkey: Panzer!
+@d5fd9f7382090cb6	Sgt. Bob Starkey: Fogo inimigo!
+@96f37a61e5776dc9	Sgt. Bob Starkey: Acerte aquele caminhão!
+@3dcad5cecfcf2533	Sgt. Bob Starkey: Estamos livres!
+@4b491219ab13e2d6	Sgt. Bob Starkey: Maldição!
+@64dd1028d1eaef3e	Sgt. Bob Starkey: Continue atirando!
+@f7f92cc4d652beaa	Sgt. Bob Starkey: Segurem-se!
+@cf65107e7b149841	Sgt. Bob Starkey: Chegamos.
+@80ec6451225d33df	Sgt. Bob Starkey: Ah, não.
+@e4547e78b36087ff	Sgt. Bob Starkey: Isso não parece nada bom!
+@7d575c5dd273e6f6	Sgt. Bob Starkey: Lá vamos nós!
+@af7195d523ab1bf7	Sgt. Bob Starkey: Derrube-o!
+@68981331f9712729	Sgt. Bob Starkey: Mais uma dessas e estamos acabados!
+@47da8830e38f958a	Sgt. Bob Starkey: Opa!
+@974543d9939f6151	Sgt. Bob Starkey: Fique esperto, Carlyle.
+@d24a0de27416121e	Sgt. Bob Starkey: Temos que salvá-los. Aqueles rapazes encontraram um atalho pelo deserto que leva direto à porta dos fundos de Rommel!
+@38f456fbcb358b1c	Sgt. Bob Starkey: Fique de olhos bem abertos; não ficaremos sozinhos por muito tempo!
+@a08e6becaa14cb3f	Sgt. Bob Starkey: Você e eu vamos liderar o ataque. O resto dos homens nos alcançará no forte.
+@7d500c3c28b59563	Sgt. Bob Starkey: Proteja a minha pele enquanto eu abasteço o jipe!
+@1d5839fd739b9201	Sgt. Bob Starkey: Recebi uma mensagem pelo rádio de que alguns dos nossos velhos companheiros do Long Range Desert Group
+@286d2d35c39ca64b	Sgt. Bob Starkey: estão escondidos num velho forte, cercados por alemães.
+@64da95b29671c788	Sgt. Bob Starkey: Sugiro que se segure em alguma coisa!
+@1ca6d93fc6d99ce4	Sgt. Bob Starkey: Belo tiro, rapaz!
+@80e9f32bb3c1fe2a	Sgt. Bob Starkey: Ai, meu Deus.
+@602185fddfc5e2bd	Sgt. Bob Starkey: Entre! Entre!
+@3c258fdfc0a40849	QG: Starkey, avistamos os alemães avançando sobre a sua posição. Evite o contato e siga para o ponto de encontro!
+@f3653d7244753aa3	Sgt. Benny Church: Belo tiro, senhor! Aqueles Tigers nem souberam o que os atingiu.
+@fe551880f933879d	Sgt. Benny Church: Iaaah! A cavalaria chegou!
+@2b52ba7862065360	QG: Suas ordens são tomar o controle do aeródromo inimigo perto de Tatsinskya para impedir o reabastecimento do 6º Exército em Stalingrado. Esta é uma missão crucial, camaradas. Boa sorte.
+@63feea55e462db73	Maj. Nikolai Badanov: Corvo, aqui é o líder do pelotão, qual é a sua situação? Câmbio.
+@b9ac95066f50efcd	Ten. Vasiliy Kastrovanov: Líder do pelotão, aqui é Corvo. Nossos caminhões estão em posição; precisamos de 10 minutos para preparar os foguetes. Câmbio.
+@71982ff8bb2d5018	Maj. Nikolai Badanov: Mantenham as posições até...
+@73310f5ffedc33e5	Maj. Nikolai Badanov: Fomos vistos!  
+@d49bb4696ef5714c	Maj. Nikolai Badanov: Corvo. Não podemos esperar! Posicionem os foguetes agora! Nós cuidaremos daqueles bombardeiros!
+@9f8a983bac1949a6	Maj. Nikolai Badanov: Stuka! Stuka! Fogo inimigo! 
+@da516e1035ccf68a	Maj. Nikolai Badanov: Veja! Isto certamente vai chamar a atenção de muita gente. Vamos voltar ao quartel-general.
+@0265d25dce701815	Sgt. Dimitriy Petrov: Vamos reunir informações para o quartel-general.
+@71e70661bb33a0dd	Sgt. Dimitriy Petrov: Que bela fogueira vocês acenderam hoje, camaradas! Isso deve nos manter aquecidos durante boa parte do inverno.
+@1711b1484bfcca4e	Ten. Tanya Pavelovna: Muito bem, camarada. Parece que encontrei um novo observador.
+@4623faedba52abfb	Sd. William George: É um contra-ataque pesado. Os alemães não querem mesmo entregar Tillet.
+@1913f28eb5a1b93a	Sd. John Bellomy: Bem, azar o deles.
+@31b801ef8990aa65	Sd. William George: Belo tiro, Sam! Os alemães nem souberam o que os atingiu! 
+@4d113922670732ea	Sgt. Sam Rivers: Prestem atenção, todos. 
+@82ade297de93499c	Sgt. Sam Rivers: Certo! Certo! Montem e acabem com eles!
+@9170a7e060e29ced	Cb. Al Martin: Sgt. Rivers, estamos sob fogo pesado!
+@d394d33ab77c2884	Cb. Joe Robinson: Sam, devemos garantir que a área lá embaixo esteja livre para a artilharia.
+@0b4ac1f471ff8213	Sgt. Sam Rivers: A tarefa de hoje é capturar Tillet e cortar a estrada que os alemães usam para abastecer o ataque a Bastogne.  
+@ffad452eac2f8672	Sgt. Sam Rivers: A força principal vai se dividir e seguir por rotas diferentes para cercar a cidade. Todos conhecem suas equipes. 
+@e49dbdbe91aba4b1	Sgt. Sam Rivers: Hoje estamos apoiando a 87ª, então cuidado com a infantaria debaixo das suas lagartas.  
+@d65cf4b073e27b2a	Sgt. Sam Rivers: Meu esquadrão vai escoltar os M12 até suas posições de tiro e depois entrar na cidade quando a artilharia os tiver amaciado.
+@fe7171d390235040	Sgt. Sam Rivers: O ataque principal começará quando meu grupo atingir a entrada leste da cidade. 
+@821b8f4eabd0013e	Sgt. Sam Rivers: Vamos em frente, e quando virem os alemães...
+@83d398d9ba318cba	Sgt. Oleg Puskov: É um ataque em massa. Eles estão indo direto para as metralhadoras. Conheço um caminho melhor; sigam-me!
+@26bbde691620129a	Sgt. Oleg Puskov: Espere aqui!
+@3732b825c5dfc4a9	Sgt. Oleg Puskov: Você ainda está vivo, camarada! Estou impressionado! Siga-me.
+@4de295aba71af945	Sgt. Oleg Puskov: Destruam as metralhadoras! Matem todos eles!
+@71ddca0155dcd607	Sgt. Oleg Puskov: Os invasores estão recuando!
+@1f6ac3454e420153	Sd. Aleksandr Sokolov: Eles nos viram!
+@cf2c2201a099b2f3	Sd. Aleksandr Sokolov: Este é um bom ponto de observação.
+@c6248237a8718fae	Sd. Aleksandr Sokolov: Você tem um tiro livre. O que está esperando?
+@71031742dd884122	Sd. Aleksandr Sokolov: Tanya, mexa-se!
+@d5c69907005d231e	Ten. Tanya Pavelovna: Uma explosão. Precisamos de algo que encubra o som do fuzil.
+@497cd6ebab803736	Sd. Aleksandr Sokolov: Ah.
+@b250e7bd8dcbf9a4	Ten. Tanya Pavelovna: E se eu abater alemães suficientes, eles vão mandar um tanque procurar por nós.
+@60378a3d64f9402f	Ten. Tanya Pavelovna: Então teremos que cobrir nosso sapador na rua para que ele possa colocar uma mina no caminho do tanque.
+@adf28cd35303abe7	Ten. Tanya Pavelovna: É agora. Tente sempre abater os oficiais primeiro.
+@d6fc7e71f790e20c	Ten. Tanya Pavelovna: Vamos mudar de posição.
+@03e4e8e247d7765f	Sd. Aleksandr Sokolov: Devemos ir para outra janela!
+@061cb69744dde24c	Sd. Aleksandr Sokolov: Este lugar parece bom.
+@e47b549bbdd4a62f	Sd. Aleksandr Sokolov: Eles ainda acham que estamos lá.
+@9df0d408517e019e	Sd. Aleksandr Sokolov: Tanya, cuidado com as costas!
+@7b261cb6c000644c	Sd. Aleksandr Sokolov: Cuidado atrás de você!
+@063918efa3d6063b	Sd. Aleksandr Sokolov: Eles nos perderam de vista.
+@55cd3ef4bcb2cc5d	Sd. Aleksandr Sokolov: Tanya, volte! Você precisa abater mais alemães
+@563bb8f3e5e59735	Sd. Aleksandr Sokolov: Chame a atenção deles.
+@47ee7489bed86151	Sd. Aleksandr Sokolov: Atraia aquele tanque até o nosso sapador.
+@fccb704bedd3e83a	Sd. Aleksandr Sokolov: Vem um tanque aí!
+@2a218d6349286cb9	Sd. Aleksandr Sokolov: O sapador, ele está agindo na frente do tanque!
+@8fead0ae7cfebb86	Sd. Aleksandr Sokolov: Atire nos alemães perto do sapador, ou ele nunca vai conseguir.
+@eab80fcfc9724bda	Sd. Aleksandr Sokolov: Os alemães estão perto demais do sapador. Elimine-os!
+@7a3de167cf8e2660	Sgt. Fyodor Belinki: Não deixem esses aviões decolarem!
+@2479bc6bb5938172	Sgt. Dimitriy Petrov: Vamos explodir alguns aviões! Em frente!
+@bef532dc79329f06	Sgt. Fyodor Belinki: Canhões antiaéreos à frente!
+@4404b11ff5ee192a	Sgt. Viktor Gavrilov: Atenção! Todas as unidades restantes, reagrupem-se no depósito ferroviário. Precisamos de mais tanques para romper as defesas do aeródromo.
+@72d656e937e4c2d6	Ten. Sasha Vidov: Atenção, todas as unidades. Precisamos de apoio na torre de controle. Câmbio.
+@6864e0182b4c9088	Sgt. Fyodor Belinki: Senhor, nossos camaradas precisam de ajuda!
+@8c25d6a67485eaf1	Sgt. Bob Starkey: Estamos sem tempo, temos que chegar àquele depósito!
+@bc515aa4f4e14ea4	Sgt. Bob Starkey: Agora, coloquem as cargas naqueles tambores de gasolina!
+@b7500241f87df818	Sd. Jerry Locke: Encontre algumas minas para podermos destruir aqueles Panzers!
+@0edb902231dcc9be	Sgt. Bob Starkey: Carlyle, exploda o combustível e vamos sair daqui!
+@438a9c646205b802	Sgt. Bob Starkey: Cuidado, porque este lugar vai pegar fogo!
+@57d8a8cd7dcf5998	Sgt. Dimitriy Petrov: Bombardeiros alemães! Ataque aéreo! Todos abaixados!
+@12fc0eac983d977b	Sgt. Fyodor Belinki: Sim, senhor.
+@71cbb9ff3c0a5768	Sgt. Dimitriy Petrov: Tomem posição! Protejam o tanque!  
+@06824fac92cd5f66	Sgt. Dimitriy Petrov: Fyodor, depressa!
+@177180094c14356b	Ten. Nikolai Badanov: Tanya, você e Aleksandr procurem um terreno elevado e vigiem o inimigo.
+@157ebd8edf48aa91	Ten. Nikolai Badanov: E Fyodor, vamos consertar aquele tanque agora.
+@051564dfae6d2626	Ten. Tanya Pavelovna: Problema no motor?
+@ff353f1b530b2fd5	Ten. Tanya Pavelovna: Faremos o que pudermos, Nikolai.
+@65ef486405d8c3ea	Ten. Tanya Pavelovna: Infantaria alemã!
+@253042044fcc77f9	Sgt. Dimitriy Petrov: Ele está vindo direto para nós! Protejam-se! Andem!
+@2f1e84a0e5833458	Sgt. Dimitriy Petrov: É um dos nossos! Vá atrás dele! Acabe com ele!
+@9985c3546f5a0705	Sgt. Dimitriy Petrov: Tanya! Ele está mirando em você! Saia daí!
+@5cca178c40e55e72	Sgt. Dimitriy Petrov: Nikolai! Depressa! Entre no tanque!
+@de3f58cd27675d32	Sgt. Dimitriy Petrov: Tanya? Tanya! Está me ouvindo? Talvez a tenhamos perdido.
+@77f4b867ed549140	Sgt. Fyodor Belinki: Está pronto, camaradas! Vamos!
+@da18e64cdd0d38e0	Ten. Tanya Pavelovna: Tanque inimigo! Panzer IV!
+@7b80f2b73455be2c	QG: Atenção, todos os comandantes de tanque. Saiam de Stalingrado para se reagrupar.  
+@b78c601f7cf1aa83	QG: Apresentem-se imediatamente ao quartel-general de comando.
+@6f4d9b64e347b91c	Sgt. Dimitriy Petrov: O quartel-general fica logo à frente, é melhor nos apressarmos!
+@01a7eca9c4af1249	Sgt. Dimitriy Petrov: Tanques alemães, Panzers IV!
+@49ca09d3be77664a	QG: Atenção, todas as unidades próximas! O quartel-general está sob ataque!  
+@d37440d61ffe2fed	QG: Repito: o quartel-general está sob ataque! Todas as unidades disponíveis, apresentem-se ao quartel-general imediatamente!
+@10d18000d5115df2	Sgt. Dimitriy Petrov: Parece que chegamos bem a tempo. Entre e receba nossas ordens. Eu cuido dos reparos.
+@914bd017134715e5	Gen. Leonid Belov: Tenente, a situação é grave.  
+@0b91839cef5dc77d	Gen. Leonid Belov: Temos contido o avanço alemão com os foguetes Katyusha.  
+@fc047db198379623	Gen. Leonid Belov: Porém, o rádio dos nossos observadores avançados parou de funcionar e não estamos mais recebendo coordenadas de tiro.  
+@2032a5cc18b65688	Gen. Leonid Belov: O último relatório deles dizia que os fascistas estavam concentrando blindados e se preparando para tomar este quartel-general.  
+@90335eb3e8a1aa55	Gen. Leonid Belov: Leve um rádio substituto até aquela torre antes que os alemães façam o próximo movimento.  
+@b12670e9a06a74c5	Gen. Leonid Belov: Dispensado.
+@9a116b522167391f	Gen. Leonid Belov: Os observadores estão na torre da estação de trem, do outro lado da Praça Vermelha.  
+@350b74b83d5065a0	Sd. Grigory Akhmatova: General Belov, senhor. O comandante de tanque, tenente Nikolai Badanov, quer vê-lo.
+@28197c3f608d86a9	Ten. Tanya Pavelovna: Boa sorte, camarada.
+@f4d56d2a4b10cc4f	Ten. Tanya Pavelovna: Que bom que você conseguiu, Nikolai. Aquele caça-tanques quase nos enterrou vivos.
+@95db64e6261fef63	Sgt. Dimitriy Petrov: O tanque está pronto, vamos.
+@8fdd1da2b6f9702c	Sgt. Dimitriy Petrov: Antitanque! Bem à frente!
+@fb42408606d9ef83	Sgt. Dimitriy Petrov: Tomamos a Praça. Vamos continuar avançando.
+@05b4ebb1625b1151	Sgt. Dimitriy Petrov: Panzers entrando do outro lado da praça!
+@7054a29acb9e6e0c	Sgt. Dimitriy Petrov: Certo, tenente, temos nossas ordens. Leve-nos até a estação de trem.
+@7800b9fab534c378	Sgt. Dimitriy Petrov: Elimine aqueles metralhadores naquele prédio!
+@c38441e09c175e4f	Sgt. Dimitriy Petrov: Avante! Eles estão fugindo.
+@fed0f13e58fdcbd3	Sgt. Dimitriy Petrov: Vamos ter que atravessar a Praça Vermelha para chegar à estação de trem.  
+@9fabbe58f5fd5be0	Sgt. Dimitriy Petrov: Fique de olhos abertos. Lá dentro é um maldito banho de sangue.
+@eb222972507685de	Sgt. Anna Posadskaya: Esses bombardeiros passaram o dia todo sacudindo este prédio.
+@6c29740077dfcbb6	Sgt. Anna Posadskaya: Aquela porta deve levar ao telhado. O posto de observação fica do outro lado. Boa sorte.
+@047b2a3c0f5e35d2	Sgt. Anna Posadskaya: Bem-vindo, tenente. Pegue o que precisar.
+@89c99cebbab3cf57	Sd. Konstantin Bagramyan: Ah, obrigado, o rádio novo. Daqui em diante é comigo, tenente.
+@a296cee3e67e1886	Sd. Konstantin Bagramyan: Aquela coluna de blindados alemães está prestes a se mover! Temos que transmitir as coordenadas de tiro agora!
+@484e6337444b20db	Sd. Konstantin Bagramyan: Isso! Tomem! Acerto direto! Aquela coluna blindada virou um ferro-velho!  
+@3a09275098553471	Sd. Konstantin Bagramyan: Obrigado, tenente. Que dia dos infernos. 
+@3d06e8d2479165a6	Sd. Konstantin Bagramyan: Novo alvo: ponto de tiro bravo, ângulo: 78 graus, distância: 100 metros. Confirme. Câmbio.
+@f45ce34b6e1ff81f	Sd. Zakhar Ivanov: Esse é o rádio novo? Ótimo, os observadores estão na torre, mas este lugar está infestado de alemães. 
+@268230c8d88ed21f	Sd. Zakhar Ivanov: Vamos ter que abrir caminho lutando, sala por sala!
+@8ac70a90e3e9c588	Ten. Vasiliy Kastrovanov: Líder do pelotão, aqui é Corvo. Todos os foguetes em posição.
+@65c8675906e0833d	Ten. Vasiliy Kastrovanov: Iniciar barragem de foguetes em 3, 2, 1. Fogo!
+@c151c775c13a7955	Sgt. Dimitriy Petrov: É o nosso sinal! Todas as unidades, ataquem a base inimiga!
+@08092bda3bf7a486	Sgt. Dimitriy Petrov: Todas as unidades, aproximando-nos da base inimiga. Os portões estão escancarados.
+@74b9b6a740bd6e28	Sgt. Dimitriy Petrov: Eles estão em apuros! Usem as metralhadoras!
+@d15ca22c9c66beb2	Sgt. Sabir Volok: Todas as unidades! Precisamos de ajuda! Nosso tanque está preso num armazém e os alemães estão em cima de nós!
+@303247076b4710c4	Sgt. Sabir Volok: Obrigado, camarada! Essa foi por pouco!
+@22490fa48e323c05	Ten. Vasiliy Kastrovanov: Líder do pelotão, aqui é Corvo. Foguetes em posição.
+@f7937a43baf22e0c	Ten. Vasiliy Kastrovanov: Barragem de foguetes começando em 3, 2, 1. Fogo!
+@ea2824108fef9362	Sgt. Dimitriy Petrov: Nossos camaradas romperam o portão leste!
+@cba95746cc2ca8ec	Sgt. Bob Starkey: Eu cuido da metralhadora da direita!
+@fb44ce4bc8de89ee	Sgt. Bob Starkey: Atacar!
+@dcc08e7ecdddd474	Sgt. Bob Starkey: Carlyle, use suas bombas adesivas naquele Panzer!
+@16b4b201ca973ec3	Sgt. Bob Starkey: A Tropa B vai levar os jipes para trás dos alemães e crivá-los com fogo de metralhadora.  
+@e812b1b7f8011a12	Sgt. Bob Starkey: Vamos.
+@b70491c47075392b	Sd. Jerry Locke: Cuidado com essas granadas, parceiro. Elas grudam em qualquer coisa!
+@eaaa8bba14c65090	Sgt. Bob Starkey: Atenção, rapazes! Os chucrutes montaram um esquema bem confortável nesta aldeia aqui.
+@f41b5ba98906a06b	Sgt. Bob Starkey: Nosso trabalho é destruir o máximo de equipamento possível e sair correndo antes que eles saibam o que os atingiu.
+@a9b16229d376dc11	Sgt. Bob Starkey: Vou levar a Tropa A pela cidade para derrubar as comunicações deles e queimar suas reservas de combustível.
+@2e0e775fb26a2fb2	Sgt. Bob Starkey: Carlyle, você é o homem dos explosivos. Vamos cobri-lo enquanto você instala as cargas de C4 com timer.
+@3342caf32c778e0d	Sgt. Bob Starkey: Temos que entrar e sair antes que tudo vire holofotes, sirenes e fuzis disparando.
+@0dd6e214457b6eb9	Sgt. Bob Starkey: Armas engatilhadas, miras prontas, e em frente!
+@084a96ed3e75a6d0	Sd. Jerry Locke: Eles estão fugindo!
+@aa6401d1c7f99ce4	Sgt. Bob Starkey: Diabos! Problemas!
+@820a1d719419c8f0	Sgt. Bob Starkey: Carlyle, use um pouco de C4 para derrubar aquela antena de rádio.
+@bd7bb761969969ef	Sd. Jerry Locke: Certo. Vamos proteger a área!
+@d87836739827ab24	Sgt. Bob Starkey: Temos que dar cobertura aos homens para que possam avançar.
+@1414c3aec20f08c6	Sgt. Bob Starkey: Avancem!
+@ac661f772aa5c298	Sd. Jerry Locke: Área limpa!
+@fd80158c5b4bfd80	Sgt. Bob Starkey: Coloque uma carga naquela antena.
+@b6a4aab552df8a83	Sd. Jerry Locke: Protejam a área!
+@72521bb814acd112	Sgt. Bob Starkey: Ding dong!
+@d62abee7dd57e38b	Sgt. Bob Starkey: Aquela fortaleza é encrenca. Vamos ter que limpá-la.
+@ea969cd61972c70d	Sgt. Bob Starkey: Coloque uma carga naquele gerador.
+@c06d9dfd901cdd87	Sgt. Bob Starkey: Vamos! A essa altura todo mundo já acordou!
+@b95f5698fa7ade31	Sgt. Bob Starkey: Muito bem, preparem-se para destruir e sair correndo!
+@1653b66612aa9358	Sgt. Bob Starkey: Ora, ora, alguém deixou umas minas terrestres em perfeito estado largadas por aí.
+@d38935f81de52e42	Sgt. Bob Starkey: Vamos ter que abrir caminho lutando até o depósito de combustível. Sigam-me e cuidado com mais Panzers.
+@3106899233dde0b3	Sgt. Bob Starkey: Quando esta última carga explodir, o Fritz vai ficar totalmente sem energia.
+@a950fabaae383b4c	Cb. Benny Church: Sargento, acho que estamos saindo.
+@4477c185b53866e8	Cb. Benny Church: O resto da coluna está esperando por nós.
+@31495abac03171fa	Cb. Benny Church: É a nossa brecha! Vamos entrar lá!
+@385b61132788b456	Cb. Benny Church: Temos que limpar este prédio!
+@08f4f1e978f19060	Sgt. Chuck Walker: Os alemães na praça da cidade estão isolados do seu comando e controle
+@b5579f76ce16917b	Sgt. Chuck Walker: É agora, vamos tomar Aachen hoje. 
+@e70434a5201a7e48	Cb. Benny Church: Esquadrão de Panzerschreck à frente! Temos que eliminá-los antes que os tanques possam avançar de novo!
+@32a39566ecc96f23	Cb. Benny Church: Mais Panzerschrecks! A coluna de tanques não pode avançar até abrirmos caminho!
+@27b0e83b1493f2db	Cb. Benny Church: Sargento! Temos que eliminar aqueles Panzerschrecks antes que atinjam a coluna!
+@5512943e8dc5c4df	Cb. Benny Church: Sargento! Temos que eliminar aqueles Panzerschrecks antes que atinjam a coluna de novo!
+@484ac84f5d1747a9	Cb. Benny Church: Antitanque alemão! Os Shermans não vão andar até eliminarmos aqueles nazistas!
+@284636a53536a76f	Sgt. Chuck Walker: mas aqueles prédios antigos são sólidos o bastante para resistir aos bombardeios.
+@562accb9bf0e6ebe	Sgt. Chuck Walker: As ordens são escoltar o M12 até a praça da cidade, limpando os prédios da resistência alemã pelo caminho.
+@510135ec10061324	Sgt. Chuck Walker: Assim que avistarmos a prefeitura, o M12 vai explodir aquela desgraça em pedaços.
+@205b684d7be1902a	Sgt. Chuck Walker: Fiquem bem atrás dos tanques para se cobrir, e protejam-nos das armas antitanque alemãs.
+@202a5897acefb5a5	Sgt. Chuck Walker: Se perdermos os Shermans, estamos todos mortos! 
+@92eb16eff12c4367	Sgt. Chuck Walker: Vamos montar e acabar com isso!  
+@d66cd55edce041d9	Sgt. Chuck Walker: Calma, Benny. Vamos derrubar todos eles!
+@95a21d7dec97ce84	Cb. Benny Church: Sargento, alguns desses prédios antigos são fortificados demais para os tanques derrubarem. O que vamos fazer com eles?
+@2db6c6b18d43896d	Cb. Benny Church: Sargento, a gente devia mesmo acompanhar os tanques.
+@64b0f17f4827b4b0	Cb. Benny Church: Aonde você vai? Fique atrás dos tanques!
+@0d0792dad1e37a10	Cb. Benny Church: Antitanque alemão! Último andar, bem à frente!
+@abfa11a23ab482a5	Cb. Benny Church: É melhor darmos uma olhada no porão.
+@bcfe2f5a90f83a44	Cb. Benny Church: Eles cavaram túneis entre os prédios.
+@58c6ec11cceae339	Cb. Benny Church: Aquilo era o teatro? Parece que vai ficar fechado por um tempo.
+@330a8e345f8500a4	Cb. Benny Church: Eles estão saindo dos esgotos!
+@bf34bad43ff218da	Cb. Benny Church: Os alemães estão usando os esgotos para nos flanquear. Vamos ter que descer lá atrás deles.
+@ecf886c1ea2a18f1	Cb. Benny Church: Sargento, é melhor descermos lá.
+@05a1e5863558eb7c	Cb. Benny Church: Não sei se isto é melhor ou pior do que estar lá em cima.
+@7e4995e6f6f3bc72	Cb. Benny Church: A coluna não pode avançar até limparmos os esgotos.
+@4b3c00630e7065ec	Cb. Benny Church: Sargento, temos que tirar os alemães destes esgotos.  
+@6d9e1a39b55eee0c	Cb. Benny Church: Devíamos explodir todas as escadas que levam aos bueiros para impedir que eles saiam. Use seus explosivos.
+@f2db196bf0a2a280	Cb. Benny Church: MG42! Elimine o atirador daquele ninho!
+@02c0f56f4f902c88	Cb. Benny Church: Os alemães estão encurralando alguns dos nossos rapazes!
+@1c55a08b196d9830	Cb. Benny Church: Nossa coluna de tanques não deve estar longe daquele ataque. Precisamos subir até o nível da rua!
+@fb8b331f4f30828b	Cb. Jason Barth: Ei. Valeu mesmo, amigo! Somos do Terceiro Batalhão.  
+@c085d2acca26d7f5	Cb. Jason Barth: Descemos aqui para impedir que aqueles ratos alemães saíssem dos esgotos, mas acho que eles levaram a melhor sobre nós por um tempo.
+@60b965aa22f8075c	Cb. Benny Church: Temos que achar o caminho de volta até os tanques.
+@e92165c886271499	Cb. Benny Church: Panzerschrecks! Eles vão destruir o M12 se não os detivermos!
+@c880af52d18a7b3f	Cb. Benny Church: Parece o primeiro batalhão, indo para o norte.
+@b14285deaabbf3f2	Cb. Benny Church: Ah, droga, é uma emboscada!
+@7486345cae7d1c30	Cb. Benny Church: Posição de tanques! Procurem cobertura!
+@0920631a404a6d37	Cb. Benny Church: Essas posições são fortificadas demais para os Shermans derrubarem. Temos que chegar por trás e neutralizá-las!  
+@f80bf22cbb491372	Cb. Benny Church: Sargento, se conseguirmos passar por aqui, aposto que podemos flanquear aquela posição de Panzers!
+@f83f53082de734ee	Cb. Benny Church: Aqueles Panzers estão entrincheirados e não vão sair dali!
+@c0052e0f2374791e	Sgt. Oleg Puskov: Agora! Tomem a refinaria!
+@ddd9b91a1e594b0e	Sgt. Oleg Puskov: Os fascistas estão aqui na refinaria!
+@e9f935925a60fb09	Sgt. Oleg Puskov: Temos que expulsá-los antes de chegarmos ao parque! Sigam-me!
+@dcbbcd1d23f7ffef	Sd. Allen Rowe: Obrigado, vamos em frente.
+@802e7ade5d363f25	Sgt. Bob Starkey: Graças aos céus, os reforços chegaram!
+@df1f19cd34d0feb7	Sgt. Bob Starkey: Prontos? Vamos!
+@0b0f3acb71eb242e	Sgt. Jack DeHart: Seja lá quem for, estou feliz em vê-lo!
+@a3427dd6a30a6b0d	Sgt. Bob Starkey: Carlyle, pegue estes explosivos e bloqueie aquela entrada.  
+@e7b0fd48f0b87dcc	Sgt. Bob Starkey: Os sujeitos que procuramos devem estar presos naquela torre lá longe.  
+@03e147b4395ea5c4	Sd. Jeffrey Peterson: Flanqueiem-nos pela esquerda!
+@b98cb59e143e49c3	Sd. Jeffrey Peterson: Precisamos de apoio na linha de frente!
+@9d356ac94cf1d7ca	Sd. Jeffrey Peterson: Vamos com você.
+@12adf4f4df8366cc	Sd. Jeffrey Peterson: Elimine aquele metralhador!
+@fbcbd76845146375	Sd. Jeffrey Peterson: Derrube o atirador naquela torre!
+@31aeddc5de00643a	Sgt. Bob Starkey: Vamos ter que nos separar. Eu vou pela esquerda, você fica pela direita.

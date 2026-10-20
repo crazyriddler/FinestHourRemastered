@@ -964,36 +964,44 @@ float2 Hurt(float2 uv, float h, float t) {
     uv += float2(sin(uv.y * 23.0 + t * 7.0), sin(uv.x * 17.0 * aspect + t * 5.0)) * 0.0025 * h;
     return uv;
 }
-// A shot's flash's shadow at P (view space): the way from P to the flash traced through the world's depth (t1, kept
-// before the weapon in hand was drawn), on the screen. Something solid in between, nearer the eye than the ray and
-// not far behind its front (a soldier, a column, not the wall the ray runs along), shades P. The last stretch, by the
-// flash itself (the weapon firing, the hands), does not count. Soft: the samples' cover averaged with the nearer ones
-// weighing more.
-float FlashShadow(float3 P, float3 C, float2 uv0) {
-    const int n = 24;
-    float dither = Hash(uv0 * p[2].xy) * 0.4 + 0.3;
-    float shade = 0, total = 0;
-    float thick = 70 + length(C - P) * 0.08;
-    for (int s = 0; s < n; s++) {
-        float t = (s + dither) / n;
-        if (t > 0.85) break;
+// A light's shadow at P (view space): the way from P to the light C traced through the world's depth (t1, kept
+// before the weapon in hand was drawn), on the screen. Something solid in the way, nearer the eye than the ray and not
+// far behind its front (a soldier, a column, not the wall the ray runs along), shades P wherever it lies on the way:
+// the shadow is the most the way is covered at any of its samples (a soldier's legs are a short stretch of a long way;
+// covered stretches averaged over the whole way left them almost no shadow). Its source does not count: what is within
+// src of the light (the gun firing a flash and the hands holding it; a fire's burning heap), and for the eye's own
+// flash what is nearer than its muzzle. The samples: about one each 6 pixels of the way on the screen, 16 to 48,
+// moved along it by the pixel; the cover fades in over the depth gap, and the shadow keeps a little of the light.
+float LightShadow(float3 P, float3 C, float2 uv0, float src) {
+    float dist = length(C - P);
+    float stop = 1 - src / max(dist, 1);  // the way up to the source's own reach
+    if (stop <= 0) return 1;
+    float2 a = float2(P.x / P.z / p[0].x, -P.y / P.z / p[0].y);
+    float3 E = P + (C - P) * stop;
+    float2 b = float2(E.x / max(E.z, 1) / p[0].x, -E.y / max(E.z, 1) / p[0].y);
+    int n = clamp((int)(length((b - a) * 0.5 * p[2].xy) / 6), 16, 48);
+    // (interleaved gradient noise: a shadow's edge in an even fine pattern, not grain)
+    float2 px = floor(uv0 * p[2].xy);
+    float dither = frac(52.9829189 * frac(dot(px, float2(0.06711056, 0.00583715)))) * 0.8 + 0.1;
+    float thick = 70 + dist * 0.08;
+    bool eyeflash = length(C) < 250;
+    float cover = 0;
+    [loop] for (int s = 0; s < n; s++) {
+        float t = (s + dither) / n * stop;
         float3 X = P + (C - P) * t;
         if (X.z <= 1) break;
         float2 q = float2(X.x / X.z / p[0].x * 0.5 + 0.5, 0.5 - X.y / X.z / p[0].y * 0.5);
         if (any(q < 0) || any(q > 1)) break;
         float zs = ViewZ(occ.SampleLevel(pnt, q, 0));
         float gap = X.z - zs;
-        float w = 1 - t * 0.5;
-        total += w;
-        // what is in the way by the flash itself is the gun firing it (a mounted MG42's sights, the shooter's hands):
-        // no shadow from it, else it throws a dark blot down the line of fire
         float3 O = float3((q.x * 2 - 1) * p[0].x * zs, (1 - q.y * 2) * p[0].y * zs, zs);
-        bool own = length(C) < 250 && zs < C.z + 10;  // the eye's own flash: nothing nearer than its muzzle
-        if (length(O - C) < 140 || zs < 60 || own) continue;
+        // (the eye's own flash: nothing nearer than its muzzle; nothing by the eye itself)
+        if (zs < 60 || (eyeflash && zs < C.z + 10) || length(O - C) < src) continue;
         float bias = 4 + X.z * 0.004;
-        shade += w * smoothstep(bias, bias * 2.5, gap) * (1 - smoothstep(thick * 0.7, thick, gap));
+        cover = max(cover, smoothstep(bias, bias * 2.5, gap) * (1 - smoothstep(thick * 0.7, thick, gap)));
+        if (cover > 0.99) break;
     }
-    return total > 0 ? 1 - smoothstep(0.1, 0.45, shade / total) * 0.95 : 1;
+    return 1 - cover * 0.9;
 }
 
 // The glowing sprites' lights (d3d12.cpp DynLightConstants: view space position and radius, colour): on the world
@@ -1029,7 +1037,8 @@ float3 Glow(O i, float3 c) {
         float ndl = saturate(dot(N, L * rsqrt(max(d2, 1e-4)))) * 0.8 + 0.2;
         float lit = 1;
         bool casts = lcol[k].w > 0.75;
-        if (casts && now >= 1) lit = FlashShadow(P, C, i.uv);
+        // (its source left out: a shot's flash's gun and hands, 60 cm; a fire's (0.875) burning heap, a metre)
+        if (casts && now >= 1) lit = LightShadow(P, C, i.uv, lcol[k].w < 0.95 ? 100 : 60);
         // the lights that cast (the shots' flashes, fires, big lights) reach further with their strength: what they
         // light at a middle distance stands out from what they leave in shadow
         float fall = casts ? f * f / (1 + 2 * q) * 1.6 : f * f / (1 + 6 * q);

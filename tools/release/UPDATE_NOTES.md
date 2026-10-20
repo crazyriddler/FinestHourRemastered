@@ -55,6 +55,9 @@ The version installed is in `version.txt` beside the game. Unattended:
 - More crashes fixed (a fault in RenderWare's frames or memory blocks, at any point of play): the turns above were
   taken by the wrong thread. The game's main thread is not the one the XBE starts with (that one only starts main's
   thread and ends), so main and the loading thread still ran at once. Now main's thread takes the turns.
+- Muzzle Flash Shadows: soldiers and things by a shot or a fire cast their whole shadow, not only below the
+  knees: anything in the way shades now, only the gun firing (or a fire's own heap) is left out. The shadows' edges
+  are smooth, with no extra cost.
 - A freeze fixed (Airfield Ambush coming out of the hangar after the planes, and elsewhere while playing): the
   loading thread, now taking turns with the game's main thread, waited in a loop for the main thread to let go of
   what it was loading, holding its turn all the while. It gives its turn up while it waits.

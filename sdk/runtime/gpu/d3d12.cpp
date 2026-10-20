@@ -902,15 +902,10 @@ private:
         D3D_PRIMITIVE_TOPOLOGY topo;
         D3D12_GPU_VIRTUAL_ADDRESS vc, dc;
         D3D12_GPU_DESCRIPTOR_HANDLE srv, smp;
-        ID3D12PipelineState* cover;  // the same draw's opacity (veil_cover_ps_), null when it has none
     };
     std::vector<VeilDraw> veil_;
     uint64_t veil_gen_ = 0;
     uint64_t veil_ps_ = 0;
-    // the smoke's cover (DrawVeil, after the occlusion's blur: scene_[2] is free until the frame's end): how much of
-    // what is behind it the see-through draws hide, for the dynamic lights (SceneFinal's t7); the frame it was drawn
-    uint64_t veil_cover_ps_ = 0;
-    uint64_t veil_cover_frame_ = ~0ull;
     std::unordered_map<uint64_t, uint32_t> lit_ids_;
     uint64_t targets_version_ = 0;
     // the draw before's keys and what they found (EnsureStageSamplers, EnsurePipeline, the pixel key's hash)
@@ -2490,7 +2485,6 @@ uint64_t VertexRecipeId(uint64_t vkey, uint8_t variant) { return variant ? Hash(
 constexpr uint64_t kShadowAlphaId[2] = {0x5AD0A1FA00000000ull, 0x5AD0A1FA00000001ull};
 constexpr uint64_t kMaskId = 0x5AD0A1FA00000002ull, kVeilId = 0x5AD0A1FA00000003ull;
 constexpr uint64_t kTopWaterId = 0x5AD0A1FA00000004ull, kTopCoverId = 0x5AD0A1FA00000005ull;
-constexpr uint64_t kVeilCoverId = 0x5AD0A1FA00000006ull;
 
 constexpr uint32_t kVertexTag = 'V', kPixelTag = 'P', kBuildTag = 'B', kPassTag = 'S';
 struct VertexRecipe {
@@ -2556,18 +2550,6 @@ float4 main(VOut i) : SV_Target {
     float2 uv = i.tc0.xy / (i.tc0.w == 0 ? 1 : i.tc0.w);
     // (wherever any smoke is seen, nothing of the corners' shade behind it shows; only its quad's empty edge not)
     return smoothstep(0.004, 0.035, tex0.Sample(smp0, uv).a * saturate(i.d0.a)).xxxx;
-}
-)";
-}
-
-// the smoke's cover (DrawVeil, scene_[2]): a see-through draw's opacity as drawn, gathered as the veil's (o + a (1 - o))
-std::string VeilCoverPixelHlsl() {
-    return DrawHlslHead() + R"(
-Texture2D tex0 : register(t0);
-SamplerState smp0 : register(s0);
-float4 main(VOut i) : SV_Target {
-    float2 uv = i.tc0.xy / (i.tc0.w == 0 ? 1 : i.tc0.w);
-    return saturate(tex0.Sample(smp0, uv).a * saturate(i.d0.a)).xxxx;
 }
 )";
 }
@@ -2725,7 +2707,6 @@ void D3D12Backend::LoadShaderCache() {
     shadow_alpha_ps_[1] = FixedShader(kShadowAlphaId[1], ShadowAlphaHlsl(true), "main", "ps_5_0");
     mask_ps_ = FixedShader(kMaskId, "float4 main(float4 pos : SV_Position) : SV_Target { return 1; }", "main", "ps_5_0");
     veil_ps_ = FixedShader(kVeilId, VeilPixelHlsl(), "main", "ps_5_0");
-    veil_cover_ps_ = FixedShader(kVeilCoverId, VeilCoverPixelHlsl(), "main", "ps_5_0");
     // the top view's (Water Interaction): the water's height; what crosses it, how far up the slab about the water's
     // height (tdp.x below, tdp.y above) it reaches
     top_water_ps_ = FixedShader(kTopWaterId, "float4 main(float4 pos : SV_Position, float wy : TEXCOORD0) : SV_Target { return wy; }",
@@ -6785,10 +6766,6 @@ void D3D12Backend::RecordVeil(const State& s, const Assembled& a, const DrawShad
     }
     VeilDraw v{};
     v.pso = pso;
-    if (veil_cover_ps_) {
-        key.ps = veil_cover_ps_;
-        v.cover = EnsureShadowPipeline(key);
-    }
     v.vb_count = a.buffer_count;
     std::memcpy(v.vb, last_vbv_, sizeof(D3D12_VERTEX_BUFFER_VIEW) * a.buffer_count);
     v.indexed = a.index_count != 0;
@@ -6834,35 +6811,8 @@ void D3D12Backend::DrawVeil(Target& ds) {
             cl_->DrawInstanced(v.count, 1, 0, 0);
         }
     }
-    Transition(scene_[1].Get(), scene_state_[1], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    // the same draws' opacity, on a cleared target: the smoke's cover for the dynamic lights
-    if (scene_[2]) {
-        Transition(scene_[2].Get(), scene_state_[2], D3D12_RESOURCE_STATE_RENDER_TARGET);
-        D3D12_CPU_DESCRIPTOR_HANDLE ch = SceneRtv(2);
-        const float zero[4] = {};
-        cl_->ClearRenderTargetView(ch, zero, 0, nullptr);
-        cl_->OMSetRenderTargets(1, &ch, FALSE, &dh);
-        bound = nullptr;
-        for (const VeilDraw& v : veil_) {
-            if (!v.cover) continue;
-            if (v.cover != bound) SetPso(bound = v.cover);
-            cl_->SetGraphicsRootConstantBufferView(0, v.vc);
-            cl_->SetGraphicsRootConstantBufferView(1, v.dc);
-            cl_->SetGraphicsRootDescriptorTable(2, v.srv);
-            SetSamplerTable(v.smp);
-            cl_->IASetVertexBuffers(0, v.vb_count, v.vb);
-            SetTopology(v.topo);
-            if (v.indexed) {
-                cl_->IASetIndexBuffer(&v.ib);
-                cl_->DrawIndexedInstanced(v.count, 1, 0, v.base, 0);
-            } else {
-                cl_->DrawInstanced(v.count, 1, 0, 0);
-            }
-        }
-        Transition(scene_[2].Get(), scene_state_[2], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-        veil_cover_frame_ = presents_;
-    }
     veil_.clear();
+    Transition(scene_[1].Get(), scene_state_[1], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     bound_rt_ = bound_ds_ = nullptr;
 }
 
@@ -9246,20 +9196,7 @@ void D3D12Backend::SceneFinal(Target& rt, const float p[16], bool bloom, bool ra
     grade_cb_[13] = fog_done_ ? fog_tint_[0] : 0, grade_cb_[14] = fog_tint_[1], grade_cb_[15] = fog_tint_[2];
     grade_cb_[11] = fog_done_ ? 1.0f : 0.0f;
     std::memcpy(cb.cpu + kGradeAt * sizeof(float), grade_cb_, sizeof(grade_cb_));
-    // t7: the smoke's cover (DrawVeil), when drawn this frame; the scene draws' table back after
-    {
-        uint32_t vslot = AllocSrvSlots(3);
-        D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
-        sv.Format = DXGI_FORMAT_R8_UNORM;
-        sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-        sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        sv.Texture2D.MipLevels = 1;
-        ID3D12Resource* cover = veil_cover_frame_ == presents_ ? scene_[2].Get() : nullptr;
-        for (uint32_t i = 0; i < 3; i++) dev_->CreateShaderResourceView(i == 0 ? cover : nullptr, &sv, Cpu(srv_heap_.Get(), vslot + i, srv_inc_));
-        cl_->SetGraphicsRootDescriptorTable(4, Gpu(srv_heap_.Get(), vslot, srv_inc_));
-    }
     DrawFullScreen(pso, cb.gpu, slot);
-    if (sun_table_.ptr) cl_->SetGraphicsRootDescriptorTable(4, sun_table_);
     Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
     bound_rt_ = bound_ds_ = nullptr;
 }

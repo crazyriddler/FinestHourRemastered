@@ -83,6 +83,8 @@ The version installed is in `version.txt` beside the game. Unattended:
   textures and animations. On by default; PC Settings, Graphics, Remastered Models.
 - Remastered Models: the textures now sit on the new shapes exactly as on the original models (in the first
   version of this update some were slightly warped where the shapes curve, like the grooves on the PPSh).
+- Remastered Models: no more gaps between pieces of the scenery where the sky showed through (the rocks of
+  level 17, the boards over a window in level 4): each model's open edges stay exactly where they were.
 - Crash fixed: Road to Remagen, the small passage around the large building half-way through (it also crashed
   there on the Xbox emulators). When a part of the level was unloaded, things still standing in it kept pointing at
   it, and the game used it again later. That could also crash elsewhere, at any time, after long play.

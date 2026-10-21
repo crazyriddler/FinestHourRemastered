@@ -4,7 +4,8 @@ own wait is not needed, the weapon still at rest), kept whole at work/shots/<tag
 
     python tools/model_shots.py <level> <weapon id,...> [--tag models] [--pitch -10] [--at 40]
 
-Weapon ids: player_tests.cpp (7 MP40, 8 PPSh, 10 Thompson, 14 Mosin Nagant, 15 M1 Garand, 16 Kar98, ...).
+Weapon ids: player_tests.cpp (7 MP40, 8 PPSh, 10 Thompson, 14 Mosin Nagant, 15 M1 Garand, 16 Kar98, ...); "held" the
+one the level starts with.
 """
 import argparse
 import os
@@ -61,7 +62,8 @@ def main():
             time.sleep(0.2)
     os.makedirs(os.path.join(WORK, "shots"), exist_ok=True)
     for w in a.weapons.split(","):
-        send("cmd giveweapon %s" % w)
+        if w != "held":  # ("held": the weapon the level starts with)
+            send("cmd giveweapon %s" % w)
         time.sleep(6)  # streamed, drawn and at rest
         for case, on in (("on", 1), ("off", 0)):
             send("cmd fx remastered_models %d" % on)

@@ -13,7 +13,8 @@ character, a vehicle or a weapon alike.
 
 The original's smoothing tells where it is meant to be round and where hard: an edge whose two faces share their
 normals is smooth and subdivides round; one split in normals (a hard edge) is creased and stays sharp; on hard
-surfaces (--crease-angle) folds sharper than the angle are creased too.
+surfaces (--crease-angle) folds sharper than the angle are creased too. Open edges stay exactly where they were
+(their points corners): models meeting there still meet.
 
     blender -b --factory-startup --python tools/meshes/subdivide.py -- <in.fhm> <out.fhm> [--levels 2]
         [--crease-angle 70] [--blend out.blend]
@@ -108,6 +109,7 @@ def build(m, name, crease_angle=0.0):
     bm.faces.ensure_lookup_table()
     bm.normal_update()
     crease = bm.edges.layers.float.new("crease_edge")
+    corner = bm.verts.layers.float.new("crease_vert")
     corner_of = {}  # (face, welded vertex) -> original vertex
     for fi, f in enumerate(bm.faces):
         tri = m.indices[srcs[fi]]
@@ -117,7 +119,12 @@ def build(m, name, crease_angle=0.0):
     for e in bm.edges:
         lf = e.link_faces
         if len(lf) != 2:
-            e[crease] = 1.0 if len(lf) == 1 else 0.0
+            # an open edge (or one of three faces and more): kept where it is, its points corners, so another
+            # model meeting it there still meets it (a crease alone smooths it as a curve: it parts from it, the sky
+            # showing through between two rocks)
+            e[crease] = 1.0
+            for v in e.verts:
+                v[corner] = 1.0
             continue
         if crease_angle > 0:
             fold = math.degrees(lf[0].normal.angle(lf[1].normal, 0.0))

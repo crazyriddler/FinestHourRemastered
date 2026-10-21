@@ -16,6 +16,7 @@
 
 #include "app/app.h"
 #include "core/log.h"
+#include "gpu/backend.h"
 #include "kernel/memory.h"
 #include "xdk/hle.h"
 
@@ -89,5 +90,8 @@ X86_FUNC(sub_001F4C80) {  // RpWorldSectorRender(sector)
             W32(sector + kSectorPipeline, 0);
         }
     }
+    // (the level's own geometry: its draws keep the game's models, gpu::g_world_sector)
+    gpu::g_world_sector++;
     __imp__sub_001F4C80(ctx, base);
+    gpu::g_world_sector--;
 }

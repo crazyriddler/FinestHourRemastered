@@ -4723,7 +4723,8 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     // a remastered mesh in place of the game's: the same registers, skinned by the game's own vertex program
     mesh_ = nullptr;
     bool mesh_floats = false;  // mesh_asm_ holds this draw's floats
-    if (app::Get().remastered_models && meshes::Candidate(prim, count)) {
+    if (app::Get().remastered_models && g_world_sector.load(std::memory_order_relaxed) == 0 &&
+        meshes::Candidate(prim, count)) {
         // the key by the draw's buffers (kept while their first bytes are as they were), worked out only when new
         uint64_t key = 0;
         const meshes::DrawId id = meshes::IdOf(s, prim, start, count, indices);

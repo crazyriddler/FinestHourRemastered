@@ -78,9 +78,10 @@ The version installed is in `version.txt` beside the game. Unattended:
 - Fires' lights hold steady: their light and shadows on the walls around a fire no longer jump from frame to frame.
 - The surfaces' highlights by a shadow's edge no longer flicker as the view turns.
 - **New: Remastered Models.** The game's models remastered: the soldiers of every army, the weapons in your hands
-  and in theirs, the pickups, the vehicles (tanks, half-tracks, trucks, planes, anti-tank guns), the objects and the
-  scenery. Round barrels, drums and stocks, soldiers without the old corners, round turrets and wheels, with the
-  game's own textures and animations; the water, flat surfaces and the boats' hulls stay as they were. A new Models setting (PC Settings, Graphics)
+  and in theirs, the pickups, the vehicles (tanks, half-tracks, trucks, planes, anti-tank guns) and the objects
+  standing in the levels (barrels, wrecks, crates...). Round barrels, drums and stocks, soldiers without the old
+  corners, round turrets and wheels, with the game's own textures and animations. The levels' own geometry
+  (buildings, walls, the ground), the water and the boats' hulls stay as they were. A new Models setting (PC Settings, Graphics)
   chooses them: Remastered (the default), Smooth (the game's own characters and weapons rounded, the old Smooth
   Models) or Original; the Original preset sets Original. Your settings move over by themselves: Remastered if you
   had them on.

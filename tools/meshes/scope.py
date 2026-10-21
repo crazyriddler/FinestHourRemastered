@@ -1,6 +1,7 @@
 """The remastered meshes the release ships, by what they draw (their texture's name): the soldiers (bodies, heads,
-hands, their gear), the weapons in first and third person, and the pickups (weapons on the ground, medkits,
-ammunition, grenades). The scenery and the vehicles wait for a closer review: their meshes are moved out of the pack
+hands, their gear), the weapons in first and third person, the pickups (weapons on the ground, medkits,
+ammunition, grenades) and the tanks (Panzer IV, T-34, Sherman). The scenery and the other vehicles wait for a closer
+review: their meshes are moved out of the pack
 to work/meshes/pack_held, and listed in tools/release/retired_files.txt so an update takes them out of an
 installation that had them.
 
@@ -25,6 +26,7 @@ SOLDIERS = r"^(AT_|Arm_|BT\d|Bt\d|BM\d|HT|HGS|HM_|GT|DeadRussian|aDeadHead|MoreC
 WEAPONS = r"(Back|Front|_back|_front)$|^(BazookaBody|BazookaSite|MosinAmmo|MWT_MG42_|BearNade|grenade$|pistol$|knife$)"
 PICKUPS = r"^(PUT|PU_|RoundMedCan|ammopack|DemoCharge|TellerMine)"
 VEHICLES = re.compile(r"^(VT_|VM_|VTrack|Russian_car|truck|Volga_body|Jeep|T34_)", re.I)
+TANKS = re.compile(r"^(VT_PanzerIV|VT_T34|VT_Sherman|VTrackL_PanzerIV|VTrackL_T34|VTrack_PanzerIV|VTrackR_PanzerIV|T34_)", re.I)
 KEEP = re.compile("|".join((SOLDIERS, WEAPONS, PICKUPS)))
 
 
@@ -45,11 +47,12 @@ def main():
     for path in sorted(glob.glob(os.path.join(PACK, "*.fhm"))):
         key = os.path.basename(path)[:-4]
         name = name_of(key, index)
-        (kept if KEEP.search(name) and not VEHICLES.search(name) else held).append(key)
+        (kept if TANKS.search(name) or (KEEP.search(name) and not VEHICLES.search(name)) else held).append(key)
     retired = set()
     if os.path.exists(RETIRED):
         retired = {l.strip() for l in open(RETIRED) if l.strip() and not l.startswith("#")}
     retired |= {"remaster/meshes/%s.fhm" % k for k in held}
+    retired -= {"remaster/meshes/%s.fhm" % k for k in kept}
     print(f"{len(kept)} kept, {len(held)} held back")
     if a.dry:
         return

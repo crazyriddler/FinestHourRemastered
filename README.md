@@ -29,9 +29,10 @@ The trailer (2560x1440, 60 FPS) is among the release's downloads: `FinestHourRem
 
 ## New: Remastered Models
 
-The soldiers of every army, the weapons in your hands and in theirs, and the pickups (weapons on the ground,
-medkits, ammunition, grenades) have been remastered. Rounded barrels, drums and stocks, soldiers without the old
-corners at their elbows, knees and coats. Each one keeps the game's own textures, animations and proportions: the
+The soldiers of every army, the weapons in your hands and in theirs, the pickups (weapons on the ground,
+medkits, ammunition, grenades) and the tanks (Panzer IV, T-34, Sherman) have been remastered. Rounded barrels, drums
+and stocks, soldiers without the old corners at their elbows, knees and coats, turrets and wheels that are finally
+round. Each one keeps the game's own textures, animations and proportions: the
 same game, with the blockiness gone.
 
 **In game** (Models: Original and Remastered):
@@ -48,6 +49,7 @@ same game, with the blockiness gone.
 | ![](docs/media/models_tanker.jpg) | ![](docs/media/models_ppsh_w.jpg) |
 | ![](docs/media/models_fp_mosin.jpg) | ![](docs/media/models_kar_w.jpg) |
 | ![](docs/media/models_fp_ppsh.jpg) | ![](docs/media/models_mp40.jpg) |
+| ![](docs/media/models_t34.jpg) | |
 
 Choose them in **PC Settings > Graphics > Models**: Remastered (the default), Smooth (the game's own characters and
 weapons rounded) or Original.
@@ -149,7 +151,7 @@ game's own look and textures. The render scale is never part of a preset: it sta
 - **Detail Textures**: a per-material high-frequency grain (stone, brick, concrete, wood, metal, fabric, ground,
   snow, ...) that keeps surfaces sharp up close, fading out with distance.
 - **Height Blending**: ground layers meet along their stones and cracks.
-- **Models**: Remastered, the soldiers, weapons and pickups remastered (see [above](#new-remastered-models));
+- **Models**: Remastered, the soldiers, weapons, pickups and tanks remastered (see [above](#new-remastered-models));
   Smooth, the game's own characters and weapons tessellated into rounded shapes; or Original.
 - **Character Detail**: skin pores and uniform weave up close. **Weapon Materials**: relief and metal sheen on the
   weapon in hand.

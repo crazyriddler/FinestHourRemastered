@@ -77,14 +77,15 @@ The version installed is in `version.txt` beside the game. Unattended:
   is gone; V-Sync stays.
 - Fires' lights hold steady: their light and shadows on the walls around a fire no longer jump from frame to frame.
 - The surfaces' highlights by a shadow's edge no longer flicker as the view turns.
-- **New: Remastered Models.** The soldiers of every army, the weapons in your hands and in theirs, and the pickups
-  (weapons on the ground, medkits, ammunition, grenades) remastered: round barrels, drums and stocks, soldiers
-  without the old corners, with the game's own textures and animations. A new Models setting (PC Settings, Graphics)
+- **New: Remastered Models.** The soldiers of every army, the weapons in your hands and in theirs, the pickups
+  (weapons on the ground, medkits, ammunition, grenades) and the tanks (Panzer IV, T-34, Sherman) remastered: round
+  barrels, drums and stocks, soldiers without the old corners, round turrets and wheels, with the game's own textures
+  and animations. A new Models setting (PC Settings, Graphics)
   chooses them: Remastered (the default), Smooth (the game's own characters and weapons rounded, the old Smooth
   Models) or Original; the Original preset sets Original. Your settings move over by themselves: Remastered if you
   had them on.
-- The remastered scenery and vehicles of the first version of this update are taken out for now, for a closer
-  review: they come back in a later update.
+- The remastered scenery and the other vehicles of the first version of this update are taken out for now, for a
+  closer review: they come back in a later update.
 - Crash fixed: Road to Remagen, the small passage around the large building half-way through (it also crashed
   there on the Xbox emulators). When a part of the level was unloaded, things still standing in it kept pointing at
   it, and the game used it again later. That could also crash elsewhere, at any time, after long play.

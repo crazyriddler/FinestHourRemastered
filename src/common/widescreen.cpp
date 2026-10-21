@@ -48,6 +48,18 @@ void SetFrontEnd(bool on) { g_front_end = on; }
 bool FrontEnd() { return g_front_end; }
 
 void SetCamera(uint32_t camera) { g_camera = camera; }
+
+// the screen's camera and its frame, if the camera is still one (RenderWare's camera type, 4, its frame within the
+// console's memory): the game frees it as a level is left, and frames drawn on meanwhile (the leaving's loading
+// screens) read it no more. Without this its freed block, used again for something else, gave a wild address to read:
+// a crash at the end of a level, after the game had saved it
+bool LiveCamera(uint32_t& camera, uint32_t& frame) {
+    constexpr uint32_t kRam = 0x08000000;
+    camera = g_camera;
+    if (!camera || camera >= kRam || kernel::G<uint8_t>(camera) != 4) return false;
+    frame = kernel::R32(camera + 4);
+    return frame && frame < kRam;
+}
 uint32_t Camera() { return g_camera; }
 
 namespace {
@@ -213,9 +225,8 @@ void StableSun(float sun[3]) {
 }
 
 void UpdateMaterialFrame() {
-    uint32_t c = g_camera;
-    uint32_t frame = c ? kernel::R32(c + 4) : 0;
-    if (!frame) return;
+    uint32_t c = 0, frame = 0;
+    if (!LiveCamera(c, frame)) return;
     // the camera's world matrix (RwFrame ltm at 0x50): right, up, at; the world is y up
     float m[3][3];
     for (int r = 0; r < 3; r++)
@@ -258,11 +269,9 @@ void UpdateMaterialFrame() {
 }
 
 bool CameraAngles(float& yaw, float& pitch) {
-    uint32_t c = g_camera;
-    if (!c) return false;
     // the camera's frame (RwObject parent at 4), its world matrix (ltm at 0x50): right, up, at, pos
-    uint32_t frame = kernel::R32(c + 4);
-    if (!frame) return false;
+    uint32_t c = 0, frame = 0;
+    if (!LiveCamera(c, frame)) return false;
     float at[3];
     for (int i = 0; i < 3; i++) {
         uint32_t v = kernel::R32(frame + 0x70 + i * 4);
@@ -275,10 +284,8 @@ bool CameraAngles(float& yaw, float& pitch) {
 }
 
 bool CameraPos(float pos[3]) {
-    uint32_t c = g_camera;
-    if (!c) return false;
-    uint32_t frame = kernel::R32(c + 4);
-    if (!frame) return false;
+    uint32_t c = 0, frame = 0;
+    if (!LiveCamera(c, frame)) return false;
     for (int i = 0; i < 3; i++) {
         uint32_t v = kernel::R32(frame + 0x80 + i * 4);
         std::memcpy(&pos[i], &v, 4);

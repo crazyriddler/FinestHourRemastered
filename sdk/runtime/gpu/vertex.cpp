@@ -207,6 +207,7 @@ void ResetAssembled(Assembled& out) {
     out.draw_count = 0;
     out.index_count = 0;
     out.base_vertex = 0;
+    out.resident = nullptr;
 }
 
 // the draw as Assemble got it, plus the vertex range it reads
@@ -464,7 +465,9 @@ void FvfInputs(uint32_t fvf, VertexShader& vs) {
     vs.stream_stride[0] = off;
 }
 
-bool Assemble(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* ip, Assembled& out) {
+namespace {
+
+bool AssembleAs(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* ip, bool allow_raw, Assembled& out) {
     ResetAssembled(out);
     if (!count || prim < 1 || prim > 10) return false;
 
@@ -491,9 +494,19 @@ bool Assemble(const State& s, uint32_t prim, uint32_t start, uint32_t count, con
     Inputs inputs = {*layout, regs, nregs};
 
     // the guest's own vertices when the input assembler can read every element of them
-    bool raw = kRawVertices && RawReadable(s, inputs);
+    bool raw = allow_raw && kRawVertices && RawReadable(s, inputs);
     if (raw) return AssembleRaw(s, inputs, d, out);
     return AssembleConverted(s, inputs, d, out);
+}
+
+}  // namespace
+
+bool Assemble(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* ip, Assembled& out) {
+    return AssembleAs(s, prim, start, count, ip, true, out);
+}
+
+bool AssembleFloats(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* ip, Assembled& out) {
+    return AssembleAs(s, prim, start, count, ip, false, out);
 }
 
 }  // namespace gpu

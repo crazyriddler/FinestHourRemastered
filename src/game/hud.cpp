@@ -245,6 +245,10 @@ constexpr uint64_t kGroupTex[] = {
     0x3ee2fae9df22de54,                                          // a tank's ring
     0x7c691e4b5741194e, 0x0b41acaa2b79af57, 0xf62d1fded3b3cc9a,  // health's bar, the medkits, the ammunition's box
     0xb4b1dc60d65eed4d,                                          // a tank's health and reload bars
+    // the thrown item's box (top left) and what it holds: grenades (American, Russian, German), mines, the radio,
+    // the bears' gifts
+    0x55611bd9a3025440, 0xde2365f20672ccb0, 0x9b17d56d5cf58e0c, 0x3624ea1eb07718ce, 0x56c80fbb38a698ac,
+    0x97cefc51ebba39c7, 0xa2a4ee5d63e75a7d, 0x0b09adde33f0fcbd, 0x124484d0c8a81c3a, 0xf30141fd1bf208eb,
 };
 // the pieces that move on an element (the objective star round the dial, its pulse growing past it, the arrows, a
 // tank's hull and turret turning in its ring): smaller with the element they lie on, not part of its measure (its
@@ -387,11 +391,46 @@ X86_FUNC(sub_000A5D20) {  // the front end
     LeaveScreen();
 }
 
+// a level left (quit to the main menu, or finished): from the end of its fade (the callbacks QuitLevel and
+// QuitAndLoadNextLevel give it) the game unloads it and shows its "Loading" screen until it starts the image again:
+// a screen of its own as well, not the level's (in the television, in the middle); until a level's loading screen
+// where the game goes on without starting again
+bool g_leaving = false;
+
+void LeftLevel() {
+    if (!g_leaving) g_leaving = true, EnterScreen(), LOGR("hud: the level left, its screens in the television");
+    // (the game draws and shows these screens itself while it unloads, without the frames whose update sets the
+    // television's flag: set here, it stays until then)
+    gpu::g_tv_frame = cod::Get().tv_frame && cod::Get().widescreen;
+}
+
+bool g_finishing = false;  // QuitAndLoadNextLevel's fade on (the level shown till its end)
+
+X86_EXTERN_FUNC(__imp__sub_000A42F0);
+X86_FUNC(sub_000A42F0) {  // QuitAndLoadNextLevel(next): a fade, then sub_000A3F10
+    g_finishing = true;
+    __imp__sub_000A42F0(ctx, base);
+}
+
+X86_EXTERN_FUNC(__imp__sub_000A3E70);
+X86_FUNC(sub_000A3E70) {  // QuitLevel's fade done
+    __imp__sub_000A3E70(ctx, base);
+    LeftLevel();
+}
+
+X86_EXTERN_FUNC(__imp__sub_000A3F10);
+X86_FUNC(sub_000A3F10) {  // QuitAndLoadNextLevel's fade done
+    __imp__sub_000A3F10(ctx, base);
+    g_finishing = false;
+    LeftLevel();
+}
+
 X86_EXTERN_FUNC(__imp__sub_000A3E10);
 X86_FUNC(sub_000A3E10) {  // a level's loading screen
     EnterScreen();
     __imp__sub_000A3E10(ctx, base);
     LeaveScreen();
+    if (g_leaving) g_leaving = false, LeaveScreen();
 }
 
 // the loading screen's progress bar, drawn from the loading thread outside the screen's own render: in the middle
@@ -415,6 +454,11 @@ void PlayMovie(X86Context& ctx, uint8_t* base) {  // intro.cpp's hook plays it t
 }
 
 namespace cod {
+// the game's SetCurrentLevel (game/offline.cpp): out of the front end, a level is being left (the pause screen's
+// Quit sets it straight, then the game unloads and starts again; a finished level waits for its fade)
+void LevelSet() {
+    if (!g_front_end && !g_finishing) LeftLevel();
+}
 bool InMovie() { return g_movie; }
 bool Paused() { return g_paused; }
 }  // namespace cod

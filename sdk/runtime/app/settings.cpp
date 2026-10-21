@@ -100,6 +100,7 @@ void Load() {
     s.film_grain = t["film_grain"].value_or(s.film_grain);
     s.reflections = t["reflections"].value_or(s.reflections);
     s.smooth_models = t["smooth_models"].value_or(s.smooth_models);
+    s.remastered_models = t["remastered_models"].value_or(s.remastered_models);
     s.hit_reactions = t["hit_reactions"].value_or(s.hit_reactions);
     s.sun_moon = t["sun_moon"].value_or(s.sun_moon);
     s.clouds = t["clouds"].value_or(s.clouds);
@@ -182,6 +183,7 @@ toml::table Table() {
                   {"film_grain", s.film_grain},
                   {"reflections", s.reflections},
                   {"smooth_models", s.smooth_models},
+                  {"remastered_models", s.remastered_models},
                   {"hit_reactions", s.hit_reactions},
                   {"sun_moon", s.sun_moon},
                   {"clouds", s.clouds},

@@ -106,6 +106,24 @@ def survey(game, center, radius, step=4500, height=3500):
     return read_map()
 
 
+def actor_points(game):
+    """where the level's soldiers stand (the control channel's "actors"): floors a survey from above misses (tunnels,
+    sewers, rooms, narrow streets under eaves)"""
+    before = read_log()
+    n, start = len(re.findall(r"actors: \d+$", before, re.M)), len(before)
+    game.send("cmd actors")
+    for _ in range(40):
+        time.sleep(0.25)
+        log = read_log()
+        if len(re.findall(r"actors: \d+$", log, re.M)) > n:
+            break
+    last = log[start:]
+    pts = []
+    for x, y, z in re.findall(r"actors: [0-9A-F]+ vt [0-9A-F]+(?: \(player\))? at (\S+) (\S+) (\S+),", last):
+        pts.append((float(x), float(y), float(z)))
+    return pts
+
+
 def open_floors(cells):
     """floors that are areas (a ground, a yard, a roof), not a wall's top or a beam: of the eight neighbouring 3 m
     cells, three or more have a floor within a metre of its height"""
@@ -257,8 +275,13 @@ def tour(level, a, root):
         # what this window loaded, from above: its floors not near a place seen are where to go
         known = set(survey(game, place, a.radius))
         fresh = [c for c in open_floors(list(known)) if all(math.dist(c, q) >= a.spacing for q in seen_pts)]
+        # and where the soldiers stand (floors under a roof)
+        actors = [c for c in actor_points(game) if all(math.dist(c, q) >= a.spacing for q in seen_pts)]
+        fresh += [c for i, c in enumerate(actors) if all(math.dist(c, q) >= a.spacing for q in actors[:i])]
         note("level %2d window %d: %d floor cells loaded, %d fresh" % (level, wi, len(known), len(fresh)))
-        if len(fresh) < 8:
+        # (few floors seen from above: under roofs, in tunnels: the place itself still visited, the floors its
+        # views at eye level show taking the tour on from there)
+        if len(fresh) < 8 and any(math.dist(place[:3], q) < a.spacing for q in seen_pts):
             dry += 1
             if dry >= 3:
                 break

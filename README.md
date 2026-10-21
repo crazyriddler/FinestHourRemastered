@@ -27,7 +27,34 @@ volumetric fog and much more, while keeping the game's own art direction and lig
 
 The trailer (2560x1440, 60 FPS) is among the release's downloads: `FinestHourRemastered_Trailer_1440p60.mp4`.
 
+## New: Remastered Models
+
+Every model in the game has been remastered: the weapons in your hands and on the ground, every soldier of every
+army, the tanks and vehicles, the pickups and the objects of the levels, more than 3,000 models in all. Rounded
+barrels, drums and stocks, soldiers without the old corners at their elbows, knees and coats, wheels and turrets that
+are finally round. Each one keeps the game's own textures, animations and proportions: the same game, with the
+blockiness gone.
+
+**In game** (Remastered Models off and on):
+
+| Original | Remastered |
+|---|---|
+| ![](docs/media/models_ingame_1_off.jpg) | ![](docs/media/models_ingame_1_on.jpg) |
+| ![](docs/media/models_ingame_2_off.jpg) | ![](docs/media/models_ingame_2_on.jpg) |
+
+**The models themselves** (original on the left, remastered on the right; textured above, their wireframe below):
+
+| | |
+|---|---|
+| ![](docs/media/models_tanker.jpg) | ![](docs/media/models_ppsh_w.jpg) |
+| ![](docs/media/models_fp_mosin.jpg) | ![](docs/media/models_kar_w.jpg) |
+| ![](docs/media/models_fp_ppsh.jpg) | ![](docs/media/models_mp40.jpg) |
+| ![](docs/media/models_t34.jpg) | ![](docs/media/models_barrel.jpg) |
+
+Turn them off and on in **PC Settings > Graphics > Remastered Models**.
+
 ## Contents
+- [New: Remastered Models](#new-remastered-models)
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Features](#features)
@@ -40,7 +67,7 @@ The trailer (2560x1440, 60 FPS) is among the release's downloads: `FinestHourRem
 - Windows 10 or 11, 64-bit.
 - A Direct3D 12 GPU with 4 GB of video memory or more. With every effect on at 1440p a recent mid-range GPU holds
   its 60 FPS.
-- About 9 GB of disk: the game's files and the remastered textures.
+- About 10 GB of disk: the game's files, the remastered textures and models.
 - **The game**: Call of Duty: Finest Hour for the original Xbox, **PAL (Europe) release**, title ID `4156002A`,
   version 3 (`default.xbe` SHA-1 `938a7b1e17928de49cb3c5834d61abcd3d9081c8`). Its four languages (English, French,
   Italian and Spanish, text and speech) are all supported, and Portuguese (text, with the English speech) is added by
@@ -53,7 +80,7 @@ The trailer (2560x1440, 60 FPS) is among the release's downloads: `FinestHourRem
 2. Run `FinestHourRemasteredSetup.exe`.
 3. Choose your copy of the game: its **folder** (the one with `default.xbe`, `COD.PAK`, `AUDIO`, `SHELL`, ...), or a
    **disc image** (`.iso`, a full "redump" image or an XISO). The installer checks it is the supported release.
-4. Choose where to install (about 9 GB) and the shortcuts, then **Install**.
+4. Choose where to install (about 10 GB) and the shortcuts, then **Install**.
 5. Play. The first start prepares every shader the game uses for your GPU (a few seconds), so none is compiled
    while you play.
 
@@ -123,6 +150,8 @@ game's own look and textures. The render scale is never part of a preset: it sta
 - **Detail Textures**: a per-material high-frequency grain (stone, brick, concrete, wood, metal, fabric, ground,
   snow, ...) that keeps surfaces sharp up close, fading out with distance.
 - **Height Blending**: ground layers meet along their stones and cracks.
+- **Remastered Models**: every weapon, soldier, vehicle and object of the game remastered, more than 3,000
+  models (see [above](#new-remastered-models)).
 - **Character Detail**: skin pores and uniform weave up close. **Weapon Materials**: relief and metal sheen on the
   weapon in hand. **Smooth Models**: characters and weapons tessellated into rounded shapes.
 - **Reflections**: screen-space reflections on metal, glass, varnished wood, stone and water.

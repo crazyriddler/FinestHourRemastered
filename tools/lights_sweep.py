@@ -14,7 +14,7 @@ from PIL import Image
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG = os.path.join(ROOT, "out", "build", "release", "logs", "codfh.log")
 SHOTS = os.path.join(ROOT, "work", "shots")
-LEVELS = [1, 2, 4, 5, 7, 8, 11, 12, 14, 15, 17, 18]
+LEVELS = [1, 2, 4, 5, 7, 8, 11, 12, 14, 15, 17, 18, 24, 25, 26, 30, 36, 37, 38]  # the 19 missions (the game's level ids)
 TIMES = [24.5, 27, 30, 34]
 
 

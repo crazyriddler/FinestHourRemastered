@@ -1,6 +1,6 @@
 """The detail grain (Detail Textures) of the characters' textures by their names, over their material classes (which
 the classifier often got wrong for uniforms: atlas, ground, skin, metal, ui; ground's pebbles read as dirt on a
-coat): bodies' upper and lower halves (BTnn_up/upper/low/lower, BMnn_..., AT_...) fabric; caps and helmets (HTS..)
+coat): bodies' upper and lower halves (BTnn_up/upper/low/lower, BMnn_...) fabric; the first-person arms (AT_...) skin; caps and helmets (HTS..)
 fabric or metal; heads (HT_...) none (their pores are Character Detail's). Writes <pack>/grains.txt: id kind.
 
     python -I grains.py <extract folder> <pack folder>
@@ -20,8 +20,10 @@ def kind_of(name):
         return "skin"  # (hands: their pores, no grain)
     if re.match(r"^(bt|bm|lbt)\d+.*(_up|_upper|_low|_lower|upper|lower|_up_|_low_)", n) or re.match(r"^(bt|bm)\d+_", n):
         return "fabric"
-    if re.match(r"^at_", n) and not any(s in n for s in ("flak", "wehr", "barrel")):
-        return "fabric"
+    # the first-person arms (AT_..., Arm_...): one texture for the sleeve and the hand; a fabric grain over it drew
+    # dark streaks like dirt across the hand: skin's (pores) over both
+    if (re.match(r"^at_", n) and not any(s in n for s in ("flak", "wehr", "barrel"))) or n.startswith("arm_"):
+        return "skin"
     if n.startswith("hts"):
         return "metal" if "helmet" in n else "fabric"
     if re.match(r"^ht_", n) or "head" in n:

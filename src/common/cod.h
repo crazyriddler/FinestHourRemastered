@@ -60,7 +60,17 @@ bool LastCheckpoint(int& reg, int sections[4]);
 void LoadedSections(int sections[4]);
 // the player's entity (game/damage.cpp, 0 before the game looked it up); god mode: its damage held off
 uint32_t PlayerEntity();
+// the game's current level set (game/hud.cpp: a level left, its last screens in the television)
+void LevelSet();
 void SetGodMode(bool on);
 bool GodMode();
+// tests: the level ended as its script ends it, the next one loaded (QuitAndLoadNextLevel; game/player_tests.cpp);
+// 0: quit to the main menu (QuitLevel)
+void EndLevel(int next);
+// tests: the player handed weapon id n (0..0x26, the game's table) in place of the held one, its model streamed first
+// (game/player_tests.cpp)
+void GiveWeapon(int n);
+// tests: n of a thrown item (a grenade's, a mine's id), chosen as the one thrown next
+void GiveItem(int id, int count);
 
 }  // namespace cod

@@ -162,9 +162,13 @@ float4 taa(O i) : SV_Target {
         }
     if (ta1.x > 0) return c0;
     // the velocity: the pixel's, or a neighbour's moving thing's (its edge carries its motion)
+    // (not the sky's: its box goes with the camera, a moving thing to the velocity buffer; taken by the edges of
+    // what stands against it, their history was fetched from elsewhere and clipped away: no anti-aliasing there,
+    // stair steps along the roofs against the sky)
     float4 v4 = vel.Load(int3(px, 0));
     [unroll] for (int k = 0; k < 4; k++) {
         int2 o = int2(k & 1 ? 1 : -1, k & 2 ? 1 : -1);
+        if (dnow.Load(int3(px + o, 0)) >= 0.99999) continue;
         float4 n = vel.Load(int3(px + o, 0));
         if (dot(n.zw, n.zw) > dot(v4.zw, v4.zw) * 1.5 + 1e-8) v4 = n;
     }

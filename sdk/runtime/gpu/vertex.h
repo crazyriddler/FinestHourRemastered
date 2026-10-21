@@ -49,7 +49,8 @@ struct Assembled {
     uint32_t index_count = 0;         // 0: an unindexed draw of draw_count vertices
     uint32_t draw_count = 0;
     int32_t base_vertex = 0;
-    std::array<std::vector<uint8_t>, 16> gathered;  // raw vertices copied in draw order when the indices are sparse
+    std::array<std::vector<uint8_t>, 16> gathered;
+    const void* resident = nullptr;  // vertices and indices that never change, kept on the GPU (gpu/mesh_swap.h)  // raw vertices copied in draw order when the indices are sparse
 };
 
 // the FVF bits translated to the register layout the XDK's declarations use
@@ -58,5 +59,8 @@ void FvfInputs(uint32_t fvf, VertexShader& out);
 // false when there is nothing to draw
 // indices: the title's 16 bit indices, null for an unindexed draw
 bool Assemble(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* indices, Assembled& out);
+// the same, always converted to floats on the CPU (a float4 a register, vertices in range order): what a mesh
+// replacement is made from and keyed by
+bool AssembleFloats(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* indices, Assembled& out);
 
 }  // namespace gpu

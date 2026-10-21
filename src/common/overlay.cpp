@@ -161,7 +161,7 @@ constexpr SBool kPresetFlags[] = {
     &app::Settings::wind, &app::Settings::ambient_particles, &app::Settings::lit_smoke, &app::Settings::character_light,
     &app::Settings::bounce_light, &app::Settings::soft_shadows, &app::Settings::volumetric_fog, &app::Settings::cloud_shadows,
     &app::Settings::auto_exposure, &app::Settings::color_grade, &app::Settings::film_grain, &app::Settings::hit_reactions,
-    &app::Settings::smooth_models, &app::Settings::reflections, &app::Settings::sun_moon, &app::Settings::clouds,
+    &app::Settings::smooth_models, &app::Settings::remastered_models, &app::Settings::reflections, &app::Settings::sun_moon, &app::Settings::clouds,
     &app::Settings::remaster, &app::Settings::materials, &app::Settings::parallax, &app::Settings::detail,
     &app::Settings::pixel_lighting, &app::Settings::height_blend};
 constexpr SUint kPresetValues[] = {&app::Settings::aniso, &app::Settings::sharpening, &app::Settings::shadow_quality,
@@ -344,6 +344,8 @@ std::vector<Page> BuildPages() {
     graphics.items.push_back(Toggle("Height Blending", &s.height_blend, "Ground layers meet along their stones and cracks."));
     graphics.items.push_back(Slider("Specular", &s.specular, 0, 200, 10, "%d%%", "The strength of the surfaces' highlights."));
     graphics.items.push_back(Toggle("Per-Pixel Lighting", &s.pixel_lighting, "Smooth light on characters, no facets."));
+    graphics.items.push_back(Toggle("Remastered Models", &s.remastered_models,
+                                    "Weapons, soldiers, vehicles and objects remodelled: rounder, denser, smooth outlines."));
     graphics.items.push_back(Toggle("Smooth Models", &s.smooth_models, "Characters and weapons rounded: no angular outlines."));
     graphics.items.push_back(Toggle("Reflections", &s.reflections, "Metal, glass, varnished wood and stone reflect what is around them."));
     pages.push_back(std::move(graphics));

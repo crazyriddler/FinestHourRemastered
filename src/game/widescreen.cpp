@@ -200,6 +200,15 @@ X86_FUNC(sub_001C6720) {  // RwCameraBeginUpdate(camera)
     }
 }
 
+// RwCameraDestroy(camera): the screen's camera forgotten as the game frees it
+X86_EXTERN_FUNC(__imp__sub_001C6AA0);
+X86_FUNC(sub_001C6AA0) {
+    const uint32_t camera = R32(ctx.esp + 4);
+    if (camera && camera == cod::wide::Camera()) cod::wide::SetCamera(0);
+    if (camera && camera == g_narrow[0]) g_narrow[0] = 0;
+    __imp__sub_001C6AA0(ctx, base);
+}
+
 X86_EXTERN_FUNC(__imp__sub_001C6710);
 X86_FUNC(sub_001C6710) {  // RwCameraEndUpdate(camera)
     __imp__sub_001C6710(ctx, base);

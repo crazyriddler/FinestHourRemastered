@@ -62,6 +62,7 @@ struct Settings {
     bool color_grade = true;         // each campaign's own tones: the Russian winter, the African desert, Europe
     bool film_grain = true;          // a faint, fine grain
     bool hit_reactions = true;       // soldiers flinch where bullets hit them
+    bool remastered_models = true;  // the remastered meshes (remaster/meshes): weapons, soldiers, vehicles, objects
     bool smooth_models = true;       // characters and weapons tessellated into smooth curved surfaces (PN triangles)
     bool reflections = true;         // glossy surfaces (metal, glass, varnished wood, wet stone) reflect the scene
     bool sun_moon = true;            // the sun (by day) or the moon (by night) in the sky, where the level's light is

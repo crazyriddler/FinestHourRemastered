@@ -28,6 +28,7 @@ namespace {
 // tests: "pad <button> [ms]": the first pad's button held a while (150 ms), over the replay or the live pad
 std::atomic<uint32_t> g_test_buttons{0};
 std::atomic<int> g_test_analog{-1};
+std::atomic<int> g_test_stick{-1}, g_test_stick_value{0};  // "pad LY+ <ms>": a stick pushed all the way
 std::atomic<int64_t> g_test_pad_until{0};  // steady clock, ms
 int64_t SteadyMs() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -102,6 +103,12 @@ void Line(std::string line) {
             if (!std::strcmp(name, n)) b = v;
         for (int i = 0; i < 8; i++)
             if (!std::strcmp(name, kAnalog[i])) an = i;
+        static const char* const kSticks[] = {"LX", "LY", "RX", "RY"};
+        int stick = -1, value = 0;
+        for (int i = 0; i < 4; i++)
+            if (!std::strncmp(name, kSticks[i], 2) && (name[2] == '+' || name[2] == '-'))
+                stick = i, value = name[2] == '+' ? 32767 : -32768;
+        g_test_stick = stick, g_test_stick_value = value;
         g_test_buttons = b, g_test_analog = an, g_test_pad_until = SteadyMs() + ms;
     } else if (line == "draws") {
         gpu::g_log_draws = 3;
@@ -231,6 +238,10 @@ struct Recorder {
             live.connected = true;
             live.buttons |= uint16_t(g_test_buttons.load());
             if (int an = g_test_analog.load(); an >= 0) live.analog[an] = 255;
+            if (int st = g_test_stick.load(); st >= 0) {
+                int16_t v = int16_t(g_test_stick_value.load());
+                (st == 0 ? live.lx : st == 1 ? live.ly : st == 2 ? live.rx : live.ry) = v;
+            }
         }
         if (rec && (!seen[port] || !Same(last[port], live))) {
             seen[port] = true;

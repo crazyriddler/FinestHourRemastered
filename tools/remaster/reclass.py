@@ -49,6 +49,14 @@ SURFACES = {rid: "ground" for rid in (
     "133dc7d18103e6f2", "157361a6b993eec9", "1acb9c1031516ef2", "360fbf813d4f4ae7", "40225ae3f1dbfaf3",
     "476d4f8992544ed8", "6f611ee816077cc9", "a3b61a54400165d5", "a62413a152a9fca3", "adf05cfcd3491411",
     "d5045491db427700", "e338d662ac42658d", "e43a7edc7447ad2d", "ec1438925c5ea6f5", "f4205acb11192cd1")}
+# the first-person arms taken for cloth or an atlas: the cloth's detail map tiled over the hand drew dark streaks
+# like dirt on it (the American GI's, the tank crews', the Soviet sniper's): skin, as the other arms
+SURFACES.update({rid: "skin" for rid in (
+    "7485dd2b5b2c4c6e",  # AT_USGI
+    "aa703ba39a4524ac",  # AT_UStanker
+    "207db7d39724d96d",  # AT_SovSniper
+    "8f56ced3e24d5add",  # Arm_TankComm
+)})
 
 
 def glass_frames(src, classes):

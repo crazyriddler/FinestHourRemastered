@@ -36,7 +36,7 @@ EXE = "CODFH.exe"  # its own name: the game starts itself again under it (a titl
 PART = 1900 * 1024 * 1024
 
 # what of the pack ships (the work_* folders are the tools' own)
-PACK_PARTS = ["materials.txt", "shadows.txt", "snow.txt", "grains.txt", "details", "textures", "ui"]
+PACK_PARTS = ["materials.txt", "shadows.txt", "snow.txt", "grains.txt", "details", "textures", "ui", "meshes"]
 # the shader cache: the recipes, compiled shaders and pipeline descriptions go anywhere (the game makes the
 # pipelines from them at its first start); the pipeline library (pipelines.bin, .id) is this PC driver's
 CACHE_ANY = ["recipes.bin", "blobs.bin", "passes.bin", "psos2.bin", "shadows2.bin"]

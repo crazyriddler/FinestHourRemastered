@@ -77,6 +77,24 @@ The version installed is in `version.txt` beside the game. Unattended:
   is gone; V-Sync stays.
 - Fires' lights hold steady: their light and shadows on the walls around a fire no longer jump from frame to frame.
 - The surfaces' highlights by a shadow's edge no longer flicker as the view turns.
+- **New: Remastered Models.** Every model in the game has been remastered: the weapons in your hands and on the
+  ground, every soldier, the tanks and vehicles, the pickups and the level's objects, more than 3,000 in all. Round
+  barrels, drums and stocks, soldiers without the old corners, round wheels and turrets, with the game's own
+  textures and animations. On by default; PC Settings, Graphics, Remastered Models.
+- Crash fixed: Road to Remagen, the small passage around the large building half-way through (it also crashed
+  there on the Xbox emulators). When a part of the level was unloaded, things still standing in it kept pointing at
+  it, and the game used it again later. That could also crash elsewhere, at any time, after long play.
+- Crash fixed: the end of a mission (the British missions every time, the others sometimes). The port kept the
+  game's camera after the game had thrown it away and still read from it as the next level loaded.
+- Crash fixed: the American sewers, restarting from a checkpoint (or reaching a new part of the level). One check
+  of the game's looked into a part of the level that was marked loaded before it was there; every other one of
+  its checks waits for it.
+- Leaving a mission to the main menu, its "Loading" and the Call of Duty logo show in the television, like the
+  rest of the menus.
+- HUD Size: the grenade's box (and its icon) shrinks with the rest of the HUD.
+- The first-person hands no longer show dark streaks like dirt (the American hands above all).
+- Anti-Aliasing: roofs and edges against the sky are smooth again, not in stair steps.
+- Muzzle Flash Shadows: their edges are slightly soft, still sharp and as dark as before, at no extra cost.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

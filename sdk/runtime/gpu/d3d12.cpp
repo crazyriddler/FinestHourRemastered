@@ -45,6 +45,7 @@
 #include "gpu/backend.h"
 #include "gpu/ext.h"
 #include "gpu/post_shaders.h"
+#include "gpu/mesh_swap.h"
 #include "gpu/remaster.h"
 #include "gpu/scene_shaders.h"
 #include "gpu/smaa_textures.h"
@@ -1513,6 +1514,15 @@ private:
     std::mutex late_lock_;                      // DeliverLate runs on the title's thread
     std::atomic<uint64_t> presents_seen_{0};    // presents_ for DeliverLate
     Assembled asm_;  // kept between draws for its buffers
+    Assembled mesh_asm_;  // a draw as floats, for the remastered meshes (gpu/mesh_swap.h): the original's, kept
+    const meshes::Mesh* mesh_ = nullptr;  // the draw's remastered mesh, if it has one
+    // the remastered meshes' vertices and indices, made on the GPU once (Assembled::resident)
+    struct Resident {
+        ComPtr<ID3D12Resource> vb, ib;
+    };
+    std::unordered_map<const void*, Resident> resident_;
+    const Resident& ResidentOf(const Assembled& a);
+    std::vector<uint8_t> weapon_vdrop_;  // WeaponPieces: each vertex of a piece left out
     bool tearing_ = false;
     uint64_t presents_ = 0;
     double fps_ = 0;
@@ -1531,6 +1541,7 @@ bool D3D12Backend::Init(uint32_t width, uint32_t height) {
     if (!CreateRootSignature()) return false;
     CreateFrames();
     CreateGammaLut();
+    meshes::Load(std::filesystem::path(remaster::Dir()) / "meshes");
     // (twice the frames: the overlay draws twice a frame, the television's layer and the window's)
     ImGui_ImplDX12_Init(dev_.Get(), kFrames * 2, DXGI_FORMAT_B8G8R8A8_UNORM, ui_heap_.Get(),
                         ui_heap_->GetCPUDescriptorHandleForHeapStart(), ui_heap_->GetGPUDescriptorHandleForHeapStart());
@@ -4548,8 +4559,32 @@ D3D_PRIMITIVE_TOPOLOGY PrimitiveTopology(const Assembled& a) {
     return a.strip ? D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP : D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 }
 
+const D3D12Backend::Resident& D3D12Backend::ResidentOf(const Assembled& a) {
+    auto [it, fresh] = resident_.try_emplace(a.resident);
+    if (!fresh) return it->second;
+    auto make = [&](const void* data, uint32_t bytes, ComPtr<ID3D12Resource>& out) {
+        D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_DEFAULT};
+        D3D12_RESOURCE_DESC rd = BufferDesc(bytes);
+        CreateResource(&hp, D3D12_HEAP_FLAG_NONE, &rd, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&out));
+        Alloc up = Upload(bytes, 16);
+        std::memcpy(up.cpu, data, bytes);
+        cl_->CopyBufferRegion(out.Get(), 0, up.res, up.off, bytes);
+        D3D12_RESOURCE_STATES st = D3D12_RESOURCE_STATE_COPY_DEST;
+        Transition(out.Get(), st, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER | D3D12_RESOURCE_STATE_INDEX_BUFFER);
+    };
+    make(a.buffers[0].src, a.buffers[0].bytes, it->second.vb);
+    make(a.index_src, a.index_count * 4, it->second.ib);
+    return it->second;
+}
+
 void D3D12Backend::UploadVertexBuffers(const Assembled& a) {
     D3D12_VERTEX_BUFFER_VIEW vbv[16];
+    if (a.resident) {
+        vbv[0] = {ResidentOf(a).vb->GetGPUVirtualAddress(), a.buffers[0].bytes, a.buffers[0].stride};
+        last_vbv_[0] = vbv[0];
+        cl_->IASetVertexBuffers(0, 1, vbv);
+        return;
+    }
     for (uint32_t i = 0; i < a.buffer_count; i++) {
         const VertexBuffer& b = a.buffers[i];
         Alloc vb = Upload(b.bytes, 16);
@@ -4637,6 +4672,13 @@ void D3D12Backend::DrawGeometry(const Assembled& a) {
         return;
     }
     SetTopology(PrimitiveTopology(a));
+    if (a.resident) {
+        D3D12_INDEX_BUFFER_VIEW ibv{ResidentOf(a).ib->GetGPUVirtualAddress(), a.index_count * 4, DXGI_FORMAT_R32_UINT};
+        last_ibv_ = ibv;
+        cl_->IASetIndexBuffer(&ibv);
+        cl_->DrawIndexedInstanced(a.index_count, 1, 0, 0, 0);
+        return;
+    }
     if (a.index_count) {
         uint32_t ibytes = a.index_count * (a.index16 ? 2 : 4);
         Alloc ib = Upload(ibytes, 4);
@@ -4678,6 +4720,20 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     if (ext_) ext_->BeginDraw(s);
     Assembled& a = asm_;
     if (!AssembleDraw(s, prim, start, count, indices, a)) return;
+    // a remastered mesh in place of the game's: the same registers, skinned by the game's own vertex program
+    mesh_ = nullptr;
+    bool mesh_floats = false;  // mesh_asm_ holds this draw's floats
+    if (app::Get().remastered_models && meshes::Candidate(prim, count)) {
+        // the key by the draw's buffers (kept while their first bytes are as they were), worked out only when new
+        uint64_t key = 0;
+        const meshes::DrawId id = meshes::IdOf(s, prim, start, count, indices);
+        if (!meshes::CachedKey(id, key)) {
+            if (AssembleFloats(s, prim, start, count, indices, mesh_asm_)) key = meshes::Key(mesh_asm_), mesh_floats = true;
+            meshes::StoreKey(id, key);
+        }
+        if (key && (mesh_ = meshes::Find(key, a.regs))) meshes::Fill(*mesh_, a);
+    }
+    const bool swapped = mesh_ != nullptr;
     // past the ring every upload is a buffer of its own: seconds lost on a frame that draws a whole level once
     if (CurrentFrame().used > kUploadSize - kUploadReserve) {
         static std::atomic<int> n{0};
@@ -4734,6 +4790,18 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     PixelKey pk = MakePixelKey(s, stages.info);
     pk.quad = sh.quad;
     draw_tex0_ = stages.id[0];
+    // XBE_MESH_DUMP: the weapon in hand's meshes as floats, for the remastered meshes' pipeline (tools/meshes);
+    // XBE_MESH_DUMP_ALL: every model's (characters, objects, vehicles, the level's own), not the 2D, the effects'
+    // sprites, the see-through draws that write no depth (smoke, flashes) or the water
+    if (!meshes::DumpDir().empty() && !swapped && draw_tex0_) {
+        static const bool all = std::getenv("XBE_MESH_DUMP_ALL") != nullptr;
+        bool want = stages.weapon && sh.prog && count >= 32;
+        if (all)
+            want = !stages.flat && !draw_emitter_ && count >= 24 && !(stages.mat && stages.mat->m && stages.mat->m->water) &&
+                   !(SimpleState(s, kMBlendEnable) && !SimpleState(s, kMZWriteEnable));
+        if (want && AssembleFloats(s, prim, start, count, indices, mesh_asm_))
+            meshes::Dump(s, prim, count, meshes::Key(mesh_asm_), draw_tex0_, mesh_asm_, presents_);
+    }
     // the level's own moon (a sprite of the night skies of levels 14 and 15) or sun: Sun and Moon draws none beside it
     {
         constexpr uint64_t kMoonSprite = 0x33469bfa695c087dull;  // 2_1moon1_png
@@ -4947,7 +5015,8 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     // a character's triangles (a program lit by itself, drawn with the world: not the weapon in hand, its hard edges
     // would swell), smoothed by tessellation
     tess_draw_ = false;
-    if (app::Get().smooth_models && sh.prog && pk.lit && !flat && !sh.quad && !occlusion_done_ && a.topology == Topology::Triangles && tess_hs_ &&
+    // (not a remastered mesh: dense and round already)
+    if (app::Get().smooth_models && !mesh_ && sh.prog && pk.lit && !flat && !sh.quad && !occlusion_done_ && a.topology == Topology::Triangles && tess_hs_ &&
         tess_ds_ && bound_rt_ && bound_rt_->gw == guest_w_ && bound_rt_->gh == guest_h_) {
         auto it = tess_rows_.find(sh.vkey);
         if (it == tess_rows_.end()) it = tess_rows_.emplace(sh.vkey, TessRows(s.vs->program, a.regs)).first;
@@ -5015,8 +5084,26 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     // the weapon in hand on a wide screen: a piece of it the 4:3 view shows is drawn whole (an arm going on to the
     // screen's edge); only a piece wholly outside it (an arm's cut end the console never showed) is left out
     weapon_filter_ = false;
-    if (c.layout[2] > 0 && c.layout[2] < 1 && sh.prog && a.topology == Topology::Triangles && WeaponPieces(s, a, sh))
+    // (a remastered mesh: the pieces found on the original, each of its triangles left out with the original's
+    // vertices it is made from)
+    if (c.layout[2] > 0 && c.layout[2] < 1 && sh.prog && a.topology == Topology::Triangles && (!mesh_ || mesh_floats || (mesh_floats = AssembleFloats(s, prim, start, count, indices, mesh_asm_))) &&
+        WeaponPieces(s, mesh_ ? mesh_asm_ : a, sh)) {
         c.layout[2] = 0;
+        if (mesh_ && weapon_filter_) {
+            const auto& src = mesh_->source;
+            const size_t n = mesh_->indices.size() / 3;
+            weapon_keep_.assign(n, 1);
+            if (src.size() != mesh_->vertex_count) weapon_filter_ = false;
+            for (size_t t = 0; weapon_filter_ && t < n; t++) {
+                bool drop = true;
+                for (int k = 0; k < 3; k++) {
+                    uint32_t o = src[mesh_->indices[t * 3 + k]];
+                    drop = drop && o < weapon_vdrop_.size() && weapon_vdrop_[o];
+                }
+                if (drop) weapon_keep_[t] = 0;
+            }
+        }
+    }
     if (!flat && bound_rt_ && bound_rt_ == scene_rt_) c.jitter[0] = taa_jit_[0], c.jitter[1] = taa_jit_[1];
     c.jitter[2] = a2c ? 1.0f : 0.0f;  // alphatest: the edge as coverage
     if (points) {
@@ -8239,6 +8326,10 @@ bool D3D12Backend::WeaponPieces(const State& s, const Assembled& a, const DrawSh
         }
     }
     weapon_filter_ = dropped > 0;
+    weapon_vdrop_.assign(vcount, 0);
+    for (size_t t = 0; t < tris.size(); t++)
+        if (!weapon_keep_[t])
+            for (uint32_t v : tris[t].v) weapon_vdrop_[v] = 1;
     static const bool log = std::getenv("XBE_WEAPON_LOG") != nullptr;
     if (log && presents_ % 120 == 0) {
         LOGR("weapon: tex %016llx %zu triangles, %zu left out, %.3f ms", (unsigned long long)draw_tex0_, tris.size(), dropped,

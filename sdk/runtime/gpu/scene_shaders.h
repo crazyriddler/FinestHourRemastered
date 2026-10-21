@@ -972,7 +972,20 @@ float2 Hurt(float2 uv, float h, float t) {
 // src of the light (the gun firing a flash and the hands holding it; a fire's burning heap), and for the eye's own
 // flash what is nearer than its muzzle. The samples: about one each 6 pixels of the way on the screen, 16 to 48,
 // moved along it by the pixel; the cover fades in over the depth gap, and the shadow keeps a little of the light.
+// The light is not a point: each pixel, each frame, traces to its own point of a disc 16 cm across about it (facing
+// P), which the temporal pass averages into a slightly soft edge; one way still, the shadow as dark as it was.
 float LightShadow(float3 P, float3 C, float2 uv0, float src) {
+    {
+        float2 pxs = floor(uv0 * p[2].xy);
+        float frame = floor(p[4].y * 60);
+        float n1 = frac(52.9829189 * frac(dot(pxs, float2(0.06711056, 0.00583715))) + frame * 0.618034);
+        float n2 = frac(n1 * 7.123 + frame * 0.381966 + 0.5);
+        float3 w = normalize(C - P);
+        float3 u = normalize(cross(w, abs(w.y) < 0.9 ? float3(0, 1, 0) : float3(1, 0, 0)));
+        float3 v = cross(w, u);
+        float ang = n1 * 6.2831853, rad = sqrt(n2) * 8;
+        C += (u * cos(ang) + v * sin(ang)) * rad;
+    }
     float dist = length(C - P);
     float stop = 1 - src / max(dist, 1);  // the way up to the source's own reach
     if (stop <= 0) return 1;

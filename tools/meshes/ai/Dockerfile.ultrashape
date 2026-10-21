@@ -1,0 +1,22 @@
+# UltraShape 1.0 (PKU-YuanGroup, geometry refinement of a coarse mesh from an image), for tools/meshes:
+#   docker build -t fh-ultrashape -f tools/meshes/ai/Dockerfile.ultrashape tools/meshes/ai
+# the checkpoint (infinith/UltraShape ultrashape_v1.pt) is mounted at /ckpt, the work folder at /work
+FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive PIP_NO_CACHE_DIR=1 TORCH_CUDA_ARCH_LIST="8.9" HF_HOME=/ckpt/hf
+RUN apt-get update && apt-get install -y --no-install-recommends python3.10 python3.10-dev python3-pip git \
+        libgl1 libglib2.0-0 libegl1 libxrender1 ninja-build && \
+    ln -sf /usr/bin/python3.10 /usr/bin/python && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
+RUN pip install https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.5cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
+
+RUN git clone https://github.com/PKU-YuanGroup/UltraShape-1.0.git /ultrashape
+WORKDIR /ultrashape
+# the training-only and notebook packages left out (deepspeed, wandb, sageattention, widgets)
+RUN grep -vE "^(diso|flash_attn|deepspeed|wandb|sageattention|ipywidgets|pythreejs|tensorboard)" requirements.txt > req.txt && \
+    pip install -r req.txt
+# built against the torch above (their setup reads CUDA_HOME)
+ENV CUDA_HOME=/usr/local/cuda CPATH=/usr/local/cuda/include
+RUN pip install --no-build-isolation diso==0.1.4 git+https://github.com/ashawkey/cubvh

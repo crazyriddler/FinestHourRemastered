@@ -36,6 +36,7 @@ def main():
     ap.add_argument("--each", default="", help='control lines before each shot (";" between): "cmd look 60 0"')
     ap.add_argument("--menu", action="store_true", help="no level: the shots from the main menu on (--at its time)")
     ap.add_argument("--mortal", action="store_true", help="the player not made immune (hits: the damage marks)")
+    ap.add_argument("--movies", action="store_true", help="the game's movies played (a level's ending film)")
     ap.add_argument("--draws", action="store_true", help="every shot's frame's draws in the log, not the first's alone")
     a = ap.parse_args()
     out = os.path.join(WORK, a.tag)
@@ -50,6 +51,8 @@ def main():
     drive.kill_build_exe()
     env = dict(os.environ)
     env.update({"XBE_CONTROL": control, "XBE_INPUT_REPLAY": replay, "XBE_SKIP_MOVIES": "1"})
+    if a.movies:
+        env.pop("XBE_SKIP_MOVIES")
     for kv in filter(None, a.env.split(";")):
         k, v = kv.split("=", 1)
         env[k.strip()] = v.strip()

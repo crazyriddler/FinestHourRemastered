@@ -12,7 +12,7 @@ from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SHOTS = os.path.join(ROOT, "work", "shots")
-LEVELS = [1, 2, 4, 5, 7, 8, 11, 12, 14, 15, 17, 18]
+LEVELS = [1, 2, 4, 5, 7, 8, 11, 12, 14, 15, 17, 18, 24, 25, 26, 30, 36, 37, 38]  # the 19 missions (the game's level ids)
 
 
 def main():

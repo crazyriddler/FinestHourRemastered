@@ -111,6 +111,7 @@ bool* Effect(const std::string& name) {
         {"color_grade", &app::Settings::color_grade},
         {"film_grain", &app::Settings::film_grain},
         {"smooth_models", &app::Settings::smooth_models},
+        {"remastered_models", &app::Settings::remastered_models},
         {"reflections", &app::Settings::reflections},
         {"sun_moon", &app::Settings::sun_moon},
         {"clouds", &app::Settings::clouds},
@@ -417,6 +418,10 @@ void Command(const std::string& line) {
             std::snprintf(gpu::g_frame_stats_label, sizeof(gpu::g_frame_stats_label), "%s", line.size() > 10 ? line.c_str() + 10 : "");
             gpu::g_frame_stats = 2;
         }
+        if (int w = -1; std::sscanf(line.c_str(), "giveweapon %d", &w) == 1) cod::GiveWeapon(w);
+        // (the next level the game's own: a level forced by "level" would take its place)
+        if (int w = -1; std::sscanf(line.c_str(), "endlevel %d", &w) == 1) g_level_request = -1, cod::EndLevel(w);
+        if (int w = -1, k = 3; std::sscanf(line.c_str(), "giveitem %d %d", &w, &k) >= 1) cod::GiveItem(w, k);
         if (line == "god on" || line == "god off") cod::SetGodMode(line == "god on"), LOGR("god: %s (player %08X)", line.c_str() + 4, cod::PlayerEntity());
         if (std::sscanf(line.c_str(), "warp %f %f %f", &to[0], &to[1], &to[2]) == 3 && cod::wide::CameraPos(eye)) {
             const bool hold = line.find(" hold") != std::string::npos;

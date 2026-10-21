@@ -116,6 +116,7 @@ X86_FUNC(sub_00129250) {  // SetCurrentLevel(index)
         W32(ctx.esp + 4, uint32_t(g_level_request));
     }
     gpu::g_level = int32_t(R32(ctx.esp + 4));
+    cod::LevelSet();
     if (gpu::g_level >= 0) control::Anchor();
     __imp__sub_00129250(ctx, base);
 }

@@ -22,7 +22,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EXE_DIR = os.path.join(ROOT, "out", "build", "release")
 LOG = os.path.join(EXE_DIR, "logs", "codfh.log")
 WORK = os.path.join(ROOT, "work")
-LEVELS = [1, 2, 4, 5, 7, 8, 11, 12, 14, 15, 17, 18]
+LEVELS = [1, 2, 4, 5, 7, 8, 11, 12, 14, 15, 17, 18, 24, 25, 26, 30, 36, 37, 38]  # the 19 missions (the game's level ids)
 START = "5:START 8:A 12:A 15:A 18:A"
 
 

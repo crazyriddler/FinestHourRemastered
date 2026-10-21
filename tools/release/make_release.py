@@ -156,6 +156,9 @@ def portable(game):
 # brought up to date by them); the base's other files are checked by size; the first release's exe is deleted
 ALWAYS = ("CODFH.exe", "d3dcompiler_47.dll", "README.md", "LICENSE.txt", "THIRD_PARTY.txt")
 DELETE = ("FinestHourRemastered.exe",)
+# files once shipped and no longer (the remastered meshes held back for review: tools/meshes/scope.py), taken out of
+# an installation that has them
+RETIRED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "retired_files.txt")
 KEEP = ("codfh.toml",)  # the player's own settings: never written by an update
 
 
@@ -232,7 +235,10 @@ def build_patch(items, version, undo=None):
             files.append(r)
             with open(s, "rb") as f:
                 data.append(f.read())
-    for r in DELETE:
+    retired = []
+    if os.path.exists(RETIRED):
+        retired = [l.strip() for l in open(RETIRED) if l.strip() and not l.startswith("#")]
+    for r in list(DELETE) + [r for r in retired if r not in staged and r not in base]:
         head.append("delete " + r)
     for r in undo:
         if r not in staged and r not in KEEP and r not in base:

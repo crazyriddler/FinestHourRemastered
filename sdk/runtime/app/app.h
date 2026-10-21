@@ -62,8 +62,12 @@ struct Settings {
     bool color_grade = true;         // each campaign's own tones: the Russian winter, the African desert, Europe
     bool film_grain = true;          // a faint, fine grain
     bool hit_reactions = true;       // soldiers flinch where bullets hit them
-    bool remastered_models = true;  // the remastered meshes (remaster/meshes): weapons, soldiers, vehicles, objects
-    bool smooth_models = true;       // characters and weapons tessellated into smooth curved surfaces (PN triangles)
+    uint32_t models = 2;             // the models: 0 the game's own, 1 smooth (characters and weapons tessellated into
+                                     // curved surfaces, PN triangles), 2 remastered (remaster/meshes: soldiers, weapons
+                                     // in first and third person, pickups)
+    // (the two below follow models, SetModels; not saved. Tests toggle them alone: "cmd fx remastered_models 0")
+    bool remastered_models = true;
+    bool smooth_models = false;
     bool reflections = true;         // glossy surfaces (metal, glass, varnished wood, wet stone) reflect the scene
     bool sun_moon = true;            // the sun (by day) or the moon (by night) in the sky, where the level's light is
     bool clouds = true;              // drifting clouds over the sky, lit by it and the sun
@@ -85,6 +89,7 @@ struct Settings {
 Settings& Get();
 void Load();
 void Save();
+void SetModels(Settings& s, uint32_t models);  // models and the two that follow it
 void LogSettings();  // every setting, as the settings file has them
 void LogSystem();    // the machine and the settings, at a run's start
 void ApplyDisplay();  // any thread

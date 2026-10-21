@@ -161,20 +161,21 @@ constexpr SBool kPresetFlags[] = {
     &app::Settings::wind, &app::Settings::ambient_particles, &app::Settings::lit_smoke, &app::Settings::character_light,
     &app::Settings::bounce_light, &app::Settings::soft_shadows, &app::Settings::volumetric_fog, &app::Settings::cloud_shadows,
     &app::Settings::auto_exposure, &app::Settings::color_grade, &app::Settings::film_grain, &app::Settings::hit_reactions,
-    &app::Settings::smooth_models, &app::Settings::remastered_models, &app::Settings::reflections, &app::Settings::sun_moon, &app::Settings::clouds,
+    &app::Settings::reflections, &app::Settings::sun_moon, &app::Settings::clouds,
     &app::Settings::remaster, &app::Settings::materials, &app::Settings::parallax, &app::Settings::detail,
     &app::Settings::pixel_lighting, &app::Settings::height_blend};
 constexpr SUint kPresetValues[] = {&app::Settings::aniso, &app::Settings::sharpening, &app::Settings::shadow_quality,
-                                   &app::Settings::specular};
+                                   &app::Settings::specular, &app::Settings::models};
 
 // a preset's values (the settings' own defaults are Very High)
 app::Settings PresetValues(int p) {
     app::Settings v;
     v.aniso = 16, v.sharpening = 0, v.shadow_quality = 3, v.specular = 100;
+    app::SetModels(v, 2);  // the remastered models in every preset but Original
     for (SBool f : kPresetFlags) v.*f = true;
     if (p >= kHigh) {
         v.shadow_quality = 2;
-        v.smooth_models = v.volumetric_fog = v.bounce_light = v.flash_shadows = false;
+        v.volumetric_fog = v.bounce_light = v.flash_shadows = false;
     }
     if (p >= kMedium) {
         v.shadow_quality = 2, v.aniso = 8;
@@ -192,6 +193,7 @@ app::Settings PresetValues(int p) {
     if (p >= kOriginal) {
         for (SBool f : kPresetFlags) v.*f = false;
         v.shadow_quality = 0, v.aniso = 0;
+        app::SetModels(v, 0);
     }
     return v;
 }
@@ -238,6 +240,7 @@ void ApplyPreset(int p) {
     app::Settings v = PresetValues(p);
     for (SBool f : kPresetFlags) s.*f = v.*f;
     for (SUint f : kPresetValues) s.*f = v.*f;
+    app::SetModels(s, s.models);
 }
 
 }  // namespace cod::overlay
@@ -344,9 +347,11 @@ std::vector<Page> BuildPages() {
     graphics.items.push_back(Toggle("Height Blending", &s.height_blend, "Ground layers meet along their stones and cracks."));
     graphics.items.push_back(Slider("Specular", &s.specular, 0, 200, 10, "%d%%", "The strength of the surfaces' highlights."));
     graphics.items.push_back(Toggle("Per-Pixel Lighting", &s.pixel_lighting, "Smooth light on characters, no facets."));
-    graphics.items.push_back(Toggle("Remastered Models", &s.remastered_models,
-                                    "Weapons, soldiers, vehicles and objects remodelled: rounder, denser, smooth outlines."));
-    graphics.items.push_back(Toggle("Smooth Models", &s.smooth_models, "Characters and weapons rounded: no angular outlines."));
+    graphics.items.push_back(Choice("Models", {"Original", "Smooth", "Remastered"},
+                                    [&s] { return int(std::min<uint32_t>(s.models, 2)); },
+                                    [&s](int i) { app::SetModels(s, uint32_t(i)); },
+                                    "Remastered: soldiers, weapons and pickups remodelled, rounder and denser. Smooth: the "
+                                    "game's characters and weapons rounded. Original: the game's own."));
     graphics.items.push_back(Toggle("Reflections", &s.reflections, "Metal, glass, varnished wood and stone reflect what is around them."));
     pages.push_back(std::move(graphics));
 

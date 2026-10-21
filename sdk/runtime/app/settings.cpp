@@ -32,6 +32,12 @@ Settings& Get() {
     return s;
 }
 
+void SetModels(Settings& s, uint32_t models) {
+    s.models = std::min<uint32_t>(models, 2);
+    s.smooth_models = s.models == 1;
+    s.remastered_models = s.models == 2;
+}
+
 // Windows' display language as the console's: English, French, Spanish, Italian or Portuguese, else English
 uint32_t SystemLanguage() {
     switch (PRIMARYLANGID(GetUserDefaultUILanguage())) {
@@ -99,8 +105,15 @@ void Load() {
     s.color_grade = t["color_grade"].value_or(s.color_grade);
     s.film_grain = t["film_grain"].value_or(s.film_grain);
     s.reflections = t["reflections"].value_or(s.reflections);
-    s.smooth_models = t["smooth_models"].value_or(s.smooth_models);
-    s.remastered_models = t["remastered_models"].value_or(s.remastered_models);
+    // the models: one setting now; from before, the two toggles (the remastered ones on, or the smooth ones, or
+    // neither: the game's own)
+    if (auto m = t["models"].value<int64_t>()) {
+        SetModels(s, uint32_t(std::clamp<int64_t>(*m, 0, 2)));
+    } else if (t["remastered_models"] || t["smooth_models"]) {
+        SetModels(s, t["remastered_models"].value_or(true) ? 2u : t["smooth_models"].value_or(false) ? 1u : 0u);
+    } else {
+        SetModels(s, s.models);
+    }
     s.hit_reactions = t["hit_reactions"].value_or(s.hit_reactions);
     s.sun_moon = t["sun_moon"].value_or(s.sun_moon);
     s.clouds = t["clouds"].value_or(s.clouds);
@@ -182,8 +195,7 @@ toml::table Table() {
                   {"color_grade", s.color_grade},
                   {"film_grain", s.film_grain},
                   {"reflections", s.reflections},
-                  {"smooth_models", s.smooth_models},
-                  {"remastered_models", s.remastered_models},
+                  {"models", int64_t(s.models)},
                   {"hit_reactions", s.hit_reactions},
                   {"sun_moon", s.sun_moon},
                   {"clouds", s.clouds},

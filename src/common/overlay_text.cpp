@@ -158,14 +158,17 @@ constexpr Row kRows[] = {
     {"Per-Pixel Lighting", "Éclairage par pixel", "Illuminazione per pixel", "Iluminación por píxel"},
     {"Smooth light on characters, no facets.", "Lumière douce sur les personnages, sans facettes.",
      "Luce morbida sui personaggi, senza sfaccettature.", "Luz suave en los personajes, sin facetas."},
-    {"Remastered Models", "Modèles remastérisés", "Modelli rimasterizzati", "Modelos remasterizados"},
-    {"Weapons, soldiers, vehicles and objects remodelled: rounder, denser, smooth outlines.",
-     "Armes, soldats, véhicules et objets remodelés : plus ronds, plus denses, aux contours lisses.",
-     "Armi, soldati, veicoli e oggetti rimodellati: più rotondi, più densi, contorni lisci.",
-     "Armas, soldados, vehículos y objetos remodelados: más redondos, más densos, contornos suaves."},
-    {"Smooth Models", "Modèles lissés", "Modelli levigati", "Modelos suavizados"},
-    {"Characters and weapons rounded: no angular outlines.", "Personnages et armes arrondis : plus de contours anguleux.",
-     "Personaggi e armi arrotondati: niente contorni spigolosi.", "Personajes y armas redondeados: sin contornos angulosos."},
+    {"Models", "Modèles", "Modelli", "Modelos"},
+    {"Smooth", "Lissés", "Levigati", "Suavizados"},
+    {"Remastered", "Remastérisés", "Rimasterizzati", "Remasterizados"},
+    {"Remastered: soldiers, weapons and pickups remodelled, rounder and denser. Smooth: the game's characters and weapons "
+     "rounded. Original: the game's own.",
+     "Remastérisés : soldats, armes et objets à ramasser remodelés, plus ronds et plus denses. Lissés : personnages et "
+     "armes du jeu arrondis. Original : ceux du jeu.",
+     "Rimasterizzati: soldati, armi e oggetti da raccogliere rimodellati, più rotondi e più densi. Levigati: personaggi e "
+     "armi del gioco arrotondati. Originale: quelli del gioco.",
+     "Remasterizados: soldados, armas y objetos recogibles remodelados, más redondos y densos. Suavizados: personajes y "
+     "armas del juego redondeados. Original: los del juego."},
     {"Reflections", "Reflets", "Riflessi", "Reflejos"},
     {"Metal, glass, varnished wood and stone reflect what is around them.",
      "Le métal, le verre, le bois verni et la pierre reflètent ce qui les entoure.",

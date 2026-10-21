@@ -29,13 +29,12 @@ The trailer (2560x1440, 60 FPS) is among the release's downloads: `FinestHourRem
 
 ## New: Remastered Models
 
-Every model in the game has been remastered: the weapons in your hands and on the ground, every soldier of every
-army, the tanks and vehicles, the pickups and the objects of the levels, more than 3,000 models in all. Rounded
-barrels, drums and stocks, soldiers without the old corners at their elbows, knees and coats, wheels and turrets that
-are finally round. Each one keeps the game's own textures, animations and proportions: the same game, with the
-blockiness gone.
+The soldiers of every army, the weapons in your hands and in theirs, and the pickups (weapons on the ground,
+medkits, ammunition, grenades) have been remastered. Rounded barrels, drums and stocks, soldiers without the old
+corners at their elbows, knees and coats. Each one keeps the game's own textures, animations and proportions: the
+same game, with the blockiness gone.
 
-**In game** (Remastered Models off and on):
+**In game** (Models: Original and Remastered):
 
 | Original | Remastered |
 |---|---|
@@ -49,9 +48,9 @@ blockiness gone.
 | ![](docs/media/models_tanker.jpg) | ![](docs/media/models_ppsh_w.jpg) |
 | ![](docs/media/models_fp_mosin.jpg) | ![](docs/media/models_kar_w.jpg) |
 | ![](docs/media/models_fp_ppsh.jpg) | ![](docs/media/models_mp40.jpg) |
-| ![](docs/media/models_t34.jpg) | ![](docs/media/models_barrel.jpg) |
 
-Turn them off and on in **PC Settings > Graphics > Remastered Models**.
+Choose them in **PC Settings > Graphics > Models**: Remastered (the default), Smooth (the game's own characters and
+weapons rounded) or Original.
 
 ## Contents
 - [New: Remastered Models](#new-remastered-models)
@@ -150,10 +149,10 @@ game's own look and textures. The render scale is never part of a preset: it sta
 - **Detail Textures**: a per-material high-frequency grain (stone, brick, concrete, wood, metal, fabric, ground,
   snow, ...) that keeps surfaces sharp up close, fading out with distance.
 - **Height Blending**: ground layers meet along their stones and cracks.
-- **Remastered Models**: every weapon, soldier, vehicle and object of the game remastered, more than 3,000
-  models (see [above](#new-remastered-models)).
+- **Models**: Remastered, the soldiers, weapons and pickups remastered (see [above](#new-remastered-models));
+  Smooth, the game's own characters and weapons tessellated into rounded shapes; or Original.
 - **Character Detail**: skin pores and uniform weave up close. **Weapon Materials**: relief and metal sheen on the
-  weapon in hand. **Smooth Models**: characters and weapons tessellated into rounded shapes.
+  weapon in hand.
 - **Reflections**: screen-space reflections on metal, glass, varnished wood, stone and water.
 
 ### Water, snow and effects

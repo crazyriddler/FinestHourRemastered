@@ -6,10 +6,11 @@ mesh with little to round (its faces meet flat or at hard corners: walls, boxes,
 it would only cost triangles. Characters take two levels of subdivision, the rest one; the ground, leaves, glass,
 paper, effects and the sky none.
 
-    python tools/meshes/batch.py <dump folder> [--out work/remaster/pack/meshes] [--only key,key] [--jobs 8]
+    python tools/meshes/batch.py <dump folder> [--out work/remaster/pack/meshes] [--only key,key | @file] [--jobs 8]
         [--force] (again, those done already too)
 """
 import argparse
+import re
 import concurrent.futures
 import glob
 import json
@@ -32,6 +33,11 @@ EXCLUDED_CLASSES = {"ground", "foliage", "glass", "paper", "effect", "sky", "ui"
 MIN_VERTICES = 100
 ROUNDABLE = 0.12      # the share of its edges folded softly (5 to 55 degrees) a mesh needs to be subdivided
 LARGE = 3000          # vertices: one level of subdivision past this
+FLAT = 0.02           # an organic mesh's share below this: flat (a grid of water, a flag)
+WATER = re.compile(r"water", re.I)  # the water's own meshes (their texture's name): the water effects draw them
+# left as they are by their texture's name: the boats' hulls (low hard planks, long fans of thin triangles and
+# vertices on other edges: rounded, their decks folded at the bow)
+AS_THEY_ARE = re.compile(r"^(VT_Volgaboat_hull|VT_Volgaboat_innerhull|VT_Steamboat|VT_Tugboat|VT_Rowboat|VT_backgroundBoat)", re.I)
 
 
 def bones(m):
@@ -82,11 +88,17 @@ def main():
     ap.add_argument("--force", action="store_true")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    only = set(a.only.split(",")) if a.only else None
+    if a.only.startswith("@"):  # (a file of keys, "," or a line between: a long list)
+        a.only = ",".join(open(a.only[1:]).read().split())
+    only = {k.strip() for k in a.only.split(",") if k.strip()} if a.only else None
     classes = {}
     mats_path = os.path.join(ROOT, "work", "remaster", "pack", "materials.json")
     if os.path.exists(mats_path):
         classes = {k: v.get("cls") for k, v in json.load(open(mats_path)).items()}
+    names = {}
+    index_path = os.path.join(ROOT, "work", "remaster", "extract", "index.json")
+    if os.path.exists(index_path):
+        names = {k: (v.get("names") or [""])[0] for k, v in json.load(open(index_path)).items()}
     meshes = {}
     for path in sorted(glob.glob(os.path.join(a.dump, "*.fhm"))):
         key = os.path.splitext(os.path.basename(path))[0]
@@ -105,13 +117,18 @@ def main():
         size = m.reg(0)[:, :3].max(0) - m.reg(0)[:, :3].min(0)
         cls = classes.get(f"{m.tex:016x}")
         organic = m.tex in skin or cls in ORGANIC_CLASSES
+        if WATER.search(names.get(f"{m.tex:016x}", "")):
+            return f"{name}: left as it is (water)"
+        if AS_THEY_ARE.search(names.get(f"{m.tex:016x}", "").strip()):
+            return f"{name}: left as it is (by its name)"
         if cls in EXCLUDED_CLASSES and m.tex not in skin:
             return f"{name}: left as it is ({cls})"
         # (an arm's or a body's small piece is subdivided all the same: beside the others it would show its facets)
         if (len(m.vertices) < MIN_VERTICES and not organic) or not m.tex or size.min() < 1.0:
             return f"{name}: left as it is (small or flat)"
         share = roundable(m)
-        if not organic and share < ROUNDABLE:
+        # (skinned alone is not round: the river's waves and a flag are flat grids moved by bones)
+        if share < (FLAT if organic else ROUNDABLE):
             return f"{name}: left as it is (nothing to round, {share:.2f})"
         # (characters and arms two levels; hard surfaces, the level's own models and anything large one)
         levels = 2 if organic and len(m.vertices) <= LARGE else 1

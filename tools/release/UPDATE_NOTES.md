@@ -81,6 +81,8 @@ The version installed is in `version.txt` beside the game. Unattended:
   ground, every soldier, the tanks and vehicles, the pickups and the level's objects, more than 3,000 in all. Round
   barrels, drums and stocks, soldiers without the old corners, round wheels and turrets, with the game's own
   textures and animations. On by default; PC Settings, Graphics, Remastered Models.
+- Remastered Models: the textures now sit on the new shapes exactly as on the original models (in the first
+  version of this update some were slightly warped where the shapes curve, like the grooves on the PPSh).
 - Crash fixed: Road to Remagen, the small passage around the large building half-way through (it also crashed
   there on the Xbox emulators). When a part of the level was unloaded, things still standing in it kept pointing at
   it, and the game used it again later. That could also crash elsewhere, at any time, after long play.

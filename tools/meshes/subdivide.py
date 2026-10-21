@@ -2,10 +2,14 @@
 function pipeline reads from it, whatever its registers hold.
 
 Blender subdivides the shape alone. Each new face remembers the original triangle it came from, and each corner of
-the new mesh takes its registers from that triangle, weighted by where it lies in it (barycentric): texture
-coordinates, colours, anything continuous; bone indices from the nearest corner; bone weights summed by bone over the
-three corners, the 3 strongest kept. The normals are the new shape's own. So UV seams, prelit colours and skinning
-come out as the original had them, for a character, a vehicle or a weapon alike.
+the new mesh takes its registers from the original surface where it lies nearest (barycentric in that triangle):
+texture coordinates, colours, anything continuous; bone indices from the nearest corner; bone weights summed by bone
+over the three corners, the 3 strongest kept. The nearest point is looked for on its own triangle and those about it
+(two rings) of the same UV island (no seam crossed) and facing the same way (not a thin part's other side): the
+rounding moves a corner off its own triangle where the shape curves, and kept on it the texture was squeezed to the
+triangle's edge and smeared along it. So the texture shows on the new shape as it showed on the original. The
+normals are the new shape's own. UV seams, prelit colours and skinning come out as the original had them, for a
+character, a vehicle or a weapon alike.
 
 The original's smoothing tells where it is meant to be round and where hard: an edge whose two faces share their
 normals is smooth and subdivides round; one split in normals (a hard edge) is creased and stays sharp; on hard
@@ -155,6 +159,82 @@ def apply_subdivision(obj, levels):
     bpy.ops.object.modifier_apply(modifier=tri.name)
 
 
+def closest(p, a, b, c):
+    """the point of each triangle (a, b, c) nearest p, as its weights in it: ([n, 3] weights, [n] distances)
+    (Ericson, Real-Time Collision Detection 5.1.5, over arrays)"""
+    ab, ac, ap = b - a, c - a, p - a
+    d1, d2 = (ab * ap).sum(1), (ac * ap).sum(1)
+    bp = p - b
+    d3, d4 = (ab * bp).sum(1), (ac * bp).sum(1)
+    cp = p - c
+    d5, d6 = (ab * cp).sum(1), (ac * cp).sum(1)
+    va, vb, vc = d3 * d6 - d5 * d4, d5 * d2 - d1 * d6, d1 * d4 - d3 * d2
+    n = len(p)
+    w = np.zeros((n, 3))
+    done = np.zeros(n, bool)
+
+    def put(mask, bw):
+        nonlocal done
+        m = mask & ~done
+        w[m] = bw[m] if bw.ndim == 2 else bw
+        done |= m
+
+    eps = 1e-30
+    put((d1 <= 0) & (d2 <= 0), np.array([1.0, 0, 0]))
+    put((d3 >= 0) & (d5 <= d3), np.array([0, 1.0, 0]))
+    t = d1 / np.where(np.abs(d1 - d3) < eps, eps, d1 - d3)
+    put((vc <= 0) & (d1 >= 0) & (d3 <= 0), np.stack([1 - t, t, np.zeros(n)], 1))
+    put((d6 >= 0) & (d4 <= d6), np.array([0, 0, 1.0]))
+    t = d2 / np.where(np.abs(d2 - d6) < eps, eps, d2 - d6)
+    put((vb <= 0) & (d2 >= 0) & (d6 <= 0), np.stack([1 - t, np.zeros(n), t], 1))
+    den = (d4 - d3) + (d5 - d6)
+    t = (d4 - d3) / np.where(np.abs(den) < eps, eps, den)
+    put((va <= 0) & ((d4 - d3) >= 0) & ((d5 - d6) >= 0), np.stack([np.zeros(n), 1 - t, t], 1))
+    den = va + vb + vc
+    den = np.where(np.abs(den) < eps, eps, den)
+    put(np.ones(n, bool), np.stack([va / den, vb / den, vc / den], 1))
+    w = np.clip(w, 0, 1)  # (a triangle with no area: its weights as they come, kept to the triangle)
+    w /= np.maximum(w.sum(1, keepdims=True), 1e-12)
+    q = a * w[:, :1] + b * w[:, 1:2] + c * w[:, 2:]
+    return w, np.linalg.norm(p - q, axis=1)
+
+
+def neighbours(m, rl, rings=2):
+    """each original triangle's own and those about it (sharing an edge, as far as `rings` steps) of its UV island:
+    across the edge both corners alike in every register but the position and normal (the texture coordinates,
+    colours, bones)"""
+    pos, wid = weld(m)
+    vals = [r for r, k in rl.items() if k in ("value", "indices", "weights")]  # (a piece on another bone: another)
+    V = np.concatenate([m.reg(r) for r in vals], 1) if vals else np.zeros((len(wid), 0))
+    tris = m.indices
+    edges = {}
+    for ti, t in enumerate(tris):
+        for k in range(3):
+            u, v = int(t[k]), int(t[(k + 1) % 3])
+            key = (min(wid[u], wid[v]), max(wid[u], wid[v]))
+            if key[0] != key[1]:
+                edges.setdefault(key, []).append((ti, u, v))
+    adj = [set() for _ in range(len(tris))]
+    for (wu, wv), lst in edges.items():
+        for i in range(len(lst)):
+            for j in range(i + 1, len(lst)):
+                (t0, u0, v0), (t1, u1, v1) = lst[i], lst[j]
+                # the same corners of the edge on each side (by welded point)
+                a0, b0 = (u0, v0) if wid[u0] == wu else (v0, u0)
+                a1, b1 = (u1, v1) if wid[u1] == wu else (v1, u1)
+                if np.abs(V[a0] - V[a1]).max(initial=0) < 1e-4 and np.abs(V[b0] - V[b1]).max(initial=0) < 1e-4:
+                    adj[t0].add(t1)
+                    adj[t1].add(t0)
+    out = []
+    for ti in range(len(tris)):
+        seen, ring = {ti}, {ti}
+        for _ in range(rings):
+            ring = {n for r in ring for n in adj[r]} - seen
+            seen |= ring
+        out.append(np.array(sorted(seen)))
+    return out
+
+
 def barycentric(p, a, b, c):
     """p's weights in the triangle (a, b, c), projected on its plane and kept inside it: [n, 3]"""
     v0, v1, v2 = b - a, c - a, p - a
@@ -199,15 +279,43 @@ def export(obj, src):
     poly_src = np.zeros(len(mesh.polygons), np.int32)
     mesh.attributes["src"].data.foreach_get("value", poly_src)
 
-    # each corner of the new triangles: its original triangle and its place in it
-    corners = tri_loops  # loops, 3 a triangle
-    orig_tri = src.indices[poly_src[np.repeat(tri_poly, 3)]]  # [3n, 3] the original's corners (vertex indices)
-    p = co[loop_v[corners]].astype(np.float64)
-    P = src.reg(0)[:, :3].astype(np.float64)
-    bc = barycentric(p, P[orig_tri[:, 0]], P[orig_tri[:, 1]], P[orig_tri[:, 2]])
-
+    # each corner of the new triangles: the original surface where it lies nearest, about the triangle it came from
     regs = src.reg_list()
     rl = roles(src)
+    corners = tri_loops  # loops, 3 a triangle
+    from_tri = poly_src[np.repeat(tri_poly, 3)]  # [3n] the original triangle each corner came from
+    p = co[loop_v[corners]].astype(np.float64)
+    P = src.reg(0)[:, :3].astype(np.float64)
+    T = src.indices.astype(np.int64)
+    tn = np.cross(P[T[:, 1]] - P[T[:, 0]], P[T[:, 2]] - P[T[:, 0]])
+    area = np.linalg.norm(tn, axis=1)
+    flat = area < 1e-10 * float(np.ptp(P, 0).max() or 1.0) ** 2  # no area: no place to take a texture from
+    tn /= np.maximum(area[:, None], 1e-12)
+    around = neighbours(src, rl)
+    cn = loop_n[corners].astype(np.float64)
+    tri_of = from_tri.copy()
+    bc = np.zeros((len(corners), 3))
+    order = np.argsort(from_tri, kind="stable")
+    bounds = np.searchsorted(from_tri[order], np.arange(len(T) + 1))
+    for t in range(len(T)):
+        sel = order[bounds[t]:bounds[t + 1]]
+        if not len(sel):
+            continue
+        q = p[sel]
+        best = np.full(len(sel), np.inf)
+        own = np.sign(cn[sel] @ tn[t])  # (the corner's normal against its own triangle's winding)
+        own = np.where(own == 0, 1.0, own)
+        for c in [t] + [c for c in around[t] if c != t and not flat[c]]:
+            w, d = closest(q, np.repeat(P[T[c, :1]], len(sel), 0), np.repeat(P[T[c, 1:2]], len(sel), 0),
+                           np.repeat(P[T[c, 2:]], len(sel), 0))
+            # (not a face turned away from the corner: a thin part's other side), its own always allowed
+            if c != t:
+                d = np.where((cn[sel] @ tn[c]) * own > 0.2, d, np.inf)
+            better = d < best - 1e-9 if c != t else d < best
+            best = np.where(better, d, best)
+            tri_of[sel[better]] = c
+            bc[sel[better]] = w[better]
+    orig_tri = T[tri_of]  # [3n, 3] the original's corners (vertex indices)
     nregs = len(regs)
     rows = np.zeros((len(corners), nregs, 4), np.float32)
     nearest = orig_tri[np.arange(len(corners)), bc.argmax(1)]

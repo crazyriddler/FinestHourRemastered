@@ -1,7 +1,7 @@
 """The remastered meshes the release ships, by what they draw (their texture's name): the soldiers (bodies, heads,
 hands, their gear), the weapons in first and third person, the pickups (weapons on the ground, medkits,
-ammunition, grenades) and the tanks (Panzer IV, T-34, Sherman). The scenery and the other vehicles wait for a closer
-review: their meshes are moved out of the pack
+ammunition, grenades) and the vehicles (tanks, half-tracks, trucks, planes, anti-tank guns). The scenery, the boats
+and the cars wait for a closer review: their meshes are moved out of the pack
 to work/meshes/pack_held, and listed in tools/release/retired_files.txt so an update takes them out of an
 installation that had them.
 
@@ -26,7 +26,9 @@ SOLDIERS = r"^(AT_|Arm_|BT\d|Bt\d|BM\d|HT|HGS|HM_|GT|DeadRussian|aDeadHead|MoreC
 WEAPONS = r"(Back|Front|_back|_front)$|^(BazookaBody|BazookaSite|MosinAmmo|MWT_MG42_|BearNade|grenade$|pistol$|knife$)"
 PICKUPS = r"^(PUT|PU_|RoundMedCan|ammopack|DemoCharge|TellerMine)"
 VEHICLES = re.compile(r"^(VT_|VM_|VTrack|Russian_car|truck|Volga_body|Jeep|T34_)", re.I)
-TANKS = re.compile(r"^(VT_PanzerIV|VT_T34|VT_Sherman|VTrackL_PanzerIV|VTrackL_T34|VTrack_PanzerIV|VTrackR_PanzerIV|T34_)", re.I)
+TANKS = re.compile(r"^(VT_PanzerIV|VT_T34|VT_Sherman|VTrackL_PanzerIV|VTrackL_T34|VTrack_PanzerIV|VTrackR_PanzerIV|T34_|"
+                   r"VT_Sdkfz251|VTrackL_Sdkfz251|VT_FordTruck|VT_Opel|truck_|VT_StalinsOrgans|VT_JU88|VM_P51|VM_Stuka|"
+                   r"aPak40|VT_M12|VTrackL_M12)", re.I)  # the tanks, half-tracks, trucks, planes and anti-tank guns
 KEEP = re.compile("|".join((SOLDIERS, WEAPONS, PICKUPS)))
 
 

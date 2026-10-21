@@ -113,9 +113,9 @@ const PtRow kPtRows[] = {
     {"Models", "Modelos"},
     {"Smooth", "Suavizados"},
     {"Remastered", "Remasterizados"},
-    {"Remastered: soldiers, weapons, pickups and tanks remodelled, rounder and denser. Smooth: the game's characters and "
+    {"Remastered: soldiers, weapons, pickups and vehicles remodelled, rounder and denser. Smooth: the game's characters and "
      "weapons rounded. Original: the game's own.",
-     "Remasterizados: soldados, armas, objetos de apanhar e tanques remodelados, mais redondos e densos. Suavizados: personagens e "
+     "Remasterizados: soldados, armas, objetos de apanhar e veículos remodelados, mais redondos e densos. Suavizados: personagens e "
      "armas do jogo arredondados. Original: os do jogo."},
     {"Reflections", "Reflexos"},
     {"Metal, glass, varnished wood and stone reflect what is around them.",

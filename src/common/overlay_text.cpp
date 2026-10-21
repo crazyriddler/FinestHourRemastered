@@ -161,13 +161,13 @@ constexpr Row kRows[] = {
     {"Models", "Modèles", "Modelli", "Modelos"},
     {"Smooth", "Lissés", "Levigati", "Suavizados"},
     {"Remastered", "Remastérisés", "Rimasterizzati", "Remasterizados"},
-    {"Remastered: soldiers, weapons, pickups and tanks remodelled, rounder and denser. Smooth: the game's characters and "
+    {"Remastered: soldiers, weapons, pickups and vehicles remodelled, rounder and denser. Smooth: the game's characters and "
      "weapons rounded. Original: the game's own.",
-     "Remastérisés : soldats, armes, objets à ramasser et chars remodelés, plus ronds et plus denses. Lissés : personnages et "
+     "Remastérisés : soldats, armes, objets à ramasser et véhicules remodelés, plus ronds et plus denses. Lissés : personnages et "
      "armes du jeu arrondis. Original : ceux du jeu.",
-     "Rimasterizzati: soldati, armi, oggetti da raccogliere e carri armati rimodellati, più rotondi e più densi. Levigati: personaggi e "
+     "Rimasterizzati: soldati, armi, oggetti da raccogliere e veicoli rimodellati, più rotondi e più densi. Levigati: personaggi e "
      "armi del gioco arrotondati. Originale: quelli del gioco.",
-     "Remasterizados: soldados, armas, objetos recogibles y tanques remodelados, más redondos y densos. Suavizados: personajes y "
+     "Remasterizados: soldados, armas, objetos recogibles y vehículos remodelados, más redondos y densos. Suavizados: personajes y "
      "armas del juego redondeados. Original: los del juego."},
     {"Reflections", "Reflets", "Riflessi", "Reflejos"},
     {"Metal, glass, varnished wood and stone reflect what is around them.",

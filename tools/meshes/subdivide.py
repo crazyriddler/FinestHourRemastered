@@ -152,8 +152,9 @@ def build(m, name, crease_angle=0.0):
     return obj
 
 
-def apply_subdivision(obj, levels):
+def subdivide(obj, levels, kind):
     mod = obj.modifiers.new("subd", "SUBSURF")
+    mod.subdivision_type = kind
     mod.levels = levels
     mod.render_levels = levels
     mod.boundary_smooth = "PRESERVE_CORNERS"
@@ -161,6 +162,23 @@ def apply_subdivision(obj, levels):
     mod.use_limit_surface = True
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.modifier_apply(modifier=mod.name)
+
+
+def apply_subdivision(obj, levels):
+    """the shape subdivided round; and each new vertex's point on the original where it was made (attribute "flat"):
+    the same subdivision made linear on a copy (the same refinement: the same vertices, in the same order)"""
+    flat = obj.copy()
+    flat.data = obj.data.copy()
+    bpy.context.collection.objects.link(flat)
+    subdivide(flat, levels, "SIMPLE")
+    subdivide(obj, levels, "CATMULL_CLARK")
+    n = len(obj.data.vertices)
+    if len(flat.data.vertices) != n:
+        raise RuntimeError(f"the flat copy has {len(flat.data.vertices)} vertices, the round {n}")
+    co = np.zeros(n * 3, np.float32)
+    flat.data.vertices.foreach_get("co", co)
+    obj.data.attributes.new("flat", "FLOAT_VECTOR", "POINT").data.foreach_set("vector", co)
+    bpy.data.objects.remove(flat)
     tri = obj.modifiers.new("tri", "TRIANGULATE")
     tri.quad_method = "SHORTEST_DIAGONAL"
     bpy.ops.object.modifier_apply(modifier=tri.name)
@@ -323,9 +341,21 @@ def export(obj, src):
             tri_of[sel[better]] = c
             bc[sel[better]] = w[better]
     orig_tri = T[tri_of]  # [3n, 3] the original's corners (vertex indices)
+    # the skin by where each vertex was made (its point on the flat copy, in the triangle it came from): one point
+    # for all the corners of a vertex, on the edge or the corner its triangles share, so they take the same bones
+    # and weights and move together (by the nearest point, a vertex on a texture seam took two: the seam opened
+    # as the character moved)
+    skin_tri = T[from_tri]
+    if "flat" in mesh.attributes:
+        made = np.zeros(len(mesh.vertices) * 3, np.float32)
+        mesh.attributes["flat"].data.foreach_get("vector", made)
+        q = made.reshape(-1, 3)[loop_v[corners]].astype(np.float64)
+        skin_bc = barycentric(q, P[skin_tri[:, 0]], P[skin_tri[:, 1]], P[skin_tri[:, 2]])
+    else:  # (no subdivision: where it is)
+        skin_tri, skin_bc = orig_tri, bc
     nregs = len(regs)
     rows = np.zeros((len(corners), nregs, 4), np.float32)
-    nearest = orig_tri[np.arange(len(corners)), bc.argmax(1)]
+    nearest = skin_tri[np.arange(len(corners)), skin_bc.argmax(1)]
     idx_reg = next((r for r in regs if rl[r] == "indices"), None)
     w_reg = next((r for r in regs if rl[r] == "weights"), None)
     for ri, r in enumerate(regs):
@@ -350,12 +380,13 @@ def export(obj, src):
         for n in range(len(corners)):
             acc = {}
             for k in range(3):
-                o = orig_tri[n, k]
+                o = skin_tri[n, k]
                 for j in range(3):
                     if W[o, j] > 0:
                         b = float(I[o, j])
-                        acc[b] = acc.get(b, 0.0) + float(W[o, j]) * float(bc[n, k])
-            top = sorted(acc.items(), key=lambda t: -t[1])[:3]
+                        acc[b] = acc.get(b, 0.0) + float(W[o, j]) * float(skin_bc[n, k])
+            # (ties by the bone: a vertex's corners, summed in another order, keep the same three)
+            top = sorted(acc.items(), key=lambda t: (-round(t[1], 5), t[0]))[:3]
             total = sum(w for _, w in top) or 1.0
             rows[n, ii, :3] = 0
             rows[n, wi, :3] = 0

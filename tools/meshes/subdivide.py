@@ -415,6 +415,9 @@ def export(obj, src):
     m.indices = inverse.ravel().astype(np.uint32).reshape(-1, 3)
     # each vertex's original one it lies nearest (the game's pieces left out by the original's: WeaponPieces)
     m.source = nearest[first].astype(np.uint32)
+    # each triangle's original one (the game's own triangle order): the weapon's pieces left out on a wide screen take
+    # out the very triangles made from theirs (by the vertices, a triangle across two pieces stayed, a shard)
+    m.tri_source = poly_src[tri_poly].astype(np.uint32)
     return m
 
 

@@ -20,7 +20,8 @@ struct Settings {
     bool hud_compass = true;
     bool hud_stance = true;       // standing, crouching, lying down
     bool hud_crosshair = true;
-    uint32_t hud_size = 0;        // 0 the original's, 1 small, 2 smaller: each element where it was (game/hud.cpp)
+    uint32_t hud_size = 2;        // 0 the original's, 1 small, 2 smaller: each element where it was (game/hud.cpp);
+                                  // a graphics preset sets it too (the Original preset the original's, the others smaller)
     // input
     bool keyboard_mouse = true;
     uint32_t mouse_sensitivity = 100;  // percent

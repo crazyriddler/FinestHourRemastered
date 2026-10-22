@@ -9,7 +9,7 @@ import sys
 import numpy as np
 
 HEADER = struct.Struct("<4sQQIIIHHII")
-CULL, CCW, CONSTANTS, SOURCE = 1, 2, 4, 8
+CULL, CCW, CONSTANTS, SOURCE, TRI_SOURCE = 1, 2, 4, 8, 16
 
 
 class Mesh:
@@ -21,6 +21,7 @@ class Mesh:
         self.indices = np.zeros((0, 3), np.uint32)
         self.constants = None  # [192, 4]: D3D register + 96
         self.source = None  # [vertex]: the original's nearest vertex (a remastered mesh's)
+        self.tri_source = None  # [triangle]: the original's triangle it was made from (a remastered mesh's)
 
     def reg_list(self):
         return [r for r in range(16) if self.regs >> r & 1]
@@ -46,6 +47,9 @@ def read(path):
     if flags & SOURCE:
         m.source = np.frombuffer(data, np.uint32, nv, o).copy()
         o += nv * 4
+    if flags & TRI_SOURCE:
+        m.tri_source = np.frombuffer(data, np.uint32, ni // 3, o).copy()
+        o += (ni // 3) * 4
     if flags & CONSTANTS:
         m.constants = np.frombuffer(data, np.float32, 192 * 4, o).reshape(192, 4).copy()
     return m
@@ -53,13 +57,16 @@ def read(path):
 
 def write(path, m):
     nv, nregs = m.vertices.shape[0], m.vertices.shape[1]
-    flags = m.flags & ~(CONSTANTS | SOURCE) | (SOURCE if m.source is not None else 0)
+    flags = (m.flags & ~(CONSTANTS | SOURCE | TRI_SOURCE) | (SOURCE if m.source is not None else 0) |
+             (TRI_SOURCE if m.tri_source is not None else 0))
     with open(path, "wb") as f:
         f.write(HEADER.pack(b"FHM1", m.key, m.tex, m.prim, m.count, flags, m.regs, nregs, nv, m.indices.size))
         f.write(np.ascontiguousarray(m.vertices, np.float32).tobytes())
         f.write(np.ascontiguousarray(m.indices, np.uint32).tobytes())
         if m.source is not None:
             f.write(np.ascontiguousarray(m.source, np.uint32).tobytes())
+        if m.tri_source is not None:
+            f.write(np.ascontiguousarray(m.tri_source, np.uint32).tobytes())
 
 
 def main():

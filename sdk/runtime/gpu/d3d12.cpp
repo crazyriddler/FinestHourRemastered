@@ -210,7 +210,7 @@ float Opening(float2 q) {
     float2 d = abs(q - c) * float2(16.0 / 9.0, 1) - h * float2(16.0 / 9.0, 1) + opts.y;
     return length(max(d, 0)) + min(max(d.x, d.y), 0) - opts.y;
 }
-float3 Picture(float2 s) {
+float3 Picture(float2 s, float2 dev) {
     // a slightly curved tube: the picture bulges towards the edges
     float2 c = s * 2 - 1;
     c *= 1 + opts.z * float2(c.y * c.y, c.x * c.x);
@@ -228,12 +228,24 @@ float3 Picture(float2 s) {
     float2 up = float2(0.5 / 640, 0.5 / 480);
     float4 o = ui.SampleLevel(ls, s, 0) * 0.4 + (ui.SampleLevel(ls, s + float2(up.x, 0), 0) + ui.SampleLevel(ls, s - float2(up.x, 0), 0) +
                ui.SampleLevel(ls, s + float2(0, up.y), 0) + ui.SampleLevel(ls, s - float2(0, up.y), 0)) * 0.15;
+    // the tube's glow (halation, as the CRT shaders make it: crt-lottes, crt-geom): the bright parts' light spread
+    // a few lines about them, which softens a low resolution picture's steps without blurring the text over it
+    float2 g = px * 5;
+    float3 glow = (img.SampleLevel(ls, uv + float2(g.x, g.y), 0).rgb + img.SampleLevel(ls, uv + float2(-g.x, g.y), 0).rgb +
+                   img.SampleLevel(ls, uv + float2(g.x, -g.y), 0).rgb + img.SampleLevel(ls, uv + float2(-g.x, -g.y), 0).rgb) * 0.25;
+    col += max(glow - 0.25, 0) * 0.22 * opts.w;
     col = col * (1 - o.a) + o.rgb;
     if (opts.x > 0) col = float3(lut.Sample(ps, float2(col.r, 0.5)).r, lut.Sample(ps, float2(col.g, 0.5)).g, lut.Sample(ps, float2(col.b, 0.5)).b);
-    // faint scan lines at 480, a little bloom of the bright lines over them
+    // scan lines at 480, the beam wider with the light: deep in the dark (the background's steps hidden), the bright
+    // lines (the menus' text) filling them, as readable as without
     float scan = 0.5 + 0.5 * cos(s.y * 480 * 6.2831853);
     float lum = dot(col, float3(0.3, 0.59, 0.11));
-    col *= lerp(1, 0.9 + 0.1 * scan, opts.w * (1 - lum * 0.6));
+    col *= lerp(1, 0.76 + 0.24 * scan, opts.w * saturate(1 - lum * 0.85));
+    // a faint shadow mask: the screen's columns of red, green and blue phosphor, every three of the display's pixels
+    // (its loss made up)
+    int m = int(fmod(dev.x, 3.0));
+    float3 mask = m == 0 ? float3(1, 0.9, 0.9) : m == 1 ? float3(0.9, 1, 0.9) : float3(0.9, 0.9, 1);
+    col *= lerp(1, mask * 1.07, opts.w);
     // the tube's corners darker
     float2 v = s * (1 - s);
     col *= pow(saturate(v.x * v.y * 18), 0.18);
@@ -244,7 +256,7 @@ float4 psmain(O i) : SV_Target {
     float3 col = 0;
     // the picture in the screen's rectangle; the frame's glass (its alpha) gives the tube's shape
     float2 s = (q - screen.xy) / (screen.zw - screen.xy);
-    if (all(s >= -0.01) && all(s <= 1.01)) col = Picture(saturate(s));
+    if (all(s >= -0.01) && all(s <= 1.01)) col = Picture(saturate(s), i.p.xy);
     float4 f = frame.SampleLevel(ls, q, 0);
     return float4(lerp(col, f.rgb, f.a), 1);
 }
@@ -4613,28 +4625,42 @@ void D3D12Backend::DrawGeometry(const Assembled& a) {
             if (!a.index_count) return i;
             return a.index16 ? static_cast<const uint16_t*>(a.index_src)[i] : static_cast<const uint32_t*>(a.index_src)[i];
         };
-        tess_list_.clear();
-        size_t t = 0;
-        if (a.strip) {
-            for (uint32_t i = 2; i < n; i++, t++) {
-                uint32_t i0 = index(i - 2), i1 = index(i - 1), i2 = index(i);
-                if (i0 == i1 || i1 == i2 || i0 == i2 || (t < weapon_keep_.size() && !weapon_keep_[t])) continue;
-                if (i & 1) std::swap(i0, i1);
-                tess_list_.insert(tess_list_.end(), {i0, i1, i2});
-            }
-        } else {
-            for (uint32_t i = 0; i + 2 < n; i += 3, t++)
-                if (t >= weapon_keep_.size() || weapon_keep_[t]) tess_list_.insert(tess_list_.end(), {index(i), index(i + 1), index(i + 2)});
-        }
-        if (tess_list_.empty()) return;
+        // the kept triangles (1), then those of the pieces ending past the 4:3 view, drawn within its sides (2)
         SetTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        uint32_t ibytes = uint32_t(tess_list_.size() * 4);
-        Alloc ib = Upload(ibytes, 4);
-        std::memcpy(ib.cpu, tess_list_.data(), ibytes);
-        D3D12_INDEX_BUFFER_VIEW ibv{ib.gpu, ibytes, DXGI_FORMAT_R32_UINT};
-        last_ibv_ = ibv;
-        cl_->IASetIndexBuffer(&ibv);
-        cl_->DrawIndexedInstanced(uint32_t(tess_list_.size()), 1, 0, a.index_count ? a.base_vertex : 0, 0);
+        for (uint8_t want = 1; want <= 2; want++) {
+            tess_list_.clear();
+            size_t t = 0;
+            auto cls = [&](size_t k) -> uint8_t { return k < weapon_keep_.size() ? weapon_keep_[k] : 1; };
+            if (a.strip) {
+                for (uint32_t i = 2; i < n; i++, t++) {
+                    uint32_t i0 = index(i - 2), i1 = index(i - 1), i2 = index(i);
+                    if (i0 == i1 || i1 == i2 || i0 == i2 || cls(t) != want) continue;
+                    if (i & 1) std::swap(i0, i1);
+                    tess_list_.insert(tess_list_.end(), {i0, i1, i2});
+                }
+            } else {
+                for (uint32_t i = 0; i + 2 < n; i += 3, t++)
+                    if (cls(t) == want) tess_list_.insert(tess_list_.end(), {index(i), index(i + 1), index(i + 2)});
+            }
+            if (tess_list_.empty()) continue;
+            const D3D12_RECT whole = cmd_.sc;
+            if (want == 2) {
+                const float vx = cmd_.vp.TopLeftX, vw = cmd_.vp.Width, part = 1.0f / widen_;
+                D3D12_RECT r = whole;
+                r.left = std::max(whole.left, LONG(std::floor(vx + vw * (1 - part) * 0.5f)));
+                r.right = std::min(whole.right, LONG(std::ceil(vx + vw * (1 + part) * 0.5f)));
+                if (r.right <= r.left) continue;
+                SetScissor(r);
+            }
+            uint32_t ibytes = uint32_t(tess_list_.size() * 4);
+            Alloc ib = Upload(ibytes, 4);
+            std::memcpy(ib.cpu, tess_list_.data(), ibytes);
+            D3D12_INDEX_BUFFER_VIEW ibv{ib.gpu, ibytes, DXGI_FORMAT_R32_UINT};
+            last_ibv_ = ibv;
+            cl_->IASetIndexBuffer(&ibv);
+            cl_->DrawIndexedInstanced(uint32_t(tess_list_.size()), 1, 0, a.index_count ? a.base_vertex : 0, 0);
+            if (want == 2) SetScissor(whole);
+        }
         return;
     }
     if (tess_draw_) {
@@ -5092,7 +5118,16 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     if (c.layout[2] > 0 && c.layout[2] < 1 && sh.prog && a.topology == Topology::Triangles && (!mesh_ || mesh_floats || (mesh_floats = AssembleFloats(s, prim, start, count, indices, mesh_asm_))) &&
         WeaponPieces(s, mesh_ ? mesh_asm_ : a, sh)) {
         c.layout[2] = 0;
-        if (mesh_ && weapon_filter_) {
+        if (mesh_ && weapon_filter_ && mesh_->tri_source.size() == mesh_->indices.size() / 3) {
+            // (each of its triangles out with the original's it was made from)
+            const std::vector<uint8_t> orig = weapon_keep_;
+            const size_t n = mesh_->tri_source.size();
+            weapon_keep_.assign(n, 1);
+            for (size_t t = 0; t < n; t++) {
+                const uint32_t o = mesh_->tri_source[t];
+                if (o < orig.size()) weapon_keep_[t] = orig[o];
+            }
+        } else if (mesh_ && weapon_filter_) {
             const auto& src = mesh_->source;
             const size_t n = mesh_->indices.size() / 3;
             weapon_keep_.assign(n, 1);
@@ -5340,6 +5375,13 @@ void D3D12Backend::Layout2D(const State& s, const Assembled& a, bool prog, Guest
     // never shown by the game, are left out (a sleeve's cut end by the left edge of a wide screen)
     c.layout[2] = !(a.pretransformed || s.layout2d) && screen && occlusion_done_ && widen_ > 1.0f ? 1.0f / widen_ : 0.0f;
     if (int ww = g_weapon_whole.load(std::memory_order_relaxed); ww == 1) c.layout[2] = 0;  // tests: as the game draws it
+    // a tank's sight seen from inside: its black bands top and bottom (texture "topbottom") made for the 4:3 view end
+    // at its sides, the world showing past them in the wide screen's corners: stretched to its edges, about its middle
+    if (c.layout[2] > 0 && draw_tex0_ == 0x543e36e7cdb5ddfcull) {
+        c.layout[0] = widen_;
+        c.layout[1] = (1.0f - widen_) * float(size.w) * 0.5f;
+        c.layout[2] = 0;
+    }
     const VertexElement& e = a.elements[0];
     if (g_log_draws && screen) {
         float p[4] = {};
@@ -8189,7 +8231,12 @@ bool D3D12Backend::WeaponPieces(const State& s, const Assembled& a, const DrawSh
     auto it = cpu_prog_.find(sh.vkey);
     if (it == cpu_prog_.end()) it = cpu_prog_.emplace(sh.vkey, DecodeCpuProgram(s.vs->program, a.regs)).first;
     const CpuProgram* prog = it->second.get();
-    if (!prog) return false;
+    if (!prog) {
+        static std::unordered_set<uint64_t> told;
+        if (told.size() < 32 && told.insert(sh.vkey).second)
+            LOGR("weapon: tex %016llx its program not run here: the geometry shader's triangle test", (unsigned long long)draw_tex0_);
+        return false;
+    }
     auto input = [&](uint32_t r, uint32_t i, float v[4]) {
         v[0] = v[1] = v[2] = 0, v[3] = 1;
         const VertexElement& e = a.elements[r];
@@ -8316,6 +8363,59 @@ bool D3D12Backend::WeaponPieces(const State& s, const Assembled& a, const DrawSh
     size_t dropped = 0;
     for (size_t t = 0; t < tris.size(); t++)
         if (on[t] && !shown.count(find(tris[t].v[0]))) weapon_keep_[t] = 0, dropped++;
+    // a piece shown that lies nearly all past the 4:3 view (a sleeve's open end, its last sliver at the view's side,
+    // the cut the console's screen edge hid): drawn only within the 4:3 view's sides (2: DrawGeometry's scissor), as
+    // the console showed it. A piece of which the view shows a fair share (an arm reaching in from the corner to the
+    // gun) is drawn whole. The shares by area of what shows on the screen: its triangles clipped to the screen, and to
+    // the 4:3 view's sides
+    auto shown_area = [&](const Tri& tr, float xlo, float xhi) {
+        float poly[2][12][2];
+        int n = 3, cur = 0;
+        for (int k = 0; k < 3; k++) poly[0][k][0] = scr[tr.v[k]][0], poly[0][k][1] = scr[tr.v[k]][1];
+        const float lims[4] = {xlo, xhi, -1.0f, 1.0f};
+        for (int side = 0; side < 4 && n > 0; side++) {
+            const int axis = side / 2;
+            const float lim = lims[side];
+            const bool keep_greater = side == 0 || side == 2;
+            int m = 0;
+            for (int i = 0; i < n && m < 10; i++) {
+                const float* a0 = poly[cur][i];
+                const float* b0 = poly[cur][(i + 1) % n];
+                float da = keep_greater ? a0[axis] - lim : lim - a0[axis];
+                float db = keep_greater ? b0[axis] - lim : lim - b0[axis];
+                if (da >= 0) poly[1 - cur][m][0] = a0[0], poly[1 - cur][m][1] = a0[1], m++;
+                if ((da >= 0) != (db >= 0) && m < 10) {
+                    float f = da / (da - db);
+                    poly[1 - cur][m][0] = a0[0] + (b0[0] - a0[0]) * f, poly[1 - cur][m][1] = a0[1] + (b0[1] - a0[1]) * f, m++;
+                }
+            }
+            n = m, cur = 1 - cur;
+        }
+        float area = 0;
+        for (int i = 0; i < n; i++) {
+            const float* p0 = poly[cur][i];
+            const float* p1 = poly[cur][(i + 1) % n];
+            area += p0[0] * p1[1] - p1[0] * p0[1];
+        }
+        return std::fabs(area) * 0.5f;
+    };
+    std::unordered_map<uint32_t, std::array<float, 2>> share;  // a piece's area on the screen, and in the 4:3 view
+    for (size_t t = 0; t < tris.size(); t++) {
+        if (!on[t] || !weapon_keep_[t]) continue;
+        auto& a2 = share.try_emplace(find(tris[t].v[0]), std::array<float, 2>{0.0f, 0.0f}).first->second;
+        a2[0] += shown_area(tris[t], -1.0f, 1.0f);
+        a2[1] += shown_area(tris[t], -half, half);
+    }
+    constexpr float kMostlyOut = 0.15f;  // the 4:3 view's share of what shows, below it: a cut end
+    for (size_t t = 0; t < tris.size(); t++) {
+        if (!on[t] || !weapon_keep_[t]) continue;
+        const auto& a2 = share[find(tris[t].v[0])];
+        if (a2[0] > 1e-6f && a2[1] < a2[0] * kMostlyOut) weapon_keep_[t] = 2, dropped++;
+    }
+    static const bool log_share = std::getenv("XBE_WEAPON_LOG") != nullptr;
+    if (log_share && presents_ % 120 == 0)
+        for (const auto& [root, a2] : share)
+            if (a2[1] < a2[0] * 0.999f) LOGR("weapon:   piece %u shows %.4f, %.0f%% of it in the 4:3 view", root, a2[0], 100 * a2[1] / std::max(a2[0], 1e-9f));
     // tests (cmd weaponwhole 3 / 4): the triangles wholly outside the 4:3 view wound one way (a strip's alternate
     // triangles counted as the strip draws them) left out, the rest drawn
     if (int ww = g_weapon_whole.load(std::memory_order_relaxed); ww == 3 || ww == 4) {

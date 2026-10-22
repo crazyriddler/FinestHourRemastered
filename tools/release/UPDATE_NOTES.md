@@ -83,7 +83,14 @@ The version installed is in `version.txt` beside the game. Unattended:
   game's own textures and animations; the water, flat surfaces and the boats' hulls stay as they were.
 - Remastered Models: no more textures smeared into streaks (the cobbles at the start of Road to Remagen, rubble,
   the inner corners of steps), and no more models flickering between their remastered and original shapes.
-- Smooth Models: the T-34's gun (and other long thin parts) no longer swells into a cigar. A new Models setting (PC Settings, Graphics)
+- Smooth Models: the T-34's gun (and other long thin parts) no longer swells into a cigar.
+- Weapons in hand on a wide screen: no more loose bits of sleeve in the bottom corners (the arm's cut end the
+  console's 4:3 screen hid), with nothing cut from the arms holding the weapon; the remastered weapons follow the
+  game's own trimming triangle by triangle.
+- Tanks: inside the tank, the sight's black band at the bottom now reaches the corners of a wide screen.
+- HUD Size: Smaller by default, and the graphics presets set it too (Original keeps the original HUD).
+- The menus' 1940s television: a slightly stronger picture tube (scan lines, a faint phosphor mask and glow) that
+  hides the low resolution of the menus' backgrounds, with the menus' text as sharp as before. A new Models setting (PC Settings, Graphics)
   chooses them: Remastered (the default), Smooth (the game's own characters and weapons rounded, the old Smooth
   Models) or Original; the Original preset sets Original. Your settings move over by themselves: Remastered if you
   had them on.

@@ -59,6 +59,10 @@ bool ReadMesh(const std::filesystem::path& p, uint64_t& key, uint64_t& draw, Mes
         m.source.resize(h.vertex_count);
         if (!f.read(reinterpret_cast<char*>(m.source.data()), std::streamsize(m.source.size() * 4))) return false;
     }
+    if (h.flags & kMeshTriSource) {
+        m.tri_source.resize(h.index_count / 3);
+        if (!f.read(reinterpret_cast<char*>(m.tri_source.data()), std::streamsize(m.tri_source.size() * 4))) return false;
+    }
     key = h.key;
     draw = uint64_t(h.prim) << 32 | h.count;
     return true;

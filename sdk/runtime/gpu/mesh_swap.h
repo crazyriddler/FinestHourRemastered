@@ -18,6 +18,7 @@ enum : uint32_t {
     kMeshCcw = 2,        // culling clockwise: counter clockwise is the front
     kMeshConstants = 4,  // the vertex constants follow (192 float4, the dump's)
     kMeshSource = 8,     // each vertex's nearest vertex of the original follows the indices (uint32)
+    kMeshTriSource = 16, // each triangle's own of the original (its index in the draw's order) follows (uint32)
 };
 
 struct Mesh {
@@ -26,6 +27,7 @@ struct Mesh {
     std::vector<float> vertices;    // vertex_count * registers * 4
     std::vector<uint32_t> indices;  // a triangle list
     std::vector<uint32_t> source;   // each vertex's nearest of the original's (its AssembleFloats order), or empty
+    std::vector<uint32_t> tri_source;  // each triangle's own of the original's (the draw's triangle order), or empty
 };
 
 // loads <dir>/*.fhm once (the remaster folder's meshes)

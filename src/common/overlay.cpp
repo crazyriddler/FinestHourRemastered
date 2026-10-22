@@ -241,6 +241,8 @@ void ApplyPreset(int p) {
     for (SBool f : kPresetFlags) s.*f = v.*f;
     for (SUint f : kPresetValues) s.*f = v.*f;
     app::SetModels(s, s.models);
+    // the HUD with it: the original's with the game's own look, the smallest otherwise (a monitor's distance)
+    cod::Get().hud_size = p == kOriginal ? 0 : 2;
 }
 
 }  // namespace cod::overlay

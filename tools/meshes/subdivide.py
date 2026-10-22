@@ -320,6 +320,7 @@ def export(obj, src):
     cn = loop_n[corners].astype(np.float64)
     tri_of = from_tri.copy()
     bc = np.zeros((len(corners), 3))
+    dist = np.zeros(len(corners))
     order = np.argsort(from_tri, kind="stable")
     bounds = np.searchsorted(from_tri[order], np.arange(len(T) + 1))
     for t in range(len(T)):
@@ -340,7 +341,7 @@ def export(obj, src):
             best = np.where(better, d, best)
             tri_of[sel[better]] = c
             bc[sel[better]] = w[better]
-    orig_tri = T[tri_of]  # [3n, 3] the original's corners (vertex indices)
+        dist[sel] = best
     # the skin by where each vertex was made (its point on the flat copy, in the triangle it came from): one point
     # for all the corners of a vertex, on the edge or the corner its triangles share, so they take the same bones
     # and weights and move together (by the nearest point, a vertex on a texture seam took two: the seam opened
@@ -352,7 +353,16 @@ def export(obj, src):
         q = made.reshape(-1, 3)[loop_v[corners]].astype(np.float64)
         skin_bc = barycentric(q, P[skin_tri[:, 0]], P[skin_tri[:, 1]], P[skin_tri[:, 2]])
     else:  # (no subdivision: where it is)
-        skin_tri, skin_bc = orig_tri, bc
+        skin_tri, skin_bc = T[tri_of], bc
+    # a corner whose nearest point is on the original's edge, away from it (the rounded surface out in front of a
+    # concave fold: a step's inner corner, rubble): many corners there meet the same edge, their texture a streak
+    # along it. Those take it where they were made, inside a face, as the skin does
+    if "flat" in mesh.attributes:
+        size = float(np.ptp(P, 0).max() or 1.0)
+        on_edge = (bc.min(1) < 1e-4) & (dist > 1e-4 * size)
+        tri_of = np.where(on_edge, from_tri, tri_of)
+        bc = np.where(on_edge[:, None], skin_bc, bc)
+    orig_tri = T[tri_of]  # [3n, 3] the original's corners (vertex indices)
     nregs = len(regs)
     rows = np.zeros((len(corners), nregs, 4), np.float32)
     nearest = skin_tri[np.arange(len(corners)), skin_bc.argmax(1)]

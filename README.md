@@ -31,10 +31,9 @@ The trailer (2560x1440, 60 FPS) is among the release's downloads: `FinestHourRem
 
 The game's models have been remastered: the soldiers of every army, the weapons in your hands and in theirs, the
 pickups (weapons on the ground, medkits, ammunition, grenades), the vehicles (tanks, half-tracks, trucks, planes,
-anti-tank guns) and the objects standing in the levels (barrels, wrecks, crates...). Rounded barrels, drums and
-stocks, soldiers without the old corners at their elbows, knees and coats, turrets and wheels that are finally round.
-Each one keeps the game's own textures, animations and proportions: the same game, with the blockiness gone. The
-levels' own geometry (buildings, walls, the ground) keeps its original shape.
+anti-tank guns), the objects and the scenery. Rounded barrels, drums and stocks, soldiers without the old corners
+at their elbows, knees and coats, turrets and wheels that are finally round. Each one keeps the game's own textures,
+animations and proportions: the same game, with the blockiness gone.
 
 **In game** (Models: Original and Remastered):
 

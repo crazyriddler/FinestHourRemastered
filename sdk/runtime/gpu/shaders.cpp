@@ -1230,7 +1230,9 @@ PnPatch pnconst(InputPatch<VOut, 3> v) {
     fn /= max(area, 1e-12);
     [unroll] for (int q = 0; q < 3; q++) ok = ok && abs(dot(N[q], fn)) > 0.2;
     o.usable = ok ? 1 : 0;
-    o.reach = longest * 0.12;
+    // (by its width as well: a long thin triangle, a gun barrel's along its length, bulged by its length grew the
+    // barrel into a cigar)
+    o.reach = min(longest * 0.12, area / max(longest, 1e-12) * 0.35);
     // the factors: an edge's length in console pixels over 5, up to 7; flat where it cannot be placed
     float e0 = ok ? clamp(length(s[1] - s[2]) / 5, 1, 7) : 1;
     float e1 = ok ? clamp(length(s[2] - s[0]) / 5, 1, 7) : 1;

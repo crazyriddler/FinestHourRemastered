@@ -4723,8 +4723,7 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     // a remastered mesh in place of the game's: the same registers, skinned by the game's own vertex program
     mesh_ = nullptr;
     bool mesh_floats = false;  // mesh_asm_ holds this draw's floats
-    if (app::Get().remastered_models && g_world_sector.load(std::memory_order_relaxed) == 0 &&
-        meshes::Candidate(prim, count)) {
+    if (app::Get().remastered_models && meshes::Candidate(prim, count)) {
         // the key by the draw's buffers (kept while their first bytes are as they were), worked out only when new
         uint64_t key = 0;
         const meshes::DrawId id = meshes::IdOf(s, prim, start, count, indices);
@@ -4732,7 +4731,10 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
             if (AssembleFloats(s, prim, start, count, indices, mesh_asm_)) key = meshes::Key(mesh_asm_), mesh_floats = true;
             meshes::StoreKey(id, key);
         }
-        if (key && (mesh_ = meshes::Find(key, a.regs))) meshes::Fill(*mesh_, a);
+        if (key && (mesh_ = meshes::Find(key, a.regs))) {
+            meshes::Fill(*mesh_, a);
+            if (g_log_draws) LOGR("draw:   remastered %016llx", (unsigned long long)key);
+        }
     }
     const bool swapped = mesh_ != nullptr;
     // past the ring every upload is a buffer of its own: seconds lost on a frame that draws a whole level once

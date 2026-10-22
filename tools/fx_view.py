@@ -1,7 +1,8 @@
 """A level started (movies skipped), the free camera at the player's eye turned by the given yaw and pitch (degrees,
 from where the player looks), a screenshot with everything on and one with each effect given off in turn: a sheet at
 work/shots/<tag>.png. The case "texview" draws each texture in its own colour (logged: "texview: <id> r g b"), kept
-whole at work/shots/<tag>_texview.png; a case "cmd:<command>" sends that command (left in force).
+whole at work/shots/<tag>_texview.png; a case "cmd:<command>" sends that command (left in force), "raw:<line>" that
+control line.
 
     python tools/fx_view.py <level> <yaw> <pitch> <effect,effect,...> [--tag name] [--at seconds]
 """
@@ -102,6 +103,8 @@ def main():
             send("cmd texview 1")
         elif case.startswith("cmd:"):
             send("cmd " + case[4:])
+        elif case.startswith("raw:"):  # a control line as it is ("raw:draws": the frame's draws in the log)
+            send(case[4:])
         elif case != "all":
             send("cmd fx %s 0" % case)
         time.sleep(0.6)
@@ -113,7 +116,7 @@ def main():
         time.sleep(0.5)
         if case == "texview":
             send("cmd texview 0")
-        elif case.startswith("cmd:"):
+        elif case.startswith("cmd:") or case.startswith("raw:"):
             pass
         elif case != "all":
             send("cmd fx %s 1" % case)

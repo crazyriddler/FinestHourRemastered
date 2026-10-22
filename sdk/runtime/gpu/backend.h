@@ -147,9 +147,6 @@ struct Place2D {
 };
 inline std::atomic<bool (*)(const Draw2D&, Place2D&)> g_layout_2d{nullptr};
 inline std::atomic<int> g_log_draws{0};
-// the level's own geometry being drawn (RpWorldSectorRender, the game's src/game/matfx.cpp): its draws keep the
-// game's models (the remastered meshes are for what stands in the level: soldiers, weapons, vehicles, objects)
-inline std::atomic<int> g_world_sector{0};
 // tests (control line "drawstack <texture name>"): guest addresses whose draws (a stage's D3D texture one of them)
 // log their callers and the stages' texture transforms, each distinct caller once
 inline std::array<std::atomic<uint32_t>, 16> g_stack_tex{};

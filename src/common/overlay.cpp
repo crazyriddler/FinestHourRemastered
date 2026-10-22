@@ -350,8 +350,8 @@ std::vector<Page> BuildPages() {
     graphics.items.push_back(Choice("Models", {"Original", "Smooth", "Remastered"},
                                     [&s] { return int(std::min<uint32_t>(s.models, 2)); },
                                     [&s](int i) { app::SetModels(s, uint32_t(i)); },
-                                    "Remastered: soldiers, weapons, vehicles and objects remodelled, rounder and denser. "
-                                    "Smooth: the game's characters and weapons rounded. Original: the game's own."));
+                                    "Remastered: soldiers, weapons, vehicles, objects and scenery remodelled, rounder and "
+                                    "denser. Smooth: the game's characters and weapons rounded. Original: the game's own."));
     graphics.items.push_back(Toggle("Reflections", &s.reflections, "Metal, glass, varnished wood and stone reflect what is around them."));
     pages.push_back(std::move(graphics));
 

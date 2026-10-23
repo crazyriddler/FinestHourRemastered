@@ -21,7 +21,11 @@ def make(n):
     os.makedirs(os.path.join(d, "logs"), exist_ok=True)
     exe = os.path.join(d, "CODFH.exe")
     if os.path.exists(exe):
-        os.remove(exe)
+        try:
+            os.remove(exe)
+        except PermissionError:  # (the same file as a game running: a running image can be renamed, not removed)
+            import time
+            os.replace(exe, os.path.join(d, "CODFH.old%d.exe" % int(time.time() * 1000)))
     os.link(os.path.join(BUILD, "CODFH.exe"), exe)
     pack = os.path.realpath(os.path.join(BUILD, "remaster"))
     if not os.path.exists(os.path.join(d, "remaster")):

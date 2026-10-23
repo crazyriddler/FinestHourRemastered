@@ -75,6 +75,10 @@ inline std::atomic<float> g_screen_widen{1.0f};
 // the screen's view widened by a Field of View past the game's (its view window times this): the weapon in hand drawn
 // as the game's view would (its clip space times this about the middle)
 inline std::atomic<float> g_weapon_scale{1.0f};
+// the shadows' debug view (XBE_SHADOW_DEBUG at the start, "sdebug N" on the control channel): 0 none
+inline std::atomic<int> g_shadow_debug{-1};
+// the reflections' debug view (XBE_SSR_DEBUG at the start, "ssrdebug N" on the control channel): 0 none
+inline std::atomic<int> g_ssr_debug{-1};
 inline std::atomic<bool> g_aiming{false};  // the player aims down the sights (the game's aim held in play)
 inline std::atomic<bool> g_texview{false};
 // tests: every frame's time from "perf start" to "perf stop <label>" (control lines), the report in the log: average,

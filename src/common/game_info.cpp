@@ -229,6 +229,25 @@ void MemSeq(const std::string& args) {
     LOGR("memseq %s: %zu places", pattern, found);
 }
 
+void Command(const std::string& line_in);
+
+// the testers' flight (developer = true, F10 in play): the Free Camera with the player held at it (noclip) and
+// immune, all on or all off; in the menus F10 opens the settings as ever
+void TestFlight() {
+    static bool on = false;
+    on = !on;
+    if (on) {
+        Command("god on");
+        Command("noclip on");
+        *cod::wide::FlyEnabled() = true;
+    } else {
+        *cod::wide::FlyEnabled() = false;
+        Command("noclip off");
+        Command("god off");
+    }
+    LOGR("test flight: %s", on ? "on" : "off");
+}
+
 bool Message(void* hwnd, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* result) {
     // the testers' keys, for developer = true (or XBE_DEV) alone: F3 (the runtime's threads and a frame's capture) is
     // kept from the runtime otherwise
@@ -256,6 +275,11 @@ bool Message(void* hwnd, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* resu
             float eye[3], yaw = 0, pitch = 0;
             if (cod::wide::CameraPos(eye)) {
                 cod::wide::CameraAngles(yaw, pitch);
+                // flying (or a free camera): the view's own place and heading, not the held player's eye (the
+                // camera read back is the game's, restored after the frame)
+                float at[3], ayaw = 0, apitch = 0;
+                const bool free = cod::wide::FreeCameraAt(at, ayaw, apitch);
+                if (free) std::memcpy(eye, at, sizeof(eye)), yaw = ayaw, pitch = apitch;
                 LOGR("mark %s: level %d warp %.1f %.1f %.1f yaw %.1f pitch %.1f", text, gpu::g_level.load(), eye[0], eye[1], eye[2], yaw, pitch);
                 int reg = 0, secs[4];
                 bool known = cod::LastCheckpoint(reg, secs);
@@ -269,6 +293,7 @@ bool Message(void* hwnd, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* resu
                 LOGR("mark %s: %s, %s loaded", text, cp, ls);
                 if (FILE* f = _wfopen((app::ExeDir() / "logs" / "marks" / ("mark_" + std::string(text) + ".txt")).c_str(), L"w")) {
                     std::fprintf(f, "level %d\nwarp %.1f %.1f %.1f\nyaw %.1f pitch %.1f\n", gpu::g_level.load(), eye[0], eye[1], eye[2], yaw, pitch);
+                    if (free) std::fprintf(f, "freecam at %.2f %.2f %.2f %.2f %.2f\n", eye[0], eye[1], eye[2], yaw, pitch);
                     std::fprintf(f, "%s\n", cp);
                     std::fprintf(f, "%s\n", ls);
                     std::fclose(f);
@@ -279,7 +304,8 @@ bool Message(void* hwnd, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* resu
         return true;
     }
     if ((msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && wp == VK_F10 && !(lp & (1 << 30))) {
-        cod::overlay::Toggle();
+        if (cod::Get().developer && !cod::InMenu() && !cod::OverlayOpen()) TestFlight();
+        else cod::overlay::Toggle();
         *result = 0;
         return true;
     }
@@ -519,6 +545,8 @@ void Command(const std::string& line_in) {
                 std::fclose(f);
             }
         if (std::sscanf(line.c_str(), "texview %d", &on) == 1) gpu::g_texview = on != 0;
+        if (std::sscanf(line.c_str(), "ssrdebug %d", &on) == 1) gpu::g_ssr_debug = on, LOGR("reflections: debug view %d", on);
+        if (std::sscanf(line.c_str(), "sdebug %d", &on) == 1) gpu::g_shadow_debug = on, LOGR("shadows: debug view %d", on);
         if (std::sscanf(line.c_str(), "weaponwhole %d", &on) == 1) gpu::g_weapon_whole = on;
         // tests: the prompts as for a controller in hand or the keyboard (a test's pad presses come after the check)
         if (line == "prompts pad") cod::prompts::PadUsed();
@@ -613,6 +641,8 @@ void Command(const std::string& line_in) {
                         &pb[0], &pb[1], &pb[2], &pb[3], &pb[4], &dur) == 11)
             cod::wide::SetFreeCameraPath(pa, pb, dur), LOGR("freecam: path over %.1f s", dur);
         if (line == "freecam off") cod::wide::SetFreeCamera(false, 0, 0, 0), cod::wide::SetFreeCameraAt(false, nullptr, 0, 0);
+        if (float fa[5]; std::sscanf(line.c_str(), "fly at %f %f %f %f %f", &fa[0], &fa[1], &fa[2], &fa[3], &fa[4]) == 5)
+            cod::wide::FlyAt(fa, fa[3], fa[4]), LOGR("fly: at %.1f %.1f %.1f yaw %.1f pitch %.1f", fa[0], fa[1], fa[2], fa[3], fa[4]);
         if (line == "fly on" || line == "fly off") *cod::wide::FlyEnabled() = line == "fly on";  // the Free Camera (tests)
         // the level script's checkpoint register (SetCheckPointRegister, 0x39450, keeps it at 0x3B4740): which
         // checkpoint a restart of the level starts from

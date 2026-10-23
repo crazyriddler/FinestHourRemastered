@@ -38,6 +38,8 @@ void SetFreeCameraPath(const float from[5], const float to[5], float seconds);
 bool* FlyEnabled();
 bool FlyActive();
 void FlyLook(int counts_x, int counts_y, float sensitivity);
+// tests ("fly at x y z yaw pitch"): the flying camera put there, as an F9 mark's "freecam at" gives it
+void FlyAt(const float pos[3], float yaw, float pitch);
 void FlyUpdate(input::Pad& pad);
 
 }  // namespace cod::wide

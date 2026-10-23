@@ -215,9 +215,11 @@ def patch_files(exe):
 
 
 def build_patch(items, version, undo=None):
-    """the update over the base payload: (packed bytes, unpacked size, what it holds). undo: a withdrawn update's
-    files ({path: sha1}): the ones it added that this version has not are deleted, the ones it changed are written as
-    this version has them (the base's own too), so an installation it updated goes back as an earlier one comes up"""
+    """the update over the base payload: (packed bytes, unpacked size, what it holds). undo: earlier updates' files
+    ({path: set of sha1}, a withdrawn one's or the one published now): the ones they added that this version has not
+    are deleted, the ones they changed are written as this version has them (the base's own too: a file back as the
+    base has it is only checked by its size, and one an update changed kept its size), so an installation they
+    updated comes out as this version"""
     base = base_manifest()
     undo = undo or {}
     head, data, files = ["FHRU 1", "version " + version], [], []
@@ -229,7 +231,7 @@ def build_patch(items, version, undo=None):
         if r in KEEP:
             continue
         sha = sha1_of(s)
-        if r in ALWAYS or r.startswith("shadercache/") or r not in base or base[r][0] != sha or (r in undo and undo[r] != sha):
+        if r in ALWAYS or r.startswith("shadercache/") or r not in base or base[r][0] != sha or (r in undo and any(u != sha for u in undo[r])):
             size = os.path.getsize(s)
             head.append("file %d %s %s" % (size, sha, r))
             files.append(r)
@@ -269,7 +271,11 @@ def github(version, rebase=False, undo=None):
         base = os.path.join(OUT, "github")
         os.makedirs(base, exist_ok=True)
         items = stage_list(cache_all=False)
-        packed, raw_size, files = build_patch(items, version, patch_files(undo) if undo else None)
+        earlier = {}
+        for exe in undo or []:
+            for r, sha in patch_files(exe).items():
+                earlier.setdefault(r, set()).add(sha)
+        packed, raw_size, files = build_patch(items, version, earlier)
         setup = os.path.join(BUILD, "tools", "installer", "FinestHourRemasteredSetup.exe")
         write_installer(setup, packed, raw_size, os.path.join(base, "FinestHourRemasteredSetup.exe"))
         upd = os.path.join(OUT, "update")
@@ -352,7 +358,8 @@ def main():
     ap.add_argument("--version", default=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
                     help="the update's name, shown by the installer and the updater")
     ap.add_argument("--rebase", action="store_true", help="a new base payload (its parts written again)")
-    ap.add_argument("--undo", help="a withdrawn update's exe: its files undone (patch_files, build_patch)")
+    ap.add_argument("--undo", action="append", help="an earlier update's exe (a withdrawn one, the one published now; "
+                    "again for more): what it changed written as this version has it (patch_files, build_patch)")
     a = ap.parse_args()
     if a.only == "source":
         source()

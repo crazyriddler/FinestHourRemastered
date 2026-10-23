@@ -238,7 +238,9 @@ float3 Picture(float2 s, float2 dev) {
     float2 g = px * 5;
     float3 glow = (img.SampleLevel(ls, uv + float2(g.x, g.y), 0).rgb + img.SampleLevel(ls, uv + float2(-g.x, g.y), 0).rgb +
                    img.SampleLevel(ls, uv + float2(g.x, -g.y), 0).rgb + img.SampleLevel(ls, uv + float2(-g.x, -g.y), 0).rgb) * 0.25;
-    col += max(glow - 0.25, 0) * 0.22 * opts.w;
+    // (onto what is light already: spread over the dark about the menus' light text, it drew a white halo round the
+    // letters past their black outline)
+    col += max(glow - 0.25, 0) * 0.22 * opts.w * smoothstep(0.12, 0.35, dot(col, float3(0.3, 0.59, 0.11)));
     col = col * (1 - o.a) + o.rgb;
     if (opts.x > 0) col = float3(lut.Sample(ps, float2(col.r, 0.5)).r, lut.Sample(ps, float2(col.g, 0.5)).g, lut.Sample(ps, float2(col.b, 0.5)).b);
     // scan lines at 480, the beam wider with the light: deep in the dark (the background's steps hidden), the bright
@@ -1225,6 +1227,14 @@ private:
     uint32_t msaa_samples_ = 0;
     bool EnsureMsaa(const Target& rt, uint32_t samples);
     void MsaaResolve();
+    // the sky's colour, steady (SkyAverage, kSkyAverageHlsl): a texel written in turn into each, the last one read
+    D3D12_CPU_DESCRIPTOR_HANDLE SkyAvgRtv(uint32_t i) { return Cpu(rtv_heap_.Get(), kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 14 + i, rtv_inc_); }
+    ComPtr<ID3D12Resource> sky_avg_[2];
+    D3D12_RESOURCE_STATES sky_avg_state_[2] = {};
+    int sky_avg_cur_ = -1, sky_avg_level_ = -1;
+    uint64_t sky_avg_frame_ = ~0ull;
+    void SkyAverage(ID3D12Resource* depth, const float p[16]);
+    ID3D12Resource* SkyAvg() { return sky_avg_cur_ >= 0 ? sky_avg_[sky_avg_cur_].Get() : nullptr; }
     D3D12_CPU_DESCRIPTOR_HANDLE SkyTilesRtv(uint32_t i) { return Cpu(rtv_heap_.Get(), kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 4 + i, rtv_inc_); }
     // level 1's sky tiles (kSkyTilesHlsl): found, then spread
     ComPtr<ID3D12Resource> sky_tiles_[2];
@@ -1643,7 +1653,7 @@ void D3D12Backend::CreateBackBufferViews() {
 void D3D12Backend::CreateHeaps() {
     srv_inc_ = CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, kSrvCount, true, srv_heap_);
     smp_inc_ = CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, kSamplerCount, true, smp_heap_);
-    rtv_inc_ = CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 14, false, rtv_heap_);
+    rtv_inc_ = CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 16, false, rtv_heap_);
     dsv_inc_ = CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, kDsvCount, false, dsv_heap_);
     CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, kUiDescriptors, true, ui_heap_);
     for (uint32_t i = kRtvCount; i-- > 0;) free_rtv_.push_back(i);
@@ -2072,13 +2082,13 @@ bool D3D12Backend::BindGbuf(bool on) {
 }
 
 bool t_range_ok(const Target* t) { return t && t->range != 1; }
-// tests: XBE_SHADOW_DEBUG, read once
+// tests: XBE_SHADOW_DEBUG at the start, "sdebug N" on the control channel after
 float ShadowDebug() {
-    static const float v = [] {
+    if (g_shadow_debug.load() < 0) {
         const char* e = std::getenv("XBE_SHADOW_DEBUG");
-        return e ? float(std::atoi(e)) : 0.0f;
-    }();
-    return v;
+        g_shadow_debug = e ? std::atoi(e) : 0;
+    }
+    return float(g_shadow_debug.load());
 }
 bool SmaaMode();
 
@@ -5032,6 +5042,16 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
         // sparks, the flash, lit smoke), a dark hole the tracer's shape where a burst's rounds land
         if (sprite) k.zwrite = false;
     }
+    // a tank's vision slit glass (tools/remaster/tank_glass.py's), over the whole view after the weapon's clear: it
+    // wrote its depth wherever its alpha was not nil, and the passes took those pixels for the weapon in hand (no haze,
+    // no sun's shafts, no heat over them) and the rest for the world: against the light its grime's alpha, texel by
+    // texel of the 128 x 256 original, showed as dark blocks. Seen through, it writes none
+    {
+        constexpr uint64_t kGlasses[] = {0x3e4d009ca3efd1d1ull, 0x82bfdea4ed85ba86ull, 0x4ea09c068378be95ull, 0xf2b681a6b1d296d1ull};
+        if (k.blend && occlusion_done_)
+            for (uint64_t g : kGlasses)
+                if (draw_tex0_ == g) k.zwrite = false;
+    }
     // a character's triangles (a program lit by itself, drawn with the world: not the weapon in hand, its hard edges
     // would swell), smoothed by tessellation
     tess_draw_ = false;
@@ -7613,6 +7633,12 @@ void D3D12Backend::CollectMap(const State& s, const Assembled& a, const DrawShad
     if (s.layout2d || a.pretransformed || occlusion_done_ || a.topology != Topology::Triangles || !k.zwrite || k.blend || draw_far_ ||
         !bound_rt_ || bound_rt_->gw != guest_w_ || bound_rt_->gh != guest_h_)
         return;
+    // XBE_MAP_TEX=<id>: the floors of that texture alone (tests: where a surface is in a level)
+    static const uint64_t only = [] {
+        const char* e = std::getenv("XBE_MAP_TEX");
+        return e ? std::strtoull(e, nullptr, 16) : 0ull;
+    }();
+    if (only && draw_tex0_ != only) return;
     auto pl = sh.prog ? prog_light_.find(sh.vkey) : prog_light_.end();
     bool character = (sh.prog && pk.lit && !(pl != prog_light_.end() && pl->second.ok)) || (sh.fixed_transform && (sh.fk.light & 1));
     if (character) return;
@@ -8942,10 +8968,7 @@ void D3D12Backend::SceneOcclusion() {
         const char* e = std::getenv("XBE_SCENE_DEBUG");
         return e ? std::atoi(e) : 0;
     }();
-    static const int sdbg = [] {
-        const char* e = std::getenv("XBE_SHADOW_DEBUG");
-        return e ? std::atoi(e) : 0;
-    }();
+    const int sdbg = int(ShadowDebug());
     // one bounce of light, from the scene as drawn (its copy, scene_[0])
     bool gi = set.bounce_light && scene_[kSceneGi];
     if (gi) {
@@ -9121,11 +9144,11 @@ bool D3D12Backend::SkyConstants() {
     std::memset(sky_cb_, 0, sizeof(sky_cb_));
     static const bool lights_debug = std::getenv("XBE_LIGHTS_DEBUG") != nullptr;
     sky_cb_[22] = lights_debug ? 1.0f : 0.0f;
-    static const float ssr_debug = [] {
+    if (g_ssr_debug.load() < 0) {
         const char* e = std::getenv("XBE_SSR_DEBUG");
-        return e ? float(std::atoi(e)) : 0.0f;
-    }();
-    sky_cb_[23] = ssr_debug;
+        g_ssr_debug = e ? std::atoi(e) : 0;
+    }
+    sky_cb_[23] = float(g_ssr_debug.load());
     static const bool sky_layers_debug = std::getenv("XBE_SKY_LAYERS") != nullptr;  // the sky pieces in colours (layers: level 1)
     if (!cam_ok_ || !scene_ds_ || (!set.sun_moon && !set.clouds)) return false;
     float inv[16];
@@ -9150,7 +9173,7 @@ bool D3D12Backend::SkyConstants() {
                       inv[8], inv[9], inv[10], 0.5f,
                       sv[0], sv[1], sv[2], sun ? 1.0f : 0.0f,
                       sw[0], sw[1], sw[2], std::clamp(light_.direct * 2.0f, 0.4f, 1.5f),
-                      set.clouds ? 1.0f : 0.0f, sun ? 1.0f : 0.0f, Daylight() + (lights_debug ? 2.0f : 0.0f), ssr_debug};
+                      set.clouds ? 1.0f : 0.0f, sun ? 1.0f : 0.0f, Daylight() + (lights_debug ? 2.0f : 0.0f), float(g_ssr_debug.load())};
     std::memcpy(sky_cb_, rows, sizeof(rows));
     return true;
 }
@@ -9204,17 +9227,19 @@ void D3D12Backend::SkyPass(Target& rt, const float p[16]) {
             tiles = sky_tiles_[1].Get();
         }
     }
+    SkyAverage(depth, p);
     uint32_t slot = AllocSrvSlots(7);
-    std::pair<ID3D12Resource*, DXGI_FORMAT> src[3] = {{scene_[0].Get(), rt.fmt},
+    std::pair<ID3D12Resource*, DXGI_FORMAT> src[4] = {{scene_[0].Get(), rt.fmt},
                                                       {depth, DXGI_FORMAT_R24_UNORM_X8_TYPELESS},
-                                                      {tiles, DXGI_FORMAT_R8G8_UNORM}};
+                                                      {tiles, DXGI_FORMAT_R8G8_UNORM},
+                                                      {SkyAvg(), DXGI_FORMAT_R16G16B16A16_FLOAT}};
     for (uint32_t i = 0; i < 7; i++) {
         D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
-        sv.Format = i < 3 && src[i].first ? src[i].second : kBgra;
+        sv.Format = i < 4 && src[i].first ? src[i].second : kBgra;
         sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         sv.Texture2D.MipLevels = 1;
-        dev_->CreateShaderResourceView(i < 3 ? src[i].first : nullptr, &sv, Cpu(srv_heap_.Get(), slot + i, srv_inc_));
+        dev_->CreateShaderResourceView(i < 4 ? src[i].first : nullptr, &sv, Cpu(srv_heap_.Get(), slot + i, srv_inc_));
     }
     Transition(rt.res.Get(), rt.state, D3D12_RESOURCE_STATE_RENDER_TARGET);
     D3D12_CPU_DESCRIPTOR_HANDLE rh = Cpu(rtv_heap_.Get(), rt.view, rtv_inc_);
@@ -9227,6 +9252,45 @@ void D3D12Backend::SkyPass(Target& rt, const float p[16]) {
     DrawFullScreen(pso, cb.gpu, slot);
     Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
     bound_rt_ = bound_ds_ = nullptr;
+}
+
+// The sky's colour held steady from frame to frame (kSkyAverageHlsl): the frame's sky, its copy in scene_[0] and the
+// world's depth, eased into the last; once a frame, before the sky's pass (the reflections later in the frame read it)
+void D3D12Backend::SkyAverage(ID3D12Resource* depth, const float p[16]) {
+    if (sky_avg_frame_ == frame_) return;
+    sky_avg_frame_ = frame_;
+    if (!sky_avg_[1]) {
+        D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_DEFAULT};
+        D3D12_RESOURCE_DESC td = Texture2DDesc(DXGI_FORMAT_R16G16B16A16_FLOAT, 1, 1);
+        td.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+        D3D12_CLEAR_VALUE cv{};
+        cv.Format = td.Format;
+        for (uint32_t i = 0; i < 2; i++) {
+            sky_avg_state_[i] = D3D12_RESOURCE_STATE_RENDER_TARGET;
+            if (FAILED(CreateResource(&hp, D3D12_HEAP_FLAG_NONE, &td, sky_avg_state_[i], &cv, IID_PPV_ARGS(&sky_avg_[i])))) {
+                for (auto& r : sky_avg_) r.Reset();
+                return;
+            }
+            dev_->CreateRenderTargetView(sky_avg_[i].Get(), nullptr, SkyAvgRtv(i));
+        }
+        sky_avg_cur_ = -1;
+    }
+    static auto last = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    float dt = std::clamp(std::chrono::duration<float>(now - last).count(), 0.0f, 0.25f);
+    last = now;
+    int src = sky_avg_cur_, dst = src == 0 ? 1 : 0;
+    // a new level's sky starts over
+    bool kept = src >= 0 && sky_avg_level_ == g_level.load();
+    sky_avg_level_ = g_level.load();
+    float q[8] = {p[8], p[9], p[2], p[3], kept ? 1.0f : 0.0f, 1.0f - std::exp(-dt / 0.4f), 0, 0};
+    if (src >= 0) Transition(sky_avg_[src].Get(), sky_avg_state_[src], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    Transition(sky_avg_[dst].Get(), sky_avg_state_[dst], D3D12_RESOURCE_STATE_RENDER_TARGET);
+    ID3D12Resource* s[3] = {scene_[0].Get(), depth, src >= 0 ? sky_avg_[src].Get() : nullptr};
+    DXGI_FORMAT f[3] = {scene_fmt_, DXGI_FORMAT_R24_UNORM_X8_TYPELESS, DXGI_FORMAT_R16G16B16A16_FLOAT};
+    Pass(kSkyAverageHlsl, "skyavg", DXGI_FORMAT_R16G16B16A16_FLOAT, SkyAvgRtv(uint32_t(dst)), 1, 1, s, f, q, -1);
+    Transition(sky_avg_[dst].Get(), sky_avg_state_[dst], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    sky_avg_cur_ = dst;
 }
 
 // The reflections (kSceneSsrHlsl) on the scene's target, from its copy (scene_[0]): t1 the depth now, t2 the reflection
@@ -9244,20 +9308,22 @@ void D3D12Backend::ReflectionPass(Target& rt, const float p[16]) {
     // t4 the occlusion (the AO's, scene_[1]: corners and creases reflect less); none: 1
     const app::Settings& set = app::Get();
     bool ao = set.ao || set.contact_shadows;
-    std::pair<ID3D12Resource*, DXGI_FORMAT> src[5] = {{scene_[0].Get(), rt.fmt},
+    // t5 the sky's colour held steady (SkyAverage)
+    std::pair<ID3D12Resource*, DXGI_FORMAT> src[6] = {{scene_[0].Get(), rt.fmt},
                                                       {ds.res.Get(), kDepth},
                                                       {gbuf_.Get(), DXGI_FORMAT_R16G16B16A16_FLOAT},
                                                       {world_depth_saved_ ? world_depth_.Get() : ds.res.Get(), kDepth},
-                                                      {ao ? scene_[1].Get() : nullptr, DXGI_FORMAT_R8_UNORM}};
+                                                      {ao ? scene_[1].Get() : nullptr, DXGI_FORMAT_R8_UNORM},
+                                                      {SkyAvg(), DXGI_FORMAT_R16G16B16A16_FLOAT}};
     uint32_t slot = AllocSrvSlots(7);
     for (uint32_t i = 0; i < 7; i++) {
         D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
-        sv.Format = i < 5 && src[i].first ? src[i].second : i == 4 ? DXGI_FORMAT_R8_UNORM : kBgra;
+        sv.Format = i < 6 && src[i].first ? src[i].second : i == 4 ? DXGI_FORMAT_R8_UNORM : kBgra;
         sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         sv.Shader4ComponentMapping = i == 4 && !ao ? D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(5, 5, 5, 5)
                                                    : D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         sv.Texture2D.MipLevels = 1;
-        dev_->CreateShaderResourceView(i < 5 ? src[i].first : nullptr, &sv, Cpu(srv_heap_.Get(), slot + i, srv_inc_));
+        dev_->CreateShaderResourceView(i < 6 ? src[i].first : nullptr, &sv, Cpu(srv_heap_.Get(), slot + i, srv_inc_));
     }
     Transition(rt.res.Get(), rt.state, D3D12_RESOURCE_STATE_RENDER_TARGET);
     D3D12_CPU_DESCRIPTOR_HANDLE rh = Cpu(rtv_heap_.Get(), rt.view, rtv_inc_);

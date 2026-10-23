@@ -166,6 +166,11 @@ void FlyLook(int counts_x, int counts_y, float sensitivity) {
     g_fly_pitch = std::clamp(g_fly_pitch - float(counts_y) * 0.05f * sensitivity, -89.0f, 89.0f);
 }
 
+void FlyAt(const float pos[3], float yaw, float pitch) {
+    std::memcpy(g_fly_pos, pos, sizeof(g_fly_pos));
+    g_fly_yaw = yaw, g_fly_pitch = pitch;
+}
+
 void FlyUpdate(input::Pad& pad) {
     auto now = std::chrono::steady_clock::now();
     float dt = std::clamp(std::chrono::duration<float>(now - g_fly_last).count(), 0.0f, 0.1f);

@@ -424,6 +424,47 @@ float2 trailstep(O i) : SV_Target {
 }
 )";
 
+// The sky's colour, one texel (d3d12.cpp SkyAverage): the sky the frame shows (an even grid of 32 x 18 taps, those on
+// the sky) eased into the frames' before; with too little sky in view (in a tunnel, a doorway's strip of it, a wire
+// across it) the last one kept. The reflections and the clouds' day took it from a dozen taps of the frame alone: as
+// the view moved by a step one tap more or less met the sky, and every surface reflecting it, and the clouds, turned
+// light or dark at once. q0: the screen's size, the near and far planes; q1: x a sky kept before, y the ease.
+// Out: rgb the sky, a 1 once one is known.
+inline constexpr char kSkyAverageHlsl[] = R"(
+cbuffer P : register(b1) { float4 q0; float4 q1; };
+Texture2D scene : register(t0);
+Texture2D<float> depth : register(t1);
+Texture2D prev : register(t2);
+struct O { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
+O vs(uint id : SV_VertexID) {
+    O o;
+    float2 t = float2((id << 1) & 2, id & 2);
+    o.pos = float4(t * float2(2, -2) + float2(-1, 1), 0, 1);
+    o.uv = t;
+    return o;
+}
+float4 skyavg(O i) : SV_Target {
+    float n = q0.z, f = q0.w;
+    float3 acc = 0;
+    float count = 0;
+    [loop] for (int y = 0; y < 18; y++) {
+        [loop] for (int x = 0; x < 32; x++) {
+            int2 q = int2((float2(x, y) + 0.5) / float2(32, 18) * q0.xy);
+            float d = depth.Load(int3(q, 0));
+            // the sky: by the far plane (skyfx's test)
+            if (n * f / max(f - d * (f - n), 1e-6) > f * 0.6) acc += scene.Load(int3(q, 0)).rgb, count += 1;
+        }
+    }
+    float4 last = prev.Load(int3(0, 0, 0));
+    bool kept = q1.x > 0 && last.a > 0.5;
+    // (a few taps: a wire's gap, the corner of a doorway; their colour unreliable)
+    if (count < 6) return kept ? last : float4(0, 0, 0, 0);
+    float3 now = acc / count;
+    if (!kept) return float4(now, 1);
+    return float4(lerp(last.rgb, now, q1.y * saturate(count / 48)), 1);
+}
+)";
+
 // Level 1's sky tiles (d3d12.cpp SkyPass): a texel for each 16 x 16 pixels, r where any of them is the oil smoke's
 // shells (Veiled), g where any is the far water; then the same spread over the reach of the passes that read them
 // (SkyFeather's disc, HorizonSoft's band and disc): elsewhere skyfx leaves those out, they would change nothing there.
@@ -481,6 +522,7 @@ inline constexpr char kSceneSkyHlsl[] = R"(
 Texture2D scene : register(t0);
 Texture2D<float> depth : register(t1);
 Texture2D<float2> skytiles : register(t2);  // level 1: kSkyTilesHlsl's, where the smoke (r) and the far water (g) are near
+Texture2D skyavg : register(t3);             // kSkyAverageHlsl's: the sky's colour, steady (a 1 once known)
 // Level 1 (sky[0].w 2): the sky's pieces each at a depth of its own by the far plane (d3d12.cpp sky_phase_, a step
 // of 2^-21 apart), the oil smoke's shells veiled. About a pixel (a wide disc), the smoke's and the open sky's colours
 // apart. Where the shells meet each other their colours mix. Over the smoke's outline against the open sky a thick
@@ -659,7 +701,10 @@ float4 skyfx(O i) : SV_Target {
                 sn += 1;
             }
         }
-    float day = smoothstep(0.07, 0.25, sn > 0 ? sl / sn : lum) * (sky[5].z >= 2 ? sky[5].z - 2 : sky[5].z);
+    // the steady sky once known (kSkyAverageHlsl): the frame's taps alone turned day and night as a tap met the sky or not
+    float4 savg = skyavg.Load(int3(0, 0, 0));
+    if (savg.a > 0.5) sc = savg.rgb, sl = dot(savg.rgb, float3(0.2126, 0.7152, 0.0722)), sn = 1;
+    float day =smoothstep(0.07, 0.25, sn > 0 ? sl / sn : lum) * (sky[5].z >= 2 ? sky[5].z - 2 : sky[5].z);
     float strength = sky[4].w;
     float cloud = 0;
     if (sky[5].x > 0) {
@@ -729,14 +774,17 @@ Texture2D<float> depthnow : register(t1);
 Texture2D gb : register(t2);
 Texture2D<float> world : register(t3);
 Texture2D<float> aoc : register(t4);
+Texture2D skyavg : register(t5);  // kSkyAverageHlsl's: the sky's colour, steady (a 1 once known)
 float3 OctDecode(float2 e) {
     float3 n = float3(e, 1 - abs(e.x) - abs(e.y));
     if (n.z < 0) n.xy = (1 - abs(n.yx)) * (n.xy >= 0 ? 1 : -1);
     return normalize(n);
 }
 float2 ToScreen(float3 X) { return float2(X.x / X.z / p[0].x * 0.5 + 0.5, 0.5 - X.y / X.z / p[0].y * 0.5); }
-// the sky as the level draws it: what the screen shows of it, top and sides
+// the sky as the level draws it: the steady one (kSkyAverageHlsl), else what the screen shows of it, top and sides
 float3 SkyColour(float3 R) {
+    float4 savg = skyavg.Load(int3(0, 0, 0));
+    if (savg.a > 0.5) return savg.rgb * saturate(R.y * 1.5 + 0.6);
     float3 acc = 0;
     float n = 0;
     [unroll] for (int k = 0; k < 12; k++) {
@@ -783,6 +831,8 @@ float4 ssr(O i) : SV_Target {
         float dither = Hash(i.pos.xy) * 0.5 + 0.5;
         float3 prev = X;
         float grow = steps < 40 ? 1.3 : 1.18;
+        // the ray in front of what the screen shows where it was (a surface met is one it goes behind)
+        float pgap = -1;
         [loop] for (int k = 0; k < steps; k++) {
             prev = X;
             X += R * step * (k == 0 ? dither : 1);
@@ -795,14 +845,25 @@ float4 ssr(O i) : SV_Target {
             // nothing by the eye itself is reflected (the gun in hand or mounted, the hands): seen from the far
             // ground it threw a dark, blocky copy of the gun and its flash down the line of fire
             if (zs < 150) break;
-            if (gap > 0 && gap < max(step * 1.5, 40)) {
+            bool met = false;
+            float3 b = X;
+            if (gap > 0 && pgap <= 0) {
                 // narrowed onto the surface met
-                float3 a = prev, b = X;
+                float3 a = prev;
                 [unroll] for (int r = 0; r < 5; r++) {
                     float3 m = (a + b) * 0.5;
                     float2 mq = ToScreen(m);
                     if (m.z - ViewZ(world.SampleLevel(pnt, mq, 0)) > 0) b = m; else a = m;
                 }
+                // there, the surface at the ray's own depth: one far in front of it (a doorway's frame, a post near
+                // the eye) is passed behind, not met. The steps grow long far out, and their old tolerance took such
+                // a frame for the surface met by a hair: a step of the eye and a whole roof's reflection turned from
+                // the sky to the frame's dark and back
+                float2 bq = ToScreen(b);
+                met = b.z - ViewZ(world.SampleLevel(pnt, bq, 0)) < max(40, b.z * 0.04);
+            }
+            pgap = gap;
+            if (met) {
                 float2 hq = ToScreen(b);
                 // blurrier the rougher and the further
                 float2 o = rough * 0.012 * float2(p[2].y / p[2].x, 1) * (1 + length(b - P) * 0.002);

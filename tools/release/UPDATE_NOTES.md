@@ -98,8 +98,8 @@ The version installed is in `version.txt` beside the game. Unattended:
 - The lean hint shows the lean keys (Q and E) on the keyboard, or the d-pad on a controller, instead of naming the
   directional buttons.
 - PC Settings: the options' descriptions stay inside the page in every language.
-- The main menu: its text is sharper inside the 1940s television, and the letters' dark outline is thinner (no
-  heavy halo around them).
+- The main menu: its text is sharper inside the 1940s television, with the letters' original black outline and no
+  light halo around them.
 - Tanks: inside the tank, the sight's black band at the bottom now reaches the corners of a wide screen.
 - HUD Size: Smaller by default, and the graphics presets set it too (Original keeps the original HUD).
 - The menus' 1940s television: a slightly stronger picture tube (scan lines, a faint phosphor mask and glow) that
@@ -121,6 +121,13 @@ The version installed is in `version.txt` beside the game. Unattended:
 - The first-person hands no longer show dark streaks like dirt (the American hands above all).
 - Anti-Aliasing: roofs and edges against the sky are smooth again, not in stair steps.
 - Muzzle Flash Shadows: their edges are slightly soft, still sharp and as dark as before, at no extra cost.
+- Whole surfaces no longer flicker between light and dark as the view moves (a roof, windows, the ground by the
+  rails): the reflections and the clouds took the sky's colour from a dozen points of the screen, and it changed
+  as soon as one of them saw the sky or not (through a doorway, past a post or a wire). The sky's colour is now held
+  steady from frame to frame, and a reflection no longer takes a doorway's frame far in front of it for what it
+  reflects.
+- Tanks' vision slits: the dirt on the glass no longer shows as dark pixel blocks against the light. It is soft and
+  faint, and the view through the glass stays sharp.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

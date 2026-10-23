@@ -39,7 +39,9 @@ class Game:
         # the screen and were lost), its clock (until) counted as if that screen came at 4.6 s, as alone
         replay = os.path.join(WORK, tag + ".replay.txt")
         with open(replay, "w") as f:
-            f.write("0.0 0 1 0000 0 0 0 0 0 0 0 0 0 0 0 0\n%.1f 0 1 0000 0 0 0 0 0 0 0 0 0 0 0 0\n" % 600000)
+            # (XBE_REPLAY_UNTIL seconds: the replay ends there, the keyboard and the controller the player's again)
+            until = float(os.environ.get("XBE_REPLAY_UNTIL", "600")) * 1000
+            f.write("0.0 0 1 0000 0 0 0 0 0 0 0 0 0 0 0 0\n%.1f 0 1 0000 0 0 0 0 0 0 0 0 0 0 0 0\n" % until)
         drive.kill_build_exe()
         env = dict(os.environ)
         env.update({"XBE_CONTROL": self.control, "XBE_INPUT_REPLAY": replay, "XBE_SKIP_MOVIES": "1"})

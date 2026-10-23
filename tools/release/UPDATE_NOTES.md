@@ -128,6 +128,8 @@ The version installed is in `version.txt` beside the game. Unattended:
   reflects.
 - Tanks' vision slits: the dirt on the glass no longer shows as dark pixel blocks against the light. It is soft and
   faint, and the view through the glass stays sharp.
+- The health, medkit and ammunition meters stay in their corner while a subtitle is up (they slid towards it and
+  back on wide screens).
 - The installer and the updater work on Linux (Wine, Proton): they unpack the update with their own decoder now, and
   no longer stop at "This program has no update inside" (Wine lacks the Windows part they used). The update is
   smaller too.

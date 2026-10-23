@@ -34,6 +34,7 @@ int g_depth = 0;  // Rt2d renders nest
 struct Box {
     float x0, y0, x1, y1;
     bool line = false;  // a piece of a line of text, or a picture in one: a line's pieces go together, however wide
+    bool hud = false;   // one of the HUD's elements (its pictures' groups, what lies inside them: the ammunition's numbers)
 };
 struct Placed {
     Box b;
@@ -106,10 +107,13 @@ void NewFrame(uint64_t frame) {
         merged = false;
         for (size_t i = 0; i < g_rows.size() && !merged; i++)
             for (size_t j = i + 1; j < g_rows.size(); j++)
-                if (SameRow(g_rows[i], g_rows[j]) && Joins(g_rows[i], g_rows[j])) {
+                // (the HUD's elements row only with each other: a subtitle's short piece by the health and the
+                // ammunition (its speaker's name, a last line's word) made one row of them about the middle, and the
+                // meters went towards the subtitle while it was up)
+                if (SameRow(g_rows[i], g_rows[j]) && Joins(g_rows[i], g_rows[j]) && g_rows[i].hud == g_rows[j].hud) {
                     Box& a = g_rows[i];
                     const Box& b = g_rows[j];
-                    a = {std::min(a.x0, b.x0), std::min(a.y0, b.y0), std::max(a.x1, b.x1), std::max(a.y1, b.y1), a.line || b.line};
+                    a = {std::min(a.x0, b.x0), std::min(a.y0, b.y0), std::max(a.x1, b.x1), std::max(a.y1, b.y1), a.line || b.line, a.hud};
                     g_rows.erase(g_rows.begin() + std::ptrdiff_t(j));
                     merged = true;
                     break;
@@ -125,6 +129,8 @@ int Side(float x0, float x1, float w) {
 // what Place made of a draw, for the HUD's size: left as placed (menus, overlays, text lines, world names), the
 // crosshair's (made smaller about the screen's centre), a HUD element's piece (smaller with its element)
 enum Kind { kAsPlaced, kCentred, kPiece };
+
+bool OwnPicture(uint64_t tex);  // one of the HUD's own pictures (kGroupTex)
 
 bool Place(const gpu::Draw2D& d_in, float& scale, float& offset, Kind& kind, Box& truth) {
     gpu::Draw2D d = d_in;
@@ -201,6 +207,11 @@ bool Place(const gpu::Draw2D& d_in, float& scale, float& offset, Kind& kind, Box
     }
     if (d.frame != g_frame) NewFrame(d.frame);
     Box b{d.x0, d.y0, d.x1, d.y1, narrowed};
+    // one of the HUD's elements: its own picture, or inside its pictures' groups (the frame before's, this one's so far)
+    b.hud = !narrowed && OwnPicture(d.tex);
+    for (const std::vector<Box>* list : {&g_groups, &g_pics})
+        for (const Box& g : *list)
+            if (b.x0 >= g.x0 - 4 && b.x1 <= g.x1 + 4 && b.y0 >= g.y0 - 4 && b.y1 <= g.y1 + 4) b.hud = true;
     // the crosshair's pieces, and what the game shows under it (a friend's name), stay in the middle on their own:
     // they spread as the player moves and would join the rows beside them
     float cx = (b.x0 + b.x1) * 0.5f, cy = (b.y0 + b.y1) * 0.5f;
@@ -214,11 +225,14 @@ bool Place(const gpu::Draw2D& d_in, float& scale, float& offset, Kind& kind, Box
     if (g_seen.size() < 512) g_seen.push_back(b);
     int side = 2;
     for (const Placed& p : g_placed)
-        if (std::fabs(p.b.x0 - b.x0) < 1.5f && b.y0 < p.b.y1 + 40 && b.y1 > p.b.y0 - 40) side = p.side;
+        if (std::fabs(p.b.x0 - b.x0) < 1.5f && b.y0 < p.b.y1 + 40 && b.y1 > p.b.y0 - 40 && p.b.hud == b.hud) side = p.side;
     if (side == 2) {
         float cx = (b.x0 + b.x1) * 0.5f, cy = (b.y0 + b.y1) * 0.5f;
         for (const Box& r : g_rows)
-            if ((b.x1 - b.x0 <= kGroupWidth || (b.line && r.line)) && cx >= r.x0 - 2 && cx <= r.x1 + 2 && cy >= r.y0 - 2 && cy <= r.y1 + 2) {
+            // (a HUD element's piece in its own rows: a subtitle's paragraph reaching past the medkits held their
+            // count, the medkits' "0", in the middle with it)
+            if ((b.x1 - b.x0 <= kGroupWidth || (b.line && r.line)) && r.hud == b.hud && cx >= r.x0 - 2 && cx <= r.x1 + 2 &&
+                cy >= r.y0 - 2 && cy <= r.y1 + 2) {
                 side = Side(r.x0, r.x1, w);
                 break;
             }
@@ -264,6 +278,8 @@ template <size_t N>
 bool Listed(const uint64_t (&list)[N], uint64_t tex) {
     return tex && std::find(std::begin(list), std::end(list), tex) != std::end(list);
 }
+
+bool OwnPicture(uint64_t tex) { return Listed(kGroupTex, tex); }
 
 // p's placement (x' = x * sx + ox) made smaller by s about (ax, ay), a point of the placed picture
 void ShrinkAbout(gpu::Place2D& p, float s, float ax, float ay) {

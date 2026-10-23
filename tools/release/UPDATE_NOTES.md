@@ -140,6 +140,8 @@ The version installed is in `version.txt` beside the game. Unattended:
 - The loading screen with the Call of Duty logo shows the game's own picture, as the main menu's movie after it.
 - Extras: the gallery's and the credits' movies no longer flicker with the main menu's picture at their sides.
 - The lean hint's keys are two key caps, Q and E, each its own, with no full stop after them.
+- The sewers' falling water: no more small white patches and lines on the pipes' streams (they were lit as pools),
+  and a stream no longer looks cut where it meets the wall it falls from (the wall's grime was drawn over it).
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

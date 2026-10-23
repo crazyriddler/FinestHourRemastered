@@ -2061,8 +2061,10 @@ std::string PixelHlsl(const PixelKey& k) {
             "}\n";
     // falling water (flow.x, d3d12.cpp): lit as water catching the light about it, its sheet a little more solid.
     // Its colour the sewer's dark grey water, its light the game's own as it falls off (the tunnel lamp's cone down
-    // the sheet: pressed into a narrow range it read as a flat wall), its streaks brighter, never white
-    body += "if (flow.x > 0) { float wl = dot(outc.rgb, 0.333); outc.rgb = float3(0.96, 1.0, 0.94) * min(wl * flow.z, 0.7) + smoothstep(0.05, 0.12, wl) * float3(0.02, 0.022, 0.017); outc.a = saturate(outc.a * flow.w); }\n";
+    // the sheet: pressed into a narrow range it read as a flat wall), its streaks brighter, never white: past a knee
+    // the light eases off (a face turned to the lamp, the sheet's top bend and its foot, hit the old cap at 0.7 and
+    // showed as flat white patches, its streaks gone)
+    body += "if (flow.x > 0) { float wl = dot(outc.rgb, 0.333), fl = wl * flow.z; fl = fl < 0.3 ? fl : 0.3 + 0.18 * (1 - exp(-(fl - 0.3) / 0.18)); outc.rgb = float3(0.96, 1.0, 0.94) * fl + smoothstep(0.05, 0.12, wl) * float3(0.02, 0.022, 0.017); outc.a = saturate(outc.a * flow.w); }\n";
     body += "alphatest(outc.a);\n" + Hooks().Output() +
             "if (layout2d.w > 0) {\n"
             "    // the glow on the sprite's bright fire only: its smoke and dark edges stay as drawn (brightened past\n"

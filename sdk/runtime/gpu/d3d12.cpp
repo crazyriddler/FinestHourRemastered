@@ -924,6 +924,33 @@ private:
         D3D12_GPU_DESCRIPTOR_HANDLE srv, smp;
     };
     std::vector<VeilDraw> veil_;
+    // Falling water drawn last of the world (DrawLate): water_flowing's sheets are blended and write no depth, and
+    // what the game draws after them behind (the sewer's slop over the walls behind a pipe's jet) covered them, the
+    // jet's top cut as if it came out of the wall's corner. Kept as drawn (its pipeline, constants, tables, geometry
+    // and targets), drawn again over the world before its passes
+    struct LateDraw {
+        ID3D12PipelineState* pso;
+        D3D12_VERTEX_BUFFER_VIEW vb[16];
+        uint32_t vb_count;
+        D3D12_INDEX_BUFFER_VIEW ib;
+        bool indexed;
+        uint32_t count;
+        int32_t base;
+        D3D_PRIMITIVE_TOPOLOGY topo;
+        D3D12_GPU_VIRTUAL_ADDRESS vc, dc;
+        D3D12_GPU_DESCRIPTOR_HANDLE srv, smp;
+        D3D12_VIEWPORT vp;
+        D3D12_RECT sc;
+        float bf[4];
+        UINT sref;
+        D3D12_CPU_DESCRIPTOR_HANDLE rt[2], ds;
+        uint32_t rt_count;
+        bool has_ds, msaa;
+    };
+    std::vector<LateDraw> sheets_late_;
+    uint64_t sheets_gen_ = 0;
+    bool KeepLate(const Assembled& a, const PsoKey& k, bool flat);
+    void DrawLate();
     uint64_t veil_gen_ = 0;
     uint64_t veil_ps_ = 0;
     std::unordered_map<uint64_t, uint32_t> lit_ids_;
@@ -4344,6 +4371,15 @@ void D3D12Backend::UploadConstants(const State& s, const DrawShaders& sh, const 
                     c.wave[2][3] = (wave_debug ? -3.0f : 3.0f) / (2 * kWaveCell);
                 }
             }
+            // a falling sheet (Draw's flow, water_flowing), not a pool: no flat water's up facing normal and ripples,
+            // no wave field's stir and foam, no relief nor highlight, little reflection. As a pool its faces turned up
+            // (its bend under the pipe, its foot, a strip along it) foamed and shone as flat white patches
+            if (c.flow[0] > 0) {
+                c.mrefl[0] = 0.12f, c.mrefl[2] = 0;
+                std::memset(c.trail[1], 0, sizeof(c.trail[1]));
+                c.wave[2][3] = 0;
+                c.mtl[0][3] = 0, c.mtl[1][3] = 0;
+            }
         }
     }
     if (sh.fixed_transform) {
@@ -5057,6 +5093,16 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
             for (uint64_t g : kGlasses)
                 if (draw_tex0_ == g) k.zwrite = false;
     }
+    // falling water (drawn last of the world, KeepLate): pulled a little towards the eye, so the coats laid on the
+    // walls and the floor it meets (the sewer's slop, drawn after it by the game and writing their depth a hair in
+    // front of the surface) do not cut its top at the wall nor its splash on the floor
+    {
+        constexpr uint64_t kSheets[] = {0x3d399e0f1b26898bull, 0xdf5acfa8682d9ea1ull, 0xe15b8faaa2324069ull};
+        static const int bias = [] { const char* e = std::getenv("XBE_SHEET_BIAS"); return e ? std::atoi(e) : 3000; }();
+        static const bool in_order = std::getenv("XBE_SHEETS_IN_ORDER") != nullptr;
+        if (k.blend && !flat && !in_order && std::find(std::begin(kSheets), std::end(kSheets), draw_tex0_) != std::end(kSheets))
+            k.zbias -= bias, k.zslope -= 1.0f;
+    }
     // a character's triangles (a program lit by itself, drawn with the world: not the weapon in hand, its hard edges
     // would swell), smoothed by tessellation
     tess_draw_ = false;
@@ -5245,10 +5291,7 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
                 // the game's own flow when its sector draws the material's animation (src/game/matfx.cpp: the
                 // texture transform set), else ours along u
                 c.flow[1] = s.tss[0][kTssTextureTransformFlags] ? 0.0f : speed, c.flow[2] = 2.6f, c.flow[3] = 1.15f;
-                // a falling sheet, not a pool: no flat water's ripples and up facing normal, little reflection and
-                // sheen (on its upright face they came out white)
-                c.mrefl[0] = 0.12f, c.mrefl[2] = 0;
-                c.mtl[1][3] *= 0.25f;
+                // (a falling sheet, not a pool: its material's water left out in UploadConstants, which sets it)
             }
     }
     // aircraft propellers (VT_Aircraft_propeller): spun into a soft disc (shaders.cpp, flow.x < 0: a turn, the opacity)
@@ -5365,8 +5408,8 @@ void D3D12Backend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t 
     SetViewportScissor(s, size.w);
     SetBlendFactorStencilRef(s);
 
-    // geometry
-    DrawGeometry(a);
+    // geometry (falling water's later: DrawLate)
+    if (!KeepLate(a, k, flat)) DrawGeometry(a);
     // (the sky's pieces, level 1's oil smoke shells and far water: at the far plane, no caster, no guard band)
     draw_far_ = c.jitter[3] > 0;
     RecordCaster(s, a, sh, pk, k, stages);
@@ -6935,6 +6978,101 @@ void D3D12Backend::RecordVeil(const State& s, const Assembled& a, const DrawShad
     v.topo = PrimitiveTopology(a);
     v.vc = last_vc_, v.dc = last_dc_, v.srv = last_srv_, v.smp = last_smp_;
     veil_.push_back(v);
+}
+
+// a falling water sheet kept for DrawLate: its vertices and indices uploaded now, everything it was to be drawn with
+bool D3D12Backend::KeepLate(const Assembled& a, const PsoKey& k, bool flat) {
+    constexpr uint64_t kSheets[] = {0x3d399e0f1b26898bull, 0xdf5acfa8682d9ea1ull, 0xe15b8faaa2324069ull};
+    static const bool off = std::getenv("XBE_SHEETS_IN_ORDER") != nullptr;  // (tests: as the game orders them)
+    if (off || flat || !k.blend || occlusion_done_ || !bound_rt_ || bound_rt_ != scene_rt_ || a.resident || tess_draw_ ||
+        weapon_filter_ || a.topology != Topology::Triangles || !cmd_.pso_ok)
+        return false;
+    if (std::find(std::begin(kSheets), std::end(kSheets), draw_tex0_) == std::end(kSheets)) return false;
+    if (sheets_late_.empty()) sheets_gen_ = ring_gen_;
+    if (sheets_gen_ != ring_gen_ || sheets_late_.size() >= 64) return false;
+    LateDraw d{};
+    UploadVertexBuffers(a);
+    d.vb_count = a.buffer_count;
+    std::memcpy(d.vb, last_vbv_, sizeof(D3D12_VERTEX_BUFFER_VIEW) * a.buffer_count);
+    d.indexed = a.index_count != 0;
+    if (d.indexed) {
+        uint32_t ibytes = a.index_count * (a.index16 ? 2 : 4);
+        Alloc ib = Upload(ibytes, 4);
+        std::memcpy(ib.cpu, a.index_src, ibytes);
+        d.ib = {ib.gpu, ibytes, a.index16 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT};
+        last_ibv_ = d.ib;
+        d.count = a.index_count, d.base = a.base_vertex;
+    } else {
+        d.count = a.draw_count;
+    }
+    d.topo = PrimitiveTopology(a);
+    d.pso = cmd_.pso;
+    d.vc = last_vc_, d.dc = last_dc_, d.srv = last_srv_, d.smp = last_smp_;
+    d.vp = cmd_.vp, d.sc = cmd_.sc, d.sref = cmd_.sref;
+    std::memcpy(d.bf, cmd_.bf, sizeof(d.bf));
+    // the targets as bound for it (the multisampled pair, the reflection buffer beside)
+    d.msaa = msaa_bound_;
+    d.rt[0] = msaa_bound_ ? MsaaRtv() : Cpu(rtv_heap_.Get(), bound_rt_->view, rtv_inc_);
+    d.rt[1] = msaa_bound_ ? MsaaGbufRtv() : GbufRtv();
+    d.rt_count = gbuf_bound_ ? 2 : 1;
+    d.has_ds = bound_ds_ != nullptr;
+    d.ds = msaa_bound_ ? Cpu(dsv_heap_.Get(), msaa_dsv_, dsv_inc_)
+                       : bound_ds_ ? Cpu(dsv_heap_.Get(), bound_ds_->view, dsv_inc_) : D3D12_CPU_DESCRIPTOR_HANDLE{};
+    static const bool slog = std::getenv("XBE_SHEETS_LOG") != nullptr;
+    if (slog && presents_ % 120 == 0)
+        LOGR("sheets: kept %zu count %u msaa %d rts %u ds %d zwrite %d zbias %d", sheets_late_.size(), d.count, int(d.msaa), d.rt_count,
+             int(d.has_ds), int(k.zwrite), k.zbias);
+    sheets_late_.push_back(d);
+    return true;
+}
+
+// the falling water kept by KeepLate, drawn over the world as it was to be (its targets bound again)
+void D3D12Backend::DrawLate() {
+    if (sheets_late_.empty()) return;
+    if (sheets_gen_ != ring_gen_) {
+        sheets_late_.clear();
+        return;
+    }
+    if (sheets_late_[0].msaa) {
+        if (!msaa_active_) {
+            sheets_late_.clear();
+            return;
+        }
+        Transition(msaa_rt_.Get(), msaa_rt_state_, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        Transition(msaa_ds_.Get(), msaa_ds_state_, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+    } else {
+        if (scene_rt_) Transition(scene_rt_->res.Get(), scene_rt_->state, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        if (scene_ds_) Transition(scene_ds_->res.Get(), scene_ds_->state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+    }
+    cl_->SetGraphicsRootSignature(root_.Get());
+    cl_->SetGraphicsRootDescriptorTable(4, sun_table_);
+    for (const LateDraw& d : sheets_late_) {
+        if (d.rt_count == 2) {
+            if (d.msaa) Transition(msaa_gbuf_.Get(), msaa_gbuf_state_, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            else Transition(gbuf_.Get(), gbuf_state_, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        }
+        cl_->OMSetRenderTargets(d.rt_count, d.rt, FALSE, d.has_ds ? &d.ds : nullptr);
+        SetPso(d.pso);
+        cl_->SetGraphicsRootConstantBufferView(0, d.vc);
+        cl_->SetGraphicsRootConstantBufferView(1, d.dc);
+        cl_->SetGraphicsRootDescriptorTable(2, d.srv);
+        SetSamplerTable(d.smp);
+        SetViewport(d.vp);
+        SetScissor(d.sc);
+        SetBlendFactor(d.bf);
+        SetStencilRef(d.sref);
+        cl_->IASetVertexBuffers(0, d.vb_count, d.vb);
+        SetTopology(d.topo);
+        if (d.indexed) {
+            cl_->IASetIndexBuffer(&d.ib);
+            cl_->DrawIndexedInstanced(d.count, 1, 0, d.base, 0);
+        } else {
+            cl_->DrawInstanced(d.count, 1, 0, 0);
+        }
+    }
+    sheets_late_.clear();
+    bound_rt_ = bound_ds_ = nullptr;
+    gbuf_bound_ = false, msaa_bound_ = false;
 }
 
 // the veil over the occlusion (scene_[1]): the see-through draws again through the scene's depth (DrawVeil's kVeilKey)
@@ -8928,6 +9066,7 @@ void D3D12Backend::CopyScene(Target& rt) {
 // Ambient occlusion and contact shadows on the world, from its depth, before anything is drawn over it with a depth
 // of its own (the weapon in hand clears the depth first)
 void D3D12Backend::SceneOcclusion() {
+    DrawLate();
     GpuMark("scene draws");
     MsaaResolve();
     GpuMark("msaa resolve");

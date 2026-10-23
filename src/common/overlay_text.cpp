@@ -369,6 +369,8 @@ constexpr Row kRows[] = {
     {"Use / Action", "Utiliser / Action", "Usa / Azione", "Usar / Acción"},
     {"Reload", "Recharger", "Ricarica", "Recargar"},
     {"Next Weapon", "Arme suivante", "Arma successiva", "Arma siguiente"},
+    {"Primary Weapon", "Arme principale", "Arma principale", "Arma principal"},
+    {"Secondary Weapon", "Arme secondaire", "Arma secondaria", "Arma secundaria"},
     {"Switch Grenade", "Changer de grenade", "Cambia granata", "Cambiar granada"},
     {"Lean Left (Aiming)", "Se pencher à gauche (en visée)", "Sporgersi a sinistra (in mira)", "Asomarse a la izquierda (apuntando)"},
     {"Lean Right (Aiming)", "Se pencher à droite (en visée)", "Sporgersi a destra (in mira)", "Asomarse a la derecha (apuntando)"},

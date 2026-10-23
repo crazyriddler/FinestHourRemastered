@@ -256,7 +256,14 @@ def draw_atlas(name, src, boxes):
         dx, dy, r, strength = style
         for x0, y0, x1, y1 in boxes_drawn:
             sub = ink[y0:y1, x0:x1]
-            sh = np.clip(shift(dilate(sub, r * SCALE) if r else sub, dx * SCALE, dy * SCALE), 0, 1) * strength
+            # (thinner than the original's measured growth and soft at its rim: drawn its full width and dark, it
+            # read as a heavy halo about the letters at the high resolution, where the original's was a pixel's
+            # broken line)
+            grown = dilate(sub, max(1, int(round(r * SCALE * 0.55)))) if r else sub
+            from PIL import ImageFilter
+            soft = np.asarray(Image.fromarray((np.clip(grown, 0, 1) * 255).astype(np.uint8)).filter(
+                ImageFilter.GaussianBlur(SCALE * 0.35)), np.float32) / 255.0
+            sh = np.clip(shift(soft, dx * SCALE, dy * SCALE), 0, 1) * strength * 0.8
             # fading out over the box's last half pixel at its sides (the glyphs leave their outline room: a safety,
             # never a straight cut where a box ends)
             fade = max(2, SCALE // 2)

@@ -702,17 +702,21 @@ void Ui(double fps) {
 namespace {
 
 constexpr int64_t kGraphicsVersion = 1;
+// the controls' own: 1, Toggle Aim on by default (a click aims, the next stops), set so once in older files
+constexpr int64_t kControlsVersion = 1;
 
 void LoadSettings(const void* table) {
     pc_input::Load(table);
     const toml::table& t = *static_cast<const toml::table*>(table);
     if (t["graphics_version"].value_or(int64_t(0)) < kGraphicsVersion)
         cod::overlay::MigrateGraphics(uint32_t(t["shadow_quality"].value_or(int64_t(app::Get().shadow_quality))));
+    if (t["controls_version"].value_or(int64_t(0)) < kControlsVersion) cod::Get().toggle_aim = true;
 }
 
 void SaveSettings(void* table) {
     pc_input::Save(table);
     static_cast<toml::table*>(table)->insert_or_assign("graphics_version", kGraphicsVersion);
+    static_cast<toml::table*>(table)->insert_or_assign("controls_version", kControlsVersion);
 }
 
 }  // namespace

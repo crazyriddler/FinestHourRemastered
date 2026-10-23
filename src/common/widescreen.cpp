@@ -34,12 +34,35 @@ float Aspect() {
 // the screen widened whenever the output is wider than 4:3 (no setting: at 4:3 the game's own 4:3 screen)
 float Widen() { return Aspect() / (4.0f / 3.0f); }
 
+// the camera at the player's eye: play, not a cutscene's camera (nor a mounted gun's or a vehicle's placed away)
+bool PlayerView() {
+    uint32_t player = PlayerEntity();
+    float eye[3];
+    if (!player || !CameraPos(eye)) return false;
+    float d2 = 0;
+    for (int i = 0; i < 3; i++) {
+        uint32_t v = kernel::R32(player + 0x5C + uint32_t(i) * 4);  // its feet
+        float f;
+        std::memcpy(&f, &v, 4);
+        float dd = eye[i] - f - (i == 1 ? 60.5f : 0.0f);
+        d2 += dd * dd;
+    }
+    return d2 < 150.0f * 150.0f;
+}
+
+// Field of View: the game's own unless set, and in play alone (a cutscene keeps the game's: framed for it, wider it
+// showed the scene's unfinished edges); zoomed views (the iron sights, a scope) widened by as much. The weapon in
+// hand keeps the game's (gpu::g_weapon_scale: it was modelled to its edges for it)
 float FovScale(float x) {
     float widest = g_widest.load();
     if (x > widest) g_widest = widest = x;
-    if (true || !Get().fov || widest <= 0) return 1.0f;  // the field of view: the game's always, for now
-    constexpr float kHalfDegree = 3.14159265f / 360.0f;
-    return std::tan(float(Get().fov) * kHalfDegree) / widest;
+    float k = 1.0f;
+    if (Get().fov && widest > 0 && !FrontEnd() && PlayerView()) {
+        constexpr float kHalfDegree = 3.14159265f / 360.0f;
+        k = std::tan(float(Get().fov) * kHalfDegree) / widest;
+    }
+    gpu::g_weapon_scale = k;
+    return k;
 }
 
 void Update() { gpu::g_screen_widen = Widen(); }

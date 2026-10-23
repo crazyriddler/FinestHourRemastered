@@ -255,6 +255,8 @@ const PtRow kPtRows[] = {
     {"Use / Action", "Usar / Ação"},
     {"Reload", "Recarregar"},
     {"Next Weapon", "Próxima arma"},
+    {"Primary Weapon", "Arma principal"},
+    {"Secondary Weapon", "Arma secundária"},
     {"Switch Grenade", "Trocar granada"},
     {"Lean Left (Aiming)", "Inclinar à esquerda (mirando)"},
     {"Lean Right (Aiming)", "Inclinar à direita (mirando)"},

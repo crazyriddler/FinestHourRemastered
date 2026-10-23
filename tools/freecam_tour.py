@@ -43,6 +43,10 @@ class Game:
         drive.kill_build_exe()
         env = dict(os.environ)
         env.update({"XBE_CONTROL": self.control, "XBE_INPUT_REPLAY": replay, "XBE_SKIP_MOVIES": "1"})
+        # XBE_NO_REPLAY: no replay, the keyboard's own (a replay's pad state takes the place of the keys merged into
+        # it; the presses here are the control channel's, applied after it either way)
+        if os.environ.get("XBE_NO_REPLAY"):
+            env.pop("XBE_INPUT_REPLAY", None)
         launched = time.time()
         subprocess.Popen([os.path.join(EXE_DIR, "CODFH.exe")], cwd=EXE_DIR, env=env)
         self.t0 = None

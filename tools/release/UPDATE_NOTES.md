@@ -89,6 +89,17 @@ The version installed is in `version.txt` beside the game. Unattended:
   arms holding the weapon; the remastered weapons follow the game's own trimming triangle by triangle.
 - Clouds: no more hard lines and arcs across the sky (in every level); the clouds' edges are soft and they take
   the light of the whole sky, day or night.
+- Field of View is back (PC Settings, Display): wider in play, while cutscenes keep the game's own, and the weapon in
+  your hands stays as the game draws it (no stretched arms at a wide field of view). Inside the tanks too.
+- Keys 1 and 2 pick your primary and secondary weapon, as in later Call of Duty games; the mouse wheel still
+  switches.
+- Toggle Aim is on by default (a click of the aim button aims, the next one stops); your settings move over once,
+  and you can turn it off in PC Settings, Controls.
+- The lean hint shows the lean keys (Q and E) on the keyboard, or the d-pad on a controller, instead of naming the
+  directional buttons.
+- PC Settings: the options' descriptions stay inside the page in every language.
+- The main menu: its text is sharper inside the 1940s television, and the letters' dark outline is thinner (no
+  heavy halo around them).
 - Tanks: inside the tank, the sight's black band at the bottom now reaches the corners of a wide screen.
 - HUD Size: Smaller by default, and the graphics presets set it too (Original keeps the original HUD).
 - The menus' 1940s television: a slightly stronger picture tube (scan lines, a faint phosphor mask and glow) that

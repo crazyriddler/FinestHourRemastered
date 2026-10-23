@@ -219,11 +219,16 @@ float3 Picture(float2 s, float2 dev) {
     float2 uv = src_rect.xy + s * src_rect.zw;
     // a soft tube: the picture blurred by a third of a source line, which hides small pictures' pixels
     float2 px = size.zw;  // half a console pixel
-    float3 col = img.SampleLevel(ls, uv, 0).rgb * 0.4;
+    float3 sharp = img.SampleLevel(ls, uv, 0).rgb;
+    float3 col = sharp * 0.4;
     col += img.SampleLevel(ls, uv + float2(px.x, 0), 0).rgb * 0.15;
     col += img.SampleLevel(ls, uv - float2(px.x, 0), 0).rgb * 0.15;
     col += img.SampleLevel(ls, uv + float2(0, px.y), 0).rgb * 0.15;
     col += img.SampleLevel(ls, uv - float2(0, px.y), 0).rgb * 0.15;
+    // the menus' text (light, brighter than the pictures behind it) kept sharp: the blur on the dark backgrounds
+    float tl = dot(sharp, float3(0.3, 0.59, 0.11));
+    float text = smoothstep(0.32, 0.55, tl);
+    col = lerp(col, sharp, text * 0.9);
     // the overlay's rows drawn in the picture, as soft
     float2 up = float2(0.5 / 640, 0.5 / 480);
     float4 o = ui.SampleLevel(ls, s, 0) * 0.4 + (ui.SampleLevel(ls, s + float2(up.x, 0), 0) + ui.SampleLevel(ls, s - float2(up.x, 0), 0) +
@@ -240,12 +245,12 @@ float3 Picture(float2 s, float2 dev) {
     // lines (the menus' text) filling them, as readable as without
     float scan = 0.5 + 0.5 * cos(s.y * 480 * 6.2831853);
     float lum = dot(col, float3(0.3, 0.59, 0.11));
-    col *= lerp(1, 0.76 + 0.24 * scan, opts.w * saturate(1 - lum * 0.85));
+    col *= lerp(1, 0.76 + 0.24 * scan, opts.w * saturate(1 - lum * 0.85) * (1 - text * 0.8));
     // a faint shadow mask: the screen's columns of red, green and blue phosphor, every three of the display's pixels
     // (its loss made up)
     int m = int(fmod(dev.x, 3.0));
     float3 mask = m == 0 ? float3(1, 0.9, 0.9) : m == 1 ? float3(0.9, 1, 0.9) : float3(0.9, 0.9, 1);
-    col *= lerp(1, mask * 1.07, opts.w);
+    col *= lerp(1, mask * 1.07, opts.w * (1 - text * 0.7));
     // the tube's corners darker
     float2 v = s * (1 - s);
     col *= pow(saturate(v.x * v.y * 18), 0.18);
@@ -5361,6 +5366,12 @@ void D3D12Backend::Layout2D(const State& s, const Assembled& a, bool prog, Guest
     // never shown by the game, are left out (a sleeve's cut end by the left edge of a wide screen)
     c.layout[2] = !(a.pretransformed || s.layout2d) && screen && occlusion_done_ && widen_ > 1.0f ? 1.0f / widen_ : 0.0f;
     if (int ww = g_weapon_whole.load(std::memory_order_relaxed); ww == 1) c.layout[2] = 0;  // tests: as the game draws it
+    // the weapon in hand at the game's own field of view (a wider one set: its view window grown, the weapon made
+    // smaller and further, the cut ends of its arms showing): its place on the screen scaled back about the middle
+    if (const float ws = g_weapon_scale.load(); ws != 1.0f && !(a.pretransformed || s.layout2d) && screen && occlusion_done_) {
+        c.layout[0] = ws, c.layout[1] = (1.0f - ws) * float(size.w) * 0.5f;
+        c.layout_y[0] = ws, c.layout_y[1] = (1.0f - ws) * float(size.h) * 0.5f;
+    }
     // a tank's sight seen from inside: its black bands top and bottom (texture "topbottom") made for the 4:3 view end
     // at its sides, the world showing past them in the wide screen's corners: stretched to its edges, about its middle
     if (c.layout[2] > 0 && draw_tex0_ == 0x543e36e7cdb5ddfcull) {
@@ -8288,7 +8299,9 @@ bool D3D12Backend::WeaponPieces(const State& s, const Assembled& a, const DrawSh
             for (uint32_t r = 0; r < 16; r++) input(r, v, in[r]);
             RunCpuProgram(*prog, in, s.vsc, o);
             bool ok = o[3] > 0 && std::isfinite(o[0]) && std::isfinite(o[1]);
-            scr[v] = {ok ? o[0] * 2 / gw - 1 : 0.0f, ok ? 1 - o[1] * 2 / gh : 0.0f, ok ? 1.0f : 0.0f};
+            // (at the game's own field of view, as DrawGeometry places it: Layout2D's g_weapon_scale)
+            const float ws = g_weapon_scale.load();
+            scr[v] = {ok ? (o[0] * 2 / gw - 1) * ws : 0.0f, ok ? (1 - o[1] * 2 / gh) * ws : 0.0f, ok ? 1.0f : 0.0f};
             done[v] = 1;
             uint64_t key = (uint64_t(uint32_t(std::lround(in[0][0] * 64))) << 42) ^ (uint64_t(uint32_t(std::lround(in[0][1] * 64))) << 21) ^
                            uint64_t(uint32_t(std::lround(in[0][2] * 64)));

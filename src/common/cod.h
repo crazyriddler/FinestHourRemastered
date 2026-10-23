@@ -26,7 +26,7 @@ struct Settings {
     bool keyboard_mouse = true;
     uint32_t mouse_sensitivity = 100;  // percent
     bool invert_mouse = false;
-    bool toggle_aim = false;  // the aim action's mouse buttons aim on a click and stop on the next (keys still hold)
+    bool toggle_aim = true;  // the aim action's mouse buttons aim on a click and stop on the next (keys still hold)
     uint32_t button_prompts = 0;  // 0 the device in use, 1 the controller's, 2 the keyboard's
     // controller
     uint32_t pad_layout = 0;          // 0 modern (A jump, X reload, RB grenade...), 1 the original's

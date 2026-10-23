@@ -113,7 +113,11 @@ Pad Poll(int port) {
 // the controller as it is (a test replay's while one plays)
 Pad Raw(int port) {
     Pad p = RawPad(port);
-    return control::Replaying() ? control::Filter(port, p) : p;
+    if (control::Replaying()) p = control::Filter(port, p);
+    // (the tests' presses, control "pad": as Poll has them)
+    if (port == 0 && SDL_GetTicks() < g_press_until) p.analog[g_press_analog] = 255;
+    if (port == 0 && SDL_GetTicks() < g_buttons_until) p.buttons |= g_press_buttons;
+    return p;
 }
 
 Pad RawPad(int port) {

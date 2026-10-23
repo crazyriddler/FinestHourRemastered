@@ -21,6 +21,7 @@
 #include "common/cod.h"
 #include "core/control.h"
 #include "core/log.h"
+#include "kernel/kernel.h"
 
 namespace pc_input {
 
@@ -52,6 +53,8 @@ const ActionInfo kActions[kActionCount] = {
     {"use", "Use / Action", {'F', 0}},
     {"reload", "Reload", {'R', 0}},
     {"next_weapon", "Next Weapon", {kWheelUp, kWheelDown}},
+    {"weapon_1", "Primary Weapon", {'1', 0}},
+    {"weapon_2", "Secondary Weapon", {'2', 0}},
     {"next_grenade", "Switch Grenade", {'T', 0}},
     {"lean_left", "Lean Left (Aiming)", {'Q', 0}},
     {"lean_right", "Lean Right (Aiming)", {'E', 0}},
@@ -357,6 +360,36 @@ bool Aiming() {
     return latched || keys;
 }
 
+// The weapon keys (1 and 2, as in later Call of Duty games): the game only switches to the other weapon (next weapon),
+// so a key switches when the weapon held is not its own. The player's weapon held is its entity's + 0x1AE4 (the
+// weapon's id); the primary the one held as a level starts, the secondary the other; a weapon picked up in place of
+// the one held takes its place. A switch is a press of next weapon while the held one is not yet the one wanted
+// (a press, then a wait for the game to change it)
+bool WeaponKeys() {
+    static uint32_t primary = 0, last = 0, player_seen = 0;
+    static bool switching = false;
+    static int64_t press_until = 0, wait_until = 0;
+    const uint32_t player = cod::PlayerEntity();
+    const int64_t now = NowMs();
+    if (!player) return false;
+    const uint32_t held = kernel::R32(player + 0x1AE4);
+    if (player != player_seen) player_seen = player, primary = held, last = held, switching = false;  // a level
+    if (held != last) {
+        // changed by a switch (ours, the wheel's, the controller's) or a weapon picked up in place of the held one
+        if (!switching && !Pressed(kNextWeapon) && last == primary) primary = held;
+        last = held, switching = false;
+    }
+    if (now < press_until) return true;
+    if (now < wait_until) return false;
+    const bool want1 = Pressed(kWeapon1), want2 = Pressed(kWeapon2);
+    if ((want1 && held != primary) || (want2 && held == primary)) {
+        switching = true;
+        press_until = now + 120, wait_until = now + 700;
+        return true;
+    }
+    return false;
+}
+
 void Pad(int port, input::Pad& pad) {
     if (port != 0 || !cod::Get().keyboard_mouse) return;
     Keys();
@@ -413,6 +446,7 @@ void Pad(int port, input::Pad& pad) {
     } else {
         button(kNextWeapon, 0x4);
         button(kNextGrenade, 0x8);
+        if (WeaponKeys()) pad.buttons |= 0x4;
     }
     // Escape: START in the game (the pause screen, which it also closes) and to skip a movie, back in the menus
     if (g_in_game || cod::InMovie()) button(kPause, 0x10);

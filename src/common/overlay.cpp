@@ -285,7 +285,15 @@ std::vector<Page> BuildPages() {
     display.items.push_back(Toggle("V-Sync", &s.vsync));
     display.items.push_back(Toggle("Television Frame", &c.tv_frame,
                                    "On a wide screen, the menus and movies play in a 1940s television."));
-    // (no field of view setting for now: a wider one broke the first person view; the game's always)
+    // the field of view in play (cutscenes and the weapon in hand keep the game's: common/widescreen.cpp FovScale)
+    display.items.push_back(Slider("Field of View", &c.fov, 0, 120, 5, "%d", "Horizontal at 4:3, widened further on wider screens.",
+                                   [](int v) { return v ? Fmt("%d°", v) : std::string("Default"); }));
+    display.items.back().change = [&c](int d) {
+        int v = int(c.fov);
+        v = v == 0 ? (d > 0 ? 75 : 0) : v + d * 5;
+        c.fov = v < 70 ? 0 : uint32_t(std::min(v, 110));
+        Saved();
+    };
     display.items.push_back(Slider("Brightness", &s.brightness, 50, 200, 5, "%d%%", "100% is the original picture."));
     display.items.push_back(Toggle("FPS Counter", &c.fps_counter));
     display.items.push_back(Choice("HUD Size", {"Original", "Small", "Smaller"},
@@ -808,16 +816,35 @@ void Draw(double fps) {
     {
         std::string hint = Tr(rebinding ? std::string("Press the new key or mouse button. Escape cancels, Delete clears.") : sel.hint);
         if (!hint.empty()) {
-            // two lines at most, broken at the last space that fits
-            float wmax = 300 * sc.s, hs = 11 * sc.s;
-            std::string line1 = hint, line2;
-            if (Width(g_type, hs, hint) > wmax) {
-                size_t cut = hint.size();
-                while (cut > 0 && (hint[cut - 1] != ' ' || Width(g_type, hs, hint.substr(0, cut - 1)) > wmax)) cut--;
-                if (cut > 0) line1 = hint.substr(0, cut - 1), line2 = hint.substr(cut);
-            }
-            Text(dl, g_type, hs, sc.P(300, 322), kInkSoft, line1, 0.5f);
-            if (!line2.empty()) Text(dl, g_type, hs, sc.P(300, 334), kInkSoft, line2, 0.5f);
+            // two lines at most within the paper (each broken at the last space that fits), the type a little
+            // smaller where two lines of it do not hold the hint (the longer languages); a line once broke only
+            // the first, and the second ran off the paper's sides
+            const float wmax = 270 * sc.s;
+            auto wrap = [&](float size) {
+                std::vector<std::string> lines;
+                std::string rest = hint;
+                while (!rest.empty()) {
+                    if (Width(g_type, size, rest) <= wmax) {
+                        lines.push_back(rest);
+                        break;
+                    }
+                    size_t cut = rest.size();
+                    while (cut > 0 && (rest[cut - 1] != ' ' || Width(g_type, size, rest.substr(0, cut - 1)) > wmax)) cut--;
+                    if (cut == 0) {  // (a word longer than the line)
+                        lines.push_back(rest);
+                        break;
+                    }
+                    lines.push_back(rest.substr(0, cut - 1));
+                    rest = rest.substr(cut);
+                }
+                return lines;
+            };
+            float hs = 11 * sc.s;
+            std::vector<std::string> lines = wrap(hs);
+            while (lines.size() > 2 && hs > 8.5f * sc.s) hs *= 0.94f, lines = wrap(hs);
+            const float step = hs / sc.s + 1;
+            for (size_t i = 0; i < lines.size() && i < 3; i++)
+                Text(dl, g_type, hs, sc.P(300, 322 + step * float(i)), kInkSoft, lines[i], 0.5f);
         }
     }
 

@@ -14,7 +14,7 @@ namespace pc_input {
 enum Action : int {
     kMoveForward, kMoveBack, kStrafeLeft, kStrafeRight,
     kLookUp, kLookDown, kLookLeft, kLookRight,
-    kFire, kAim, kJump, kCrouch, kGrenade, kMelee, kUse, kReload, kNextWeapon, kNextGrenade, kLeanLeft, kLeanRight,
+    kFire, kAim, kJump, kCrouch, kGrenade, kMelee, kUse, kReload, kNextWeapon, kWeapon1, kWeapon2, kNextGrenade, kLeanLeft, kLeanRight,
     kHealth, kAltFire,
     kCenterTurret, kObjectives, kPause, kDpadUp, kDpadDown, kDpadLeft, kDpadRight, kMenuAccept, kMenuBack,
     kActionCount

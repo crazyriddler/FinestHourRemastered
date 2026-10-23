@@ -33,6 +33,10 @@ def make(n):
     # windowed at 720p: four side by side fill a 1440p screen, each in its quarter (place_windows)
     toml = open(os.path.join(BUILD, "codfh.toml"), encoding="utf-8").read().splitlines()
     sets = {"display_mode": "'windowed'", "width": "1280", "height": "720"}
+    # XBE_INST_SET="width=1680,height=720,fov=90": settings of the copies' own (another screen shape, a test value)
+    for kv in filter(None, os.environ.get("XBE_INST_SET", "").split(",")):
+        k, v = kv.split("=", 1)
+        sets[k.strip()] = v.strip()
     toml = [("%s = %s" % (line.split("=")[0].strip(), sets[line.split("=")[0].strip()])
              if "=" in line and line.split("=")[0].strip() in sets else line) for line in toml]
     open(os.path.join(d, "codfh.toml"), "w", encoding="utf-8").write("\n".join(toml) + "\n")

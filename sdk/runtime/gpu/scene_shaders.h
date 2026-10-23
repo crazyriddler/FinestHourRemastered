@@ -383,6 +383,7 @@ float4 splashps(O i) : SV_Target {
 inline constexpr char kTrailHlsl[] = R"(
 cbuffer P : register(b1) { float4 q0; float4 q1; float4 s[64]; };
 Texture2D<float2> trail : register(t0);
+Texture2D<float2> tread : register(t1);  // the tanks' treads from below (d3d12.cpp SnowTracks): -height, cleat
 struct O { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
 O vs(uint id : SV_VertexID) {
     O o;
@@ -419,6 +420,14 @@ float2 trailstep(O i) : SV_Target {
         float d = Boot(u, v);
         if (d > 0) t = float2(max(t.r, d), a.z);
         else if (t.r <= 0 && d < t.r) t = float2(d, a.z);
+    }
+    // a tank's tread on the snow (q1.x on): pressed in its width, its cleats deeper, at its lowest run's height
+    if (q1.x > 0) {
+        float2 tr = tread.Load(int3(p, 0));
+        if (tr.r > -1e8) {
+            float d = 1.4 + 1.0 * tr.g;  // (deeper than a boot's: a tank's weight)
+            if (d >= t.r) t = float2(d, -tr.r);
+        }
     }
     return t;
 }

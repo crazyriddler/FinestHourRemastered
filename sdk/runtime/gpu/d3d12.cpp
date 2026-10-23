@@ -92,6 +92,7 @@ constexpr uint32_t kWeaponCullKey = 0x200;    // PsoKey::topo: the weapon in han
 constexpr uint32_t kVeilKey = 0x8000;         // ShadowKey::topo: a see-through draw's veil over the occlusion (DrawVeil)
 constexpr uint32_t kGuardKey = 0x4000;        // ShadowKey::topo: the guard band's depth pipeline (DrawGuard)
 constexpr uint32_t kTopKey = 0x10000;        // ShadowKey::topo: seen from above onto the wave field (WaterInteraction)
+constexpr uint32_t kTopTreadKey = 0x40000;   // ShadowKey::topo: a tank's tread from below onto the snow's trail (SnowTracks)
 constexpr uint32_t kTopWaterKey = 0x20000;   // ShadowKey::topo: and it is the water (its height), not what crosses it
 constexpr uint32_t kTrailSize = 2048;         // Snow Tracks: the trail's texels a side
 constexpr float kTrailCell = 2.5f;            // and a texel's size in the world (cm)
@@ -906,6 +907,7 @@ private:
         ID3D12PipelineState* screen;  // a character's: its screen mask pipeline
         ID3D12PipelineState* guard;   // the guard band's (DrawGuard)
         ID3D12PipelineState* top;     // seen from above, its cover of the water (WaterInteraction)
+        ID3D12PipelineState* tread;   // a tank's tread from below onto the snow (SnowTracks)
         float zmin, zmax;             // its viewport's depth range
     };
     std::vector<Caster> casters_;
@@ -996,7 +998,12 @@ private:
     std::vector<Caster> water_tops_;
     uint64_t water_gen_ = 0;
     std::unordered_map<uint64_t, uint64_t> top_vs_;
-    uint64_t top_water_ps_ = 0, top_cover_ps_ = 0;
+    uint64_t top_water_ps_ = 0, top_cover_ps_ = 0, top_tread_ps_ = 0;
+    // Snow Tracks' treads: the tanks' tread draws seen from below onto the trail's square (SnowTracks), this frame's
+    ComPtr<ID3D12Resource> tread_;
+    D3D12_RESOURCE_STATES tread_st_ = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    uint64_t snow_frame_ = 0;  // the last frame snowy ground was drawn
+    D3D12_CPU_DESCRIPTOR_HANDLE TreadRtv() { return Cpu(rtv_heap_.Get(), kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 16, rtv_inc_); }
     ComPtr<ID3D12Resource> wave_state_[2], wave_water_, wave_cover_;
     D3D12_RESOURCE_STATES wave_state_st_[2] = {}, wave_water_st_ = {}, wave_cover_st_ = {};
     int wave_cur_ = 0;
@@ -1680,7 +1687,7 @@ void D3D12Backend::CreateBackBufferViews() {
 void D3D12Backend::CreateHeaps() {
     srv_inc_ = CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, kSrvCount, true, srv_heap_);
     smp_inc_ = CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, kSamplerCount, true, smp_heap_);
-    rtv_inc_ = CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 16, false, rtv_heap_);
+    rtv_inc_ = CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 17, false, rtv_heap_);
     dsv_inc_ = CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, kDsvCount, false, dsv_heap_);
     CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, kUiDescriptors, true, ui_heap_);
     for (uint32_t i = kRtvCount; i-- > 0;) free_rtv_.push_back(i);
@@ -2554,7 +2561,7 @@ uint64_t VertexRecipeId(uint64_t vkey, uint8_t variant) { return variant ? Hash(
 // the fixed shaders' ids
 constexpr uint64_t kShadowAlphaId[2] = {0x5AD0A1FA00000000ull, 0x5AD0A1FA00000001ull};
 constexpr uint64_t kMaskId = 0x5AD0A1FA00000002ull, kVeilId = 0x5AD0A1FA00000003ull;
-constexpr uint64_t kTopWaterId = 0x5AD0A1FA00000004ull, kTopCoverId = 0x5AD0A1FA00000005ull;
+constexpr uint64_t kTopWaterId = 0x5AD0A1FA00000004ull, kTopCoverId = 0x5AD0A1FA00000005ull, kTopTreadId = 0x5AD0A1FA00000006ull;
 
 constexpr uint32_t kVertexTag = 'V', kPixelTag = 'P', kBuildTag = 'B', kPassTag = 'S';
 struct VertexRecipe {
@@ -2788,6 +2795,20 @@ void D3D12Backend::LoadShaderCache() {
                                 "    float w = water.Load(int3(pos.xy, 0));\n"
                                 "    if (w < -1e8 || wy < w - tdp.x || wy > w + tdp.y) discard;\n"
                                 "    return wy - (w - tdp.x);\n"
+                                "}\n",
+                                "main", "ps_5_0");
+    // a tank's tread from below (Snow Tracks): its lowest height (as its negative, the blend keeping the largest) and
+    // its cleats, bars across it every 15 cm fixed in the world (they stay where it pressed them as it rolls on):
+    // across the way its texture's coordinate runs fastest (the pads repeat along the track), the world here in the
+    // trail's texels of 2.5 cm
+    top_tread_ps_ = FixedShader(kTopTreadId,
+                                "float4 main(float4 pos : SV_Position, float wy : TEXCOORD0, float2 uv : TEXCOORD1) : SV_Target {\n"
+                                "    float2 gu = float2(ddx(uv.x), ddy(uv.x)), gv = float2(ddx(uv.y), ddy(uv.y));\n"
+                                "    float2 g = dot(gu, gu) > dot(gv, gv) ? gu : gv;\n"
+                                "    float2 dir = dot(g, g) > 1e-12 ? normalize(g) : float2(1, 0);\n"
+                                "    float along = dot(pos.xy, dir) / 6;\n"
+                                "    float cleat = smoothstep(0.1, 0.25, frac(along)) * (1 - smoothstep(0.5, 0.65, frac(along)));\n"
+                                "    return float4(-wy, cleat, 0, 0);\n"
                                 "}\n",
                                 "main", "ps_5_0");
     // the pipeline library of this device and driver, or a new one. Its pipelines are named by their keys, which leave
@@ -4335,6 +4356,7 @@ void D3D12Backend::UploadConstants(const State& s, const DrawShaders& sh, const 
         if (snow_log && m.snow && presents_ % 240 == 3)
             LOGR("snow: ground draw tex %016llx ok %d bound %d cam %d character %d", (unsigned long long)draw_tex0_, int(trail_ok_),
                  int(trail_bound_), int(cam_ok_), int(draw_character_));
+        if (m.snow && !draw_character_) snow_frame_ = frame_;
         if (m.snow && set.snow_tracks && trail_ok_ && trail_bound_ && cam_ok_ && !draw_character_) {
             if (wave_inv_frame_ != frame_ && shadow::Invert(cam_view_, wave_inv_)) wave_inv_frame_ = frame_;
             if (wave_inv_frame_ == frame_) {
@@ -6235,12 +6257,13 @@ bool D3D12Backend::ShadowDesc(const ShadowKey& k, D3D12_GRAPHICS_PIPELINE_STATE_
         d.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
         d.DSVFormat = DXGI_FORMAT_UNKNOWN;
         d.NumRenderTargets = 1;
-        d.RTVFormats[0] = k.topo & kTopWaterKey ? DXGI_FORMAT_R32_FLOAT : DXGI_FORMAT_R16_FLOAT;
+        d.RTVFormats[0] = k.topo & kTopTreadKey ? DXGI_FORMAT_R32G32_FLOAT : k.topo & kTopWaterKey ? DXGI_FORMAT_R32_FLOAT : DXGI_FORMAT_R16_FLOAT;
         auto& b = d.BlendState.RenderTarget[0];
         b.BlendEnable = TRUE;
         b.SrcBlend = D3D12_BLEND_ONE, b.DestBlend = D3D12_BLEND_ONE, b.BlendOp = D3D12_BLEND_OP_MAX;
         b.SrcBlendAlpha = D3D12_BLEND_ONE, b.DestBlendAlpha = D3D12_BLEND_ONE, b.BlendOpAlpha = D3D12_BLEND_OP_MAX;
-        b.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_RED;
+        b.RenderTargetWriteMask = k.topo & kTopTreadKey ? D3D12_COLOR_WRITE_ENABLE_RED | D3D12_COLOR_WRITE_ENABLE_GREEN
+                                                        : D3D12_COLOR_WRITE_ENABLE_RED;
     }
     if (k.topo & kShadowScreenKey) {
         // the characters' screen mask: the draw's own shader where its pixels stayed in the scene's depth
@@ -6807,6 +6830,21 @@ void D3D12Backend::RecordCaster(const State& s, const Assembled& a, const DrawSh
             tk.vs = tv, tk.ps = top_cover_ps_, tk.topo |= kTopKey;
             c.top = EnsureShadowPipeline(tk);
         }
+    }
+    // a tank's tread (its texture's): seen from below onto the snow's trail
+    c.tread = nullptr;
+    {
+        constexpr uint64_t kTreads[] = {0x192f1290bdd4800full, 0x1dc89fc985471111ull, 0x53a8e2aaa11331e9ull, 0x5675103da34a254eull,
+                                        0x5c021a5b5a639136ull, 0x5e5b0d9f829934b6ull, 0x95e5d2570ff0db20ull, 0xa76fa46bdc353f32ull,
+                                        0xc3553a8bdc2a9d7aull, 0xc46be3a4e120f8daull, 0xcfbfd099f81da66full, 0xd9de6f0a30d8e810ull,
+                                        0xe733affca12e920aull, 0xea73e24eee6c79deull, 0xfd41d18ecfcfe896ull};
+        if (app::Get().snow_tracks && top_tread_ps_ && frame_ - snow_frame_ < 30 &&
+            std::find(std::begin(kTreads), std::end(kTreads), stages.id[0]) != std::end(kTreads))
+            if (uint64_t tv = TopVertexShader(s, a, sh)) {
+                ShadowKey tk = key;
+                tk.vs = tv, tk.ps = top_tread_ps_, tk.topo |= kTopKey | kTopTreadKey;
+                c.tread = EnsureShadowPipeline(tk);
+            }
     }
     c.zmin = v.min_z, c.zmax = v.max_z;
     casters_.push_back(c);
@@ -7746,10 +7784,76 @@ void D3D12Backend::SnowTracks() {
         }
     }
     trail_ok_ = true;
-    if (steps.empty() && !shift[0] && !shift[1]) return;
-    // the pass: 32 steps at a time
+    // the tanks' treads this frame (RecordCaster's tread pipelines), from below onto the trail's square as it is now
+    bool treads = false;
+    if (casters_gen_ == ring_gen_)
+        for (const Caster& c : casters_) treads |= c.tread != nullptr;
+    if (treads && !tread_) {
+        D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_DEFAULT};
+        D3D12_RESOURCE_DESC td = Texture2DDesc(DXGI_FORMAT_R32G32_FLOAT, n, n);
+        td.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+        D3D12_CLEAR_VALUE cv{};
+        cv.Format = td.Format;
+        tread_st_ = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        if (FAILED(CreateResource(&hp, D3D12_HEAP_FLAG_NONE, &td, tread_st_, &cv, IID_PPV_ARGS(&tread_)))) tread_.Reset();
+        else dev_->CreateRenderTargetView(tread_.Get(), nullptr, TreadRtv());
+    }
+    treads = treads && tread_;
+    {
+        static const bool tlog = std::getenv("XBE_SNOW_LOG") != nullptr;
+        if (tlog && presents_ % 120 == 0) {
+            size_t nt = 0;
+            for (const Caster& c : casters_) nt += c.tread != nullptr;
+            LOGR("snow: %zu tread draws, snow seen %llu frames ago", nt, (unsigned long long)(frame_ - snow_frame_));
+        }
+    }
+    if (treads) {
+        struct Td {
+            float m[16];
+            float y[4];
+            float v[4];
+            float p[4];
+        } td{};
+        float W[16] = {};
+        W[0] = 2 / size;
+        W[9] = -2 / size;
+        W[12] = -trail_x0_ * 2 / size - 1;
+        W[13] = 1 + trail_z0_ * 2 / size;
+        W[14] = 0.5f, W[15] = 1;
+        shadow::Mul(inv, W, td.m);
+        td.y[0] = inv[1], td.y[1] = inv[5], td.y[2] = inv[9], td.y[3] = inv[13];
+        td.v[0] = 1 / cam_proj_[0], td.v[1] = 1 / cam_proj_[5];
+        Alloc tcb = Upload(sizeof(Td), 256);
+        std::memcpy(tcb.cpu, &td, sizeof(td));
+        cl_->SetGraphicsRootConstantBufferView(5, tcb.gpu);
+        Transition(tread_.Get(), tread_st_, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        const float none[4] = {-1e9f, 0, 0, 0};
+        D3D12_CPU_DESCRIPTOR_HANDLE rh = TreadRtv();
+        cl_->ClearRenderTargetView(rh, none, 0, nullptr);
+        cl_->OMSetRenderTargets(1, &rh, FALSE, nullptr);
+        SetFullViewport(n, n);
+        ID3D12PipelineState* bound = nullptr;
+        for (const Caster& c : casters_) {
+            if (!c.tread) continue;
+            if (c.tread != bound) SetPso(bound = c.tread);
+            cl_->SetGraphicsRootConstantBufferView(0, c.vc);
+            cl_->SetGraphicsRootConstantBufferView(1, c.dc);
+            cl_->IASetVertexBuffers(0, c.vb_count, c.vb);
+            SetTopology(c.topo);
+            if (c.indexed) {
+                cl_->IASetIndexBuffer(&c.ib);
+                cl_->DrawIndexedInstanced(c.count, 1, 0, c.base, 0);
+            } else {
+                cl_->DrawInstanced(c.count, 1, 0, 0);
+            }
+        }
+        Transition(tread_.Get(), tread_st_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        bound_rt_ = bound_ds_ = nullptr;
+    }
+    if (steps.empty() && !shift[0] && !shift[1] && !treads) return;
+    // the pass: 32 steps at a time (the treads with the first)
     for (size_t first = 0; first < std::max<size_t>(steps.size(), 1); first += 32) {
-        float q[8 + 64 * 4] = {float(first ? 0 : shift[0]), float(first ? 0 : shift[1]), float(n), 0, 0, 0, 0, 0};
+        float q[8 + 64 * 4] = {float(first ? 0 : shift[0]), float(first ? 0 : shift[1]), float(n), 0, treads && !first ? 1.0f : 0.0f, 0, 0, 0};
         uint32_t count = 0;
         for (size_t i = first; i < steps.size() && count < 32; i++) {
             const Step& st = steps[i];
@@ -7763,8 +7867,8 @@ void D3D12Backend::SnowTracks() {
         int src = trail_cur_, dst = 1 - trail_cur_;
         Transition(trail_[src].Get(), trail_st_[src], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         Transition(trail_[dst].Get(), trail_st_[dst], D3D12_RESOURCE_STATE_RENDER_TARGET);
-        ID3D12Resource* srcs[3] = {trail_[src].Get(), nullptr, nullptr};
-        DXGI_FORMAT fmts[3] = {DXGI_FORMAT_R16G16_FLOAT, kBgra, kBgra};
+        ID3D12Resource* srcs[3] = {trail_[src].Get(), treads && !first ? tread_.Get() : nullptr, nullptr};
+        DXGI_FORMAT fmts[3] = {DXGI_FORMAT_R16G16_FLOAT, treads && !first ? DXGI_FORMAT_R32G32_FLOAT : kBgra, kBgra};
         pass_floats_ = 8 + 64 * 4;
         Pass(kTrailHlsl, "trailstep", DXGI_FORMAT_R16G16_FLOAT, WaveRtv(5 + uint32_t(dst)), n, n, srcs, fmts, q, -1);
         Transition(trail_[dst].Get(), trail_st_[dst], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);

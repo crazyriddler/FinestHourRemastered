@@ -145,6 +145,8 @@ The version installed is in `version.txt` beside the game. Unattended:
 - Remastered Models: soldiers further off no longer show broken arms and hands (frayed strips by the rifle). The
   game's distant versions of the soldiers, of every army, stay as the game has them: remastered from so few
   triangles they came out broken, and from that far the original is what the eye sees anyway.
+- Snow Tracks: tanks and half-tracks leave the prints of their tracks in the snow too, cleats and all, as the
+  soldiers leave their footprints.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

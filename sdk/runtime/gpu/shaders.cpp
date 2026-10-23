@@ -1407,13 +1407,14 @@ std::string TopVertexHlsl(std::string s) {
     if (sub("VOut main(VIn i) {", "VOut vmain(VIn i) {")) param = "VIn i", arg = "i";
     else if (sub("VOut main(VRaw ri) {", "VOut vmain(VRaw ri) {")) param = "VRaw ri", arg = "ri";
     else return {};
-    s += "struct TOut { float4 pos : SV_Position; float wy : TEXCOORD0; };\n";
+    s += "struct TOut { float4 pos : SV_Position; float wy : TEXCOORD0; float2 uv : TEXCOORD1; };\n";
     s += "TOut main(" + param + ") {\n    VOut o = vmain(" + arg + ");\n";
     s += R"(    float3 v = float3(o.cpos.x * tdv.x, o.cpos.y * tdv.y, o.cpos.w);
     float4 l = mul(float4(v, 1), tdm);
     TOut r;
     r.pos = float4(l.xy, 0.5, 1);
     r.wy = dot(float4(v, 1), tdy);
+    r.uv = o.tc0.xy;
     return r;
 }
 )";

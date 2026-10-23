@@ -8,6 +8,9 @@ holes, magenta) and the place's sheet written with the suspects framed in red: w
 suspects listed in work/<tag>/lvNN/suspects.txt, the places in places.txt.
 
     python tools/world_tour.py [levels...] [--tag world] [--per-window 40] [--spacing 1400] [--windows 8] [--most 140]
+
+The player goes with the camera (noclip: held where it is, no fall, immune), the level loading about it as it would
+about the player walking there.
 """
 import argparse
 import math
@@ -106,6 +109,67 @@ def survey(game, center, radius, step=4500, height=3500):
     return read_map()
 
 
+def eye(game):
+    """the camera's place now (whereami), or None"""
+    n = len(re.findall(r"whereami: ", read_log()))
+    game.send("cmd whereami")
+    for _ in range(20):
+        time.sleep(0.1)
+        found = re.findall(r"whereami: (\S+) (\S+) (\S+) yaw", read_log())
+        if len(found) > n:
+            return tuple(map(float, found[-1]))
+    return None
+
+
+def noclip_on(game, wait=60):
+    """noclip with the player by the game's own camera: in a cutscene or a vehicle the game's camera is elsewhere, and
+    the game puts its sky box about that camera and loads about it (views from the free camera there show a sky box
+    seen from outside, missing streets): waited for, up to wait seconds; whether it came"""
+    t0 = time.time()
+    while True:
+        n = len(re.findall(r"warp: the player not by the camera", read_log()))
+        game.send("cmd noclip on")
+        time.sleep(1.0)
+        if len(re.findall(r"warp: the player not by the camera", read_log())) == n:
+            return True
+        game.send("cmd noclip off")
+        if time.time() - t0 > wait:
+            return False
+        time.sleep(4.0)
+
+
+def drop_probe(game, x, y, z):
+    """the floor under (x, z) by the game's own collision: the player (held by noclip) put there at height y and let
+    go; where it stands after its fall, or None (still falling: no floor, out of the level)"""
+    game.send("cmd freecam at %.1f %.1f %.1f 0 -20" % (x, y, z))
+    time.sleep(0.25)
+    game.send("cmd noclip off")
+    time.sleep(1.3)
+    a = eye(game)
+    time.sleep(0.3)
+    b = eye(game)
+    game.send("cmd noclip on")
+    time.sleep(0.15)
+    if a is None or b is None or abs(a[1] - b[1]) > 45 or b[1] > y - 40:
+        return None
+    if math.dist((a[0], a[2]), (x, z)) > 600:  # (carried away: a slope, a vehicle)
+        return None
+    return b
+
+
+def probe_floors(game, center, radius, step):
+    """floors about the center: a grid of drop probes, from just over the center's height"""
+    got = []
+    k = int(radius // step)
+    ring = sorted(((i, j) for i in range(-k, k + 1) for j in range(-k, k + 1)), key=lambda q: abs(q[0]) + abs(q[1]))
+    for i, j in ring:
+        x, z = center[0] + i * step, center[2] + j * step
+        p = drop_probe(game, x, center[1] + 300, z)
+        if p is not None:
+            got.append((p[0], p[1] - 160, p[2]))
+    return got
+
+
 def actor_points(game):
     """where the level's soldiers stand (the control channel's "actors"): floors a survey from above misses (tunnels,
     sewers, rooms, narrow streets under eaves)"""
@@ -172,7 +236,7 @@ def views(game, at, name, out, suspects):
     for i, (yaw, pitch) in enumerate(VIEWS):
         game.send("cmd freecam at %.1f %.1f %.1f %d %d" % (x, y + 160, z, yaw, pitch))
         time.sleep(0.75 if i else 1.2)
-        bmps.append(shoot(game, "%s_%d" % (name, i)))
+        bmps.append(shoot(game, "%s_%s_%d" % (os.path.basename(out), name, i)))  # (the level's: runs side by side)
         time.sleep(0.35)
     game.send("cmd map 1")
     for _ in range(40):
@@ -237,7 +301,15 @@ def tour(level, a, root):
     game.send("cmd level %d" % level)
     game.until(PLAY_AT)
     game.send("cmd god on")
+    game.send("cmd god on")
+    if not noclip_on(game, 90):
+        note("level %2d: the player never by the game's camera (a vehicle, a cutscene): left out" % level)
+        drive.kill_build_exe()
+        return
+    game.send("cmd noclip off")
+    time.sleep(0.5)
     place, _ = game.where()
+    noclip_on(game, 5)
     if place is None:
         note("level %2d: no camera" % level)
         drive.kill_build_exe()
@@ -257,9 +329,12 @@ def tour(level, a, root):
             for sections in (first, tuple(x - 2 for x in first), tuple(x + 2 for x in first)):
                 if sections[0] < 1:
                     continue
+                game.send("cmd noclip off")
                 game.restart(cp, sections)
                 game.send("cmd god on")
                 p, falls = game.where()
+                if not noclip_on(game, 40):
+                    p = None
                 if p is not None and not falls and p[1] > start_y - 2500:
                     break
             # (fallen through the world, or still falling: these sections are not where the player stands)
@@ -270,15 +345,18 @@ def tour(level, a, root):
                     break
                 continue
             place = p
-        # the places: from where the player stands, then from each place the floors its shots showed, the nearest to
-        # the last one first, none nearer than spacing to one seen
-        # what this window loaded, from above: its floors not near a place seen are where to go
-        known = set(survey(game, place, a.radius))
-        fresh = [c for c in open_floors(list(known)) if all(math.dist(c, q) >= a.spacing for q in seen_pts)]
-        # and where the soldiers stand (floors under a roof)
-        actors = [c for c in actor_points(game) if all(math.dist(c, q) >= a.spacing for q in seen_pts)]
+        # the places: floors found about where the player stands by the game's own collision (drop probes over a
+        # grid), none nearer than spacing to one seen; and where the soldiers stand
+        band = lambda cells: [c for c in cells if place[1] - 450 <= c[1] <= place[1] + 900]  # noqa: E731
+        # (the floors drawn, seen from above, within a few metres of the player's height; the drop probes: the
+        # player let go held its speed from the camera's moves at times and was carried off: those left out)
+        floors = open_floors(band(survey(game, place, a.survey))) + probe_floors(game, place, a.radius, a.probe)
+        fresh = [c for c in floors if all(math.dist(c, q) >= a.spacing for q in seen_pts)]
+        actors = [c for c in band(actor_points(game)) if math.dist(c, place[:3]) < a.radius and
+                  all(math.dist(c, q) >= a.spacing for q in seen_pts)]
         fresh += [c for i, c in enumerate(actors) if all(math.dist(c, q) >= a.spacing for q in actors[:i])]
-        note("level %2d window %d: %d floor cells loaded, %d fresh" % (level, wi, len(known), len(fresh)))
+        known, reach = set(), set()
+        note("level %2d window %d: %d floors probed, %d fresh" % (level, wi, len(floors), len(fresh)))
         # (few floors seen from above: under roofs, in tunnels: the place itself still visited, the floors its
         # views at eye level show taking the tour on from there)
         if len(fresh) < 8 and any(math.dist(place[:3], q) < a.spacing for q in seen_pts):
@@ -299,9 +377,7 @@ def tour(level, a, root):
             done += 1
             total += 1
             at = pt
-            known.update(cells)
-            for c in spread(open_floors(list(known)), pt, seen_pts + todo, a.spacing, 60):
-                todo.append(c)
+
             with open(os.path.join(out, "suspects.txt"), "w") as f:
                 f.write("\n".join(suspects) + "\n")
         note("level %2d window %d sections %s: %d places" % (level, wi, "start" if sections is None else " ".join(map(str, sections)), done))
@@ -321,7 +397,9 @@ def main():
     ap.add_argument("--per-window", type=int, default=40)
     ap.add_argument("--spacing", type=float, default=1100)
     ap.add_argument("--windows", type=int, default=10)
-    ap.add_argument("--radius", type=float, default=27000, help="the survey's reach about the player")
+    ap.add_argument("--radius", type=float, default=7200, help="the probes' reach about the player")
+    ap.add_argument("--probe", type=float, default=2400, help="the probes' grid step")
+    ap.add_argument("--survey", type=float, default=18000, help="the survey's reach about the player")
     ap.add_argument("--most", type=int, default=140, help="places a level at most")
     a = ap.parse_args()
     root = os.path.join(WORK, a.tag)

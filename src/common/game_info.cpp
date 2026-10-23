@@ -140,6 +140,9 @@ std::mutex g_held_lock;
 std::vector<Held> g_held;
 float g_held_to[3] = {};
 std::atomic<bool> g_holding{false};
+// tests ("noclip on"): the held player follows the free camera wherever it goes (FreeCameraAt, "freecam at" and
+// "freecam path"): no fall, no harm (god), the level loading about it as it would about the player walking there
+std::atomic<bool> g_noclip{false};
 
 void HoldPlayer(const std::vector<Held>& places, const float to[3]) {
     {
@@ -153,6 +156,20 @@ void HoldPlayer(const std::vector<Held>& places, const float to[3]) {
             for (;;) {
                 if (g_holding) {
                     std::lock_guard lock(g_held_lock);
+                    if (g_noclip) {
+                        float p[3], yaw = 0, pitch = 0;
+                        if (cod::wide::FreeCameraAt(p, yaw, pitch))
+                            for (int i = 0; i < 3; i++) g_held_to[i] = p[i];
+                        // never falling: the player's fall speed (+0xDC, down to -60), the height it has fallen
+                        // (+0x420) and its time in the air (+0x518) kept at 0. Held in the air the game counted a
+                        // fall going on and on, and past its longest (0x322188) took the player for fallen out of
+                        // the world: its health set to 0, the mission failed and back at its checkpoint. Its
+                        // velocity (+0xCC) too: moved by the camera the game took the moves for its speed, and let
+                        // go the player flew on with it
+                        if (uint32_t player = cod::PlayerEntity()) {
+                            for (uint32_t at : {0xCCu, 0xD0u, 0xD4u, 0xDCu, 0x420u, 0x518u}) kernel::W32(player + at, 0);
+                        }
+                    }
                     for (const Held& h : g_held)
                         for (int i = 0; i < 3; i++) {
                             float v = g_held_to[i] + h.offset[i];
@@ -346,7 +363,27 @@ void Pad(int port, input::Pad& pad) {
 }
 
 // control channel commands (tests): look <dx> <dy>
-void Command(const std::string& line) {
+void Command(const std::string& line_in) {
+    std::string line = line_in;
+    // noclip: the player held at its eye (as "warp <eye> hold" finds it) and from then on at the free camera's place
+    bool noclip_now = false;
+    if (line == "noclip off") {
+        g_noclip = false, g_holding = false;
+        // let go at rest (its velocity was the camera's moves)
+        if (uint32_t player = cod::PlayerEntity())
+            for (uint32_t at : {0xCCu, 0xD0u, 0xD4u, 0xDCu}) kernel::W32(player + at, 0);
+        cod::wide::SetFreeCameraAt(false, nullptr, 0, 0);
+        LOGR("noclip: off");
+    }
+    if (float e[3]; line == "noclip on" && cod::wide::CameraPos(e)) {
+        float yaw = 0, pitch = 0;
+        cod::wide::CameraAngles(yaw, pitch);
+        cod::SetGodMode(true);
+        cod::wide::SetFreeCameraAt(true, e, yaw, pitch);
+        char b[96];
+        std::snprintf(b, sizeof(b), "warp %.2f %.2f %.2f hold", e[0], e[1], e[2]);
+        line = b, noclip_now = true;
+    }
     int dx = 0, dy = 0;
     if (std::sscanf(line.c_str(), "look %d %d", &dx, &dy) == 2) pc_input::AddLook(dx, dy);
     if (std::sscanf(line.c_str(), "level %d", &dx) == 1) g_level_request = dx;
@@ -452,10 +489,18 @@ void Command(const std::string& line) {
                 va = end;
             }
             LOGR("warp: from %.1f %.1f %.1f to %.1f %.1f %.1f, %d places", eye[0], eye[1], eye[2], to[0], to[1], to[2], moved);
+            // noclip with the camera elsewhere (a cutscene's, a vehicle's): the player's own places, by where they
+            // are in its entity (its feet 0x5C, 0x434 and 0x440 under the eye by the heights they keep)
+            if (hold && noclip_now && places.empty())
+                if (uint32_t player = cod::PlayerEntity()) {
+                    places = {{player + 0x5C, {0, -60.5f, 0}}, {player + 0x434, {0, -35.0f, 0}}, {player + 0x440, {0, -35.0f, 0}}};
+                    LOGR("warp: the player not by the camera, its entity's places held");
+                }
             if (hold) {
                 HoldPlayer(places, to);
                 for (const Held& h : places) LOGR("warp:   held %08X (player %08X + %X)", h.at, cod::PlayerEntity(), h.at - cod::PlayerEntity());
                 LOGR("warp: held there, %zu places", places.size());
+                if (noclip_now) g_noclip = !places.empty(), LOGR("noclip: %s", places.empty() ? "no player found" : "on");
             }
         }
         unsigned long long tex = 0;

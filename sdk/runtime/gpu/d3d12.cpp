@@ -4625,42 +4625,28 @@ void D3D12Backend::DrawGeometry(const Assembled& a) {
             if (!a.index_count) return i;
             return a.index16 ? static_cast<const uint16_t*>(a.index_src)[i] : static_cast<const uint32_t*>(a.index_src)[i];
         };
-        // the kept triangles (1), then those of the pieces ending past the 4:3 view, drawn within its sides (2)
-        SetTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        for (uint8_t want = 1; want <= 2; want++) {
-            tess_list_.clear();
-            size_t t = 0;
-            auto cls = [&](size_t k) -> uint8_t { return k < weapon_keep_.size() ? weapon_keep_[k] : 1; };
-            if (a.strip) {
-                for (uint32_t i = 2; i < n; i++, t++) {
-                    uint32_t i0 = index(i - 2), i1 = index(i - 1), i2 = index(i);
-                    if (i0 == i1 || i1 == i2 || i0 == i2 || cls(t) != want) continue;
-                    if (i & 1) std::swap(i0, i1);
-                    tess_list_.insert(tess_list_.end(), {i0, i1, i2});
-                }
-            } else {
-                for (uint32_t i = 0; i + 2 < n; i += 3, t++)
-                    if (cls(t) == want) tess_list_.insert(tess_list_.end(), {index(i), index(i + 1), index(i + 2)});
+        tess_list_.clear();
+        size_t t = 0;
+        if (a.strip) {
+            for (uint32_t i = 2; i < n; i++, t++) {
+                uint32_t i0 = index(i - 2), i1 = index(i - 1), i2 = index(i);
+                if (i0 == i1 || i1 == i2 || i0 == i2 || (t < weapon_keep_.size() && !weapon_keep_[t])) continue;
+                if (i & 1) std::swap(i0, i1);
+                tess_list_.insert(tess_list_.end(), {i0, i1, i2});
             }
-            if (tess_list_.empty()) continue;
-            const D3D12_RECT whole = cmd_.sc;
-            if (want == 2) {
-                const float vx = cmd_.vp.TopLeftX, vw = cmd_.vp.Width, part = 1.0f / widen_;
-                D3D12_RECT r = whole;
-                r.left = std::max(whole.left, LONG(std::floor(vx + vw * (1 - part) * 0.5f)));
-                r.right = std::min(whole.right, LONG(std::ceil(vx + vw * (1 + part) * 0.5f)));
-                if (r.right <= r.left) continue;
-                SetScissor(r);
-            }
-            uint32_t ibytes = uint32_t(tess_list_.size() * 4);
-            Alloc ib = Upload(ibytes, 4);
-            std::memcpy(ib.cpu, tess_list_.data(), ibytes);
-            D3D12_INDEX_BUFFER_VIEW ibv{ib.gpu, ibytes, DXGI_FORMAT_R32_UINT};
-            last_ibv_ = ibv;
-            cl_->IASetIndexBuffer(&ibv);
-            cl_->DrawIndexedInstanced(uint32_t(tess_list_.size()), 1, 0, a.index_count ? a.base_vertex : 0, 0);
-            if (want == 2) SetScissor(whole);
+        } else {
+            for (uint32_t i = 0; i + 2 < n; i += 3, t++)
+                if (t >= weapon_keep_.size() || weapon_keep_[t]) tess_list_.insert(tess_list_.end(), {index(i), index(i + 1), index(i + 2)});
         }
+        if (tess_list_.empty()) return;
+        SetTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        uint32_t ibytes = uint32_t(tess_list_.size() * 4);
+        Alloc ib = Upload(ibytes, 4);
+        std::memcpy(ib.cpu, tess_list_.data(), ibytes);
+        D3D12_INDEX_BUFFER_VIEW ibv{ib.gpu, ibytes, DXGI_FORMAT_R32_UINT};
+        last_ibv_ = ibv;
+        cl_->IASetIndexBuffer(&ibv);
+        cl_->DrawIndexedInstanced(uint32_t(tess_list_.size()), 1, 0, a.index_count ? a.base_vertex : 0, 0);
         return;
     }
     if (tess_draw_) {
@@ -8363,11 +8349,10 @@ bool D3D12Backend::WeaponPieces(const State& s, const Assembled& a, const DrawSh
     size_t dropped = 0;
     for (size_t t = 0; t < tris.size(); t++)
         if (on[t] && !shown.count(find(tris[t].v[0]))) weapon_keep_[t] = 0, dropped++;
-    // a piece shown that lies nearly all past the 4:3 view (a sleeve's open end, its last sliver at the view's side,
-    // the cut the console's screen edge hid): drawn only within the 4:3 view's sides (2: DrawGeometry's scissor), as
-    // the console showed it. A piece of which the view shows a fair share (an arm reaching in from the corner to the
-    // gun) is drawn whole. The shares by area of what shows on the screen: its triangles clipped to the screen, and to
-    // the 4:3 view's sides
+    // a piece shown that lies nearly all past the 4:3 view (a sleeve's open end, of which the console showed a sliver
+    // at its screen's edge): left out, the sliver with it (a loose corner floating there on a wide screen). A piece of
+    // which the view shows a fair share (an arm reaching in from the corner to the gun) is drawn whole. The shares by
+    // area of what shows on the screen: its triangles clipped to the screen, and to the 4:3 view's sides
     auto shown_area = [&](const Tri& tr, float xlo, float xhi) {
         float poly[2][12][2];
         int n = 3, cur = 0;
@@ -8410,7 +8395,7 @@ bool D3D12Backend::WeaponPieces(const State& s, const Assembled& a, const DrawSh
     for (size_t t = 0; t < tris.size(); t++) {
         if (!on[t] || !weapon_keep_[t]) continue;
         const auto& a2 = share[find(tris[t].v[0])];
-        if (a2[0] > 1e-6f && a2[1] < a2[0] * kMostlyOut) weapon_keep_[t] = 2, dropped++;
+        if (a2[0] > 1e-6f && a2[1] < a2[0] * kMostlyOut) weapon_keep_[t] = 0, dropped++;
     }
     static const bool log_share = std::getenv("XBE_WEAPON_LOG") != nullptr;
     if (log_share && presents_ % 120 == 0)
@@ -9128,7 +9113,7 @@ bool D3D12Backend::SkyConstants() {
         return e ? float(std::atoi(e)) : 0.0f;
     }();
     sky_cb_[23] = ssr_debug;
-    static const bool sky_layers_debug = std::getenv("XBE_SKY_LAYERS") != nullptr;  // level 1's sky pieces in colours
+    static const bool sky_layers_debug = std::getenv("XBE_SKY_LAYERS") != nullptr;  // the sky pieces in colours (layers: level 1)
     if (!cam_ok_ || !scene_ds_ || (!set.sun_moon && !set.clouds)) return false;
     float inv[16];
     if (!shadow::Invert(cam_view_, inv)) return false;
@@ -9148,7 +9133,7 @@ bool D3D12Backend::SkyConstants() {
     }
     float sv[3];
     for (int j = 0; j < 3; j++) sv[j] = sw[0] * cam_view_[j] + sw[1] * cam_view_[4 + j] + sw[2] * cam_view_[8 + j];
-    float rows[24] = {inv[0], inv[1], inv[2], g_level.load() == 1 ? (sky_layers_debug ? 3.0f : 2.0f) : 1.0f,  inv[4], inv[5], inv[6], std::fmod(t, 20000.0f),
+    float rows[24] = {inv[0], inv[1], inv[2], sky_layers_debug ? 3.0f : g_level.load() == 1 ? 2.0f : 1.0f,  inv[4], inv[5], inv[6], std::fmod(t, 20000.0f),
                       inv[8], inv[9], inv[10], 0.5f,
                       sv[0], sv[1], sv[2], sun ? 1.0f : 0.0f,
                       sw[0], sw[1], sw[2], std::clamp(light_.direct * 2.0f, 0.4f, 1.5f),

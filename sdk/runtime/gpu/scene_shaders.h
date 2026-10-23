@@ -36,16 +36,19 @@ float Hash(float2 q) {
     h += dot(h, h.yzx + 33.33);
     return frac((h.x + h.y) * h.z);
 }
+// value noise, its cells blended by a quintic (smooth to the second derivative: by a cubic the cells' edges were
+// creases, and the clouds' sharp edge, their cover past a threshold, drew them as hard lines across the sky)
 float Noise(float2 q) {
     float2 i = floor(q), f = frac(q);
-    f = f * f * (3 - 2 * f);
+    f = f * f * f * (f * (f * 6 - 15) + 10);
     return lerp(lerp(Hash(i), Hash(i + float2(1, 0)), f.x), lerp(Hash(i + float2(0, 1)), Hash(i + 1), f.x), f.y);
 }
 float Fbm(float2 q, int octaves) {
     float s = 0, a = 0.5;
     for (int k = 0; k < octaves; k++) {
         s += a * Noise(q);
-        q = q * 2.03 + float2(1.7, 9.2);
+        // (each octave turned from the last: their cells' edges not lined up, adding up along the same lines)
+        q = mul(float2x2(0.8, -0.6, 0.6, 0.8), q) * 2.03 + float2(1.7, 9.2);
         a *= 0.5;
     }
     return s;
@@ -59,7 +62,9 @@ float Clouds(float3 w, int octaves) {
     float2 warp = float2(Fbm(q * 0.6 + t * float2(0.007, -0.0045), 3), Fbm(q * 0.6 + float2(5.2, 1.3) - t * float2(0.0056, 0.008), 3));
     q += (warp - 0.5) * 1.2;
     float n = Fbm(q, octaves) + 0.25 * Fbm(q * 0.31 + 7.3, 2) - 0.12;
-    return saturate((n - (1 - sky[2].w)) / 0.22) * saturate(w.y * 5);
+    // (their edge over a wide band of the noise: by a narrow one a large slow swell of it drew a long clean curve,
+    // like a cut, across the sky)
+    return saturate((n - (1 - sky[2].w)) / 0.32) * saturate(w.y * 5);
 }
 // the depth buffer's value to view space depth, a perspective's: d = far / (far - near) * (1 - near / z)
 float ViewZ(float d) { float n = p[0].z, f = p[0].w; return n * f / max(f - d * (f - n), 1e-6); }
@@ -639,8 +644,22 @@ float4 skyfx(O i) : SV_Target {
     float veil = 0;
     [branch] if (sky[0].w > 1.5 && d0 >= 0.9999 && near.x > 0) c = SkyFeather(i, c, d0, veil);
     float lum = dot(c, float3(0.2126, 0.7152, 0.0722));
-    // the pixel's own brightness, by night never day (the level's light, sky[5].z: its brighter pieces stay night)
-    float day = smoothstep(0.07, 0.25, lum) * (sky[5].z >= 2 ? sky[5].z - 2 : sky[5].z);
+    // day or night by the sky's brightness, the frame's (an even grid of taps over the screen, those on the sky), the
+    // same for every pixel; by night never day (the level's light, sky[5].z: its brighter pieces stay night). By the
+    // pixel's own brightness the faint seams between the level's sky pieces (a step of a few levels, unseen) turned
+    // the clouds over them from night to day lit: a hard line across the clouds along each seam, in every level
+    float3 sc = 0;
+    float sl = 0, sn = 0;
+    [unroll] for (int gy = 0; gy < 4; gy++)
+        [unroll] for (int gx = 0; gx < 6; gx++) {
+            int2 q = int2((float2(gx, gy) + 0.5) / float2(6, 4) * p[2].xy);
+            if (ViewZ(depth.Load(int3(q, 0))) >= p[0].w * 0.6) {
+                float3 t = scene.Load(int3(q, 0)).rgb;
+                sc += t, sl += dot(t, float3(0.2126, 0.7152, 0.0722));
+                sn += 1;
+            }
+        }
+    float day = smoothstep(0.07, 0.25, sn > 0 ? sl / sn : lum) * (sky[5].z >= 2 ? sky[5].z - 2 : sky[5].z);
     float strength = sky[4].w;
     float cloud = 0;
     if (sky[5].x > 0) {
@@ -649,8 +668,13 @@ float4 skyfx(O i) : SV_Target {
             // thicker towards the sun: that side in its own shade; the light through the edges facing the sun
             float toward = Clouds(normalize(w + sun * 0.08), 3);
             float lit = saturate(1 - (toward - cloud) * 2.5 - cloud * 0.35);
-            // (by night the moon's grey on them)
-            float3 base = lerp(c, lum.xxx * 1.3 + 0.015, 0.7) + float3(0.022, 0.025, 0.032) * (1 - day);
+            // (by night the moon's grey on them) their colour the sky's, the frame's, a little of the pixel's own: of it
+            // alone, the faint seams between the level's sky pieces (hidden in the original by its clouds' detail)
+            // showed through the smooth clouds over them as lines
+            float3 sky0 = sn > 0 ? sc / sn : c;
+            float l0 = dot(sky0, float3(0.2126, 0.7152, 0.0722));
+            float3 local = lerp(c, lum.xxx * 1.3 + 0.015, 0.7), wide = lerp(sky0, l0.xxx * 1.3 + 0.015, 0.7);
+            float3 base = lerp(local, wide, 0.7) + float3(0.022, 0.025, 0.032) * (1 - day);
             float3 light = lerp(float3(0.55, 0.62, 0.8) * 0.2, float3(1, 0.9, 0.75), day) * strength;
             float edge = pow(saturate(dot(w, sun)), 8) * (1 - cloud);
             float3 cc = base * (0.72 + 0.5 * lit) + light * (lit * 0.22 + edge * 0.8) * (0.25 + 0.75 * day);
@@ -673,7 +697,7 @@ float4 skyfx(O i) : SV_Target {
             own_moon = dot(o, float3(0.2126, 0.7152, 0.0722)) > 0.22 && ViewZ(depth.SampleLevel(pnt, q, 0)) > p[0].w * 0.6;
         }
     }
-    if (sky[5].y > 0 && sky[3].w > 0 && !own_moon) {
+    if (sky[5].y > 0 && sky[3].w > 0) {
         float a = dot(w, sun);
         // the sun: a white hot disc (past white: the bloom's glare) and its halo; the moon: larger, pale, its face
         // mottled
@@ -684,7 +708,10 @@ float4 skyfx(O i) : SV_Target {
         float3 m = w - sun * a;
         float face = 0.72 + 0.28 * Fbm(float2(dot(m, sky[0].xyz), dot(m, sky[1].xyz)) * 1800, 3);
         float3 moonlight = float3(0.82, 0.87, 1) * (moon * face * 1.4 + exp((a - 1) * 2500) * 0.25 + exp((a - 1) * 180) * 0.04);
-        c += lerp(moonlight, sunlight, day) * (1 - cloud * 0.92) * (1 - veil);
+        // (the level's own moon, looked for within 8 degrees of the light: our glow gone there, fading out towards
+        // that edge, not cut along it)
+        float keep = own_moon ? 1 - smoothstep(0.99, 0.996, a) : 1;
+        c += lerp(moonlight, sunlight, day) * keep * (1 - cloud * 0.92) * (1 - veil);
     }
     return float4(c, s.a);
 }

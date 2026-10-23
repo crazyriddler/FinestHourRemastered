@@ -13,6 +13,7 @@ import math
 import os
 import re
 import subprocess
+import threading
 import sys
 import time
 
@@ -33,21 +34,46 @@ class Game:
     def __init__(self, tag):
         self.control = os.path.join(WORK, tag + ".control.txt")
         open(self.control, "w").close()
+        # the pad connected all along (a replay of its rest); the menu's presses sent when the game shows its press
+        # start screen (anchored there: a copy run beside others boots slower, and presses at fixed times came before
+        # the screen and were lost), its clock (until) counted as if that screen came at 4.6 s, as alone
         replay = os.path.join(WORK, tag + ".replay.txt")
-        drive.build_replay(START, replay)
-        with open(replay, "a") as f:
-            f.write("%.1f 0 1 0000 0 0 0 0 0 0 0 0 0 0 0 0\n" % 30000)
+        with open(replay, "w") as f:
+            f.write("0.0 0 1 0000 0 0 0 0 0 0 0 0 0 0 0 0\n%.1f 0 1 0000 0 0 0 0 0 0 0 0 0 0 0 0\n" % 600000)
         drive.kill_build_exe()
         env = dict(os.environ)
         env.update({"XBE_CONTROL": self.control, "XBE_INPUT_REPLAY": replay, "XBE_SKIP_MOVIES": "1"})
+        launched = time.time()
         subprocess.Popen([os.path.join(EXE_DIR, "CODFH.exe")], cwd=EXE_DIR, env=env)
-        self.t0 = time.time()
+        self.t0 = None
+        self.aligned = threading.Event()
+
+        def menu():
+            log = os.path.join(EXE_DIR, "logs", "codfh.log")
+            while time.time() - launched < 300:
+                try:
+                    fresh = os.path.getmtime(log) >= launched - 1
+                except OSError:
+                    fresh = False
+                if fresh and "pressStartXbox rewritten" in read_log():
+                    break
+                time.sleep(0.1)
+            self.t0 = time.time() - 4.6
+            self.aligned.set()
+            for item in START.split():
+                at, _, name = item.partition(":")
+                while time.time() - self.t0 < float(at):
+                    time.sleep(0.02)
+                self.send("pad %s 150" % name.split("/")[0])
+
+        threading.Thread(target=menu, daemon=True).start()
 
     def send(self, line):
         with open(self.control, "a") as f:
             f.write(line + "\n")
 
     def until(self, t):
+        self.aligned.wait()
         while time.time() - self.t0 < t:
             time.sleep(0.05)
 

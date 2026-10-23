@@ -18,7 +18,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import drive  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EXE_DIR = os.path.join(ROOT, "out", "build", "release")
+# (XBE_TOOL_EXE_DIR: a copy of the game of its own to run, tools/instances.py, for runs side by side)
+EXE_DIR = os.environ.get("XBE_TOOL_EXE_DIR") or os.path.join(ROOT, "out", "build", "release")
 LOG = os.path.join(EXE_DIR, "logs", "codfh.log")
 WORK = os.path.join(ROOT, "work")
 START = "5:START 8:A 12:A 15:A 18:A"

@@ -19,7 +19,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import drive  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EXE_DIR = os.path.join(ROOT, "out", "build", "release")
+# (XBE_TOOL_EXE_DIR: a copy of the game of its own to run, tools/instances.py, for runs side by side)
+EXE_DIR = os.environ.get("XBE_TOOL_EXE_DIR") or os.path.join(ROOT, "out", "build", "release")
 LOG = os.path.join(EXE_DIR, "logs", "codfh.log")
 WORK = os.path.join(ROOT, "work")
 LEVELS = [1, 2, 4, 5, 7, 8, 11, 12, 14, 15, 17, 18, 24, 25, 26, 30, 36, 37, 38]  # the 19 missions (the game's level ids)

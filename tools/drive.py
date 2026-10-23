@@ -21,7 +21,8 @@ import time
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EXE_DIR = os.path.join(ROOT, "out", "build", "release")
+# (XBE_TOOL_EXE_DIR: a copy of the game of its own to run, tools/instances.py, for runs side by side)
+EXE_DIR = os.environ.get("XBE_TOOL_EXE_DIR") or os.path.join(ROOT, "out", "build", "release")
 WORK = os.path.join(ROOT, "work")
 
 DIGITAL = {"UP": 0x1, "DOWN": 0x2, "LEFT": 0x4, "RIGHT": 0x8, "START": 0x10, "BACK": 0x20, "LS": 0x40, "RS": 0x80}

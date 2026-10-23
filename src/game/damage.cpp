@@ -120,3 +120,21 @@ X86_FUNC(sub_00055900) {  // SetCanBulletsDamage(entity, ...)
     LogScript("SetCanBulletsDamage, entity", ctx);
     __imp__sub_00055900(ctx, base);
 }
+
+// the player's health set outright (SetHealthPercent, +0x19DC): past the damage flag, as the game's own end of a fall
+// too long (its time in the air, +0x518, past 0x322188: the player taken for fallen out of the world, its health set
+// to 0) does it. In god mode its health is never set lower
+X86_EXTERN_FUNC(__imp__sub_000C85C0);
+X86_FUNC(sub_000C85C0) {  // SetHealthPercent(percent)
+    if (g_god && ctx.ecx == g_player) {
+        float now;
+        uint32_t n = R32(ctx.ecx + 0x19DC);
+        std::memcpy(&now, &n, 4);
+        if (float(int32_t(R32(ctx.esp + 4))) * 0.01f < now) {
+            LOGR("damage: god, the player's health kept (set to %d%% from %08X)", int32_t(R32(ctx.esp + 4)), R32(ctx.esp));
+            ctx.esp += 8;  // (ret 4)
+            return;
+        }
+    }
+    __imp__sub_000C85C0(ctx, base);
+}

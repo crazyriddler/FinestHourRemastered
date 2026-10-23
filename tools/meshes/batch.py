@@ -22,6 +22,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fhm  # noqa: E402
+import far_lods  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BLENDER = os.path.join(os.path.dirname(ROOT), "tools", "blender", "blender.exe")
@@ -109,6 +110,10 @@ def main():
         meshes[path] = fhm.read(path)
     # the arms' and bodies' textures: their other pieces are skin and cloth as well
     skin = {m.tex for m in meshes.values() if bones(m) >= ORGANIC_BONES}
+    # (the soldiers' distant versions left as the game has them: far_lods.py)
+    largest = {}
+    for m in meshes.values():
+        largest[m.tex] = max(largest.get(m.tex, 0), m.count)
 
     def one(item):
         path, m = item
@@ -117,6 +122,8 @@ def main():
         size = m.reg(0)[:, :3].max(0) - m.reg(0)[:, :3].min(0)
         cls = classes.get(f"{m.tex:016x}")
         organic = m.tex in skin or cls in ORGANIC_CLASSES
+        if far_lods.far(names.get(f"{m.tex:016x}", ""), m.count, largest[m.tex]):
+            return f"{name}: left as it is (a soldier's distant version)"
         if WATER.search(names.get(f"{m.tex:016x}", "")):
             return f"{name}: left as it is (water)"
         if AS_THEY_ARE.search(names.get(f"{m.tex:016x}", "").strip()):

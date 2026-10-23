@@ -142,6 +142,9 @@ The version installed is in `version.txt` beside the game. Unattended:
 - The lean hint's keys are two key caps, Q and E, each its own, with no full stop after them.
 - The sewers' falling water: no more small white patches and lines on the pipes' streams (they were lit as pools),
   and a stream no longer looks cut where it meets the wall it falls from (the wall's grime was drawn over it).
+- Remastered Models: soldiers further off no longer show broken arms and hands (frayed strips by the rifle). The
+  game's distant versions of the soldiers, of every army, stay as the game has them: remastered from so few
+  triangles they came out broken, and from that far the original is what the eye sees anyway.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

@@ -217,15 +217,16 @@ bool MousePos(float& x, float& y, float& scale, float& left, float& top) {
 
 // --- Quit Game: a fifth row under the main menu's four, the port's own --------------------------------------------
 // The main menu is a Maestro scene of the game's data (its rows, their states and animations); the row is drawn over
-// it in the menu's typeface, colours and spacing. Down from the last row moves onto it (the game's input held back
-// meanwhile, and its own highlight drawn in the plain colour: one selection), up or back leaves it; accepting it asks
-// to quit in the pause screen's style, Yes closes the game. The mouse points and clicks at it like at the others.
+// it in the menu's typeface, colours and spacing. Down from the last row (or up from the first) moves onto it (the
+// game's input held back meanwhile, and its own highlight drawn in the plain colour: one selection), up, down or back
+// leaves it; accepting it asks to quit in the pause screen's style, Yes closes the game. The mouse points and clicks at it like at the others.
 std::atomic<bool> g_main{false};       // the main menu is up (its four rows where they are)
 std::atomic<int> g_main_sel{-1};       // the game's selected row
 std::atomic<bool> g_quit_focus{false}; // the row has the selection
 std::atomic<bool> g_dialog{false};     // asking
 std::atomic<int> g_yes{0};             // the answer selected: 0 no, 1 yes
 std::atomic<bool> g_swallow{false};    // the game sees no input until everything is let go
+std::atomic<bool> g_quiet{false};      // the row's next change of selection is the game's move, its own sound
 Box g_quit_row{}, g_dialog_rows[2]{};  // console units (640 x 480)
 std::mutex g_quit_lock;
 
@@ -304,7 +305,7 @@ bool g_left_was = false;
 void QuitSound() {
     static bool was = false;
     const bool now = g_main && g_quit_focus;
-    if (now != was && g_main && !g_dialog) xdk::dsound::ReplayRemembered();
+    if (now != was && g_main && !g_dialog && !g_quiet.exchange(false)) xdk::dsound::ReplayRemembered();
     was = now;
 }
 
@@ -708,7 +709,16 @@ void Filter(input::Pad& pad) {
         return;
     }
     if (g_quit_focus) {
-        if (edge[0] || edge[4]) g_quit_focus = false, g_swallow = true;
+        // up to the last of the game's rows, down round to the first: the game's selection is on the first when the
+        // row was reached by going up from it, else on the last; the move the game makes from there goes through
+        // (its sound with it)
+        const bool on_first = g_main_sel == 0;
+        if ((edge[0] && on_first) || (edge[1] && !on_first)) {
+            g_quit_focus = false, g_quiet = true;
+            xdk::dsound::RememberNextSound();
+            return;
+        }
+        if (edge[0] || edge[1] || edge[4]) g_quit_focus = false, g_swallow = true;
         if (edge[3]) g_dialog = true, g_yes = 0;
         hold();
         return;
@@ -718,8 +728,8 @@ void Filter(input::Pad& pad) {
         else g_swallow = false;
         return;
     }
-    // down from the last row onto this one
-    if (edge[1] && g_main_sel == 3) {
+    // down from the last row onto this one, up from the first (round, as the game's rows go)
+    if ((edge[1] && g_main_sel == 3) || (edge[0] && g_main_sel == 0)) {
         g_quit_focus = true;
         hold();
         return;

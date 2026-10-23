@@ -14,6 +14,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <functional>
 #include <set>
 #include <string>
@@ -46,6 +47,14 @@ ImFont* g_hud = nullptr;    // DejaVu Sans Condensed: the HUD's and the pause sc
 constexpr const char* kPaper = "textures/41f8455def1f2b91.c.dds";  // fend_392, the paper and its surroundings
 constexpr const char* kStone = "textures/ec0414aca61f7b19.c.dds";  // fend_208, the stone bar of prompts
 constexpr const char* kStrip = "textures/cb8517244f0b8da6.c.dds";  // fend_394, the selection's paper strip
+
+// a picture of the menus' own over the panel: ImGui's DX12 backend samples with wrap, so a picture's edge took in its
+// far side's texels (the stone bar's opaque foot drew a thin dark line along its clear top, under the hints); its
+// edges kept half a texel inside (1024 wide, 128 to 512 tall here)
+void Picture(ImDrawList* dl, uint64_t id, ImVec2 a, ImVec2 b) {
+    constexpr float kU = 0.5f / 1024, kV = 0.5f / 128;
+    dl->AddImage(ImTextureID(id), a, b, ImVec2(kU, kV), ImVec2(1 - kU, 1 - kV));
+}
 
 std::vector<std::pair<uint32_t, uint32_t>> Modes() {
     static std::vector<std::pair<uint32_t, uint32_t>> modes;
@@ -636,7 +645,18 @@ void Draw(double fps) {
     ImDrawList* dl = ImGui::GetBackgroundDrawList();
     Screen sc;
     float tv[4];
-    if (gpu::TvScreen(tv)) {
+    // the television's screen; for the frames it is not drawn while the settings open or close (the frame's choice of
+    // it comes before the settings say they are open), the last one, the television drawn over it as always: the
+    // panel showed for a moment at the full screen's size, outside the television
+    static float last_tv[4];
+    static ImVec2 last_size;
+    static bool have_tv = false;
+    bool in_tv = gpu::TvScreen(tv);
+    if (in_tv) std::memcpy(last_tv, tv, sizeof(tv)), last_size = io.DisplaySize, have_tv = true;
+    else if (have_tv && cod::Get().tv_frame && cod::Get().widescreen && last_size.x == io.DisplaySize.x &&
+             last_size.y == io.DisplaySize.y)
+        std::memcpy(tv, last_tv, sizeof(tv)), in_tv = true;
+    if (in_tv) {
         // inside the television's screen, which shows around it
         sc.s = (tv[3] - tv[1]) / 480.0f;
         sc.x0 = tv[0], sc.y0 = tv[1];
@@ -650,9 +670,9 @@ void Draw(double fps) {
 
     // the screen: the paper, the stone bar over its foot
     // as the options screen places it (fitted to the game's own: 640 by 516 from 18 above the top)
-    if (uint64_t id = gpu::UiTexture(kPaper)) dl->AddImage(ImTextureID(id), sc.P(0, -18), sc.P(640, 498));
+    if (uint64_t id = gpu::UiTexture(kPaper)) Picture(dl, id, sc.P(0, -18), sc.P(640, 498));
     else dl->AddRectFilled(sc.P(84, 40), sc.P(533, 382), IM_COL32(205, 198, 182, 255));
-    if (uint64_t id = gpu::UiTexture(kStone)) dl->AddImage(ImTextureID(id), sc.P(0, 352), sc.P(640, 480));
+    if (uint64_t id = gpu::UiTexture(kStone)) Picture(dl, id, sc.P(0, 352), sc.P(640, 480));
     else dl->AddRectFilled(sc.P(0, 380), sc.P(640, 480), IM_COL32(110, 110, 110, 255));
 
     std::vector<Page> pages = BuildPages();
@@ -752,13 +772,10 @@ void Draw(double fps) {
                 }
             }
         }
-        if (n.back) {
-            g_open = false;
-            RestartIfNeeded();
-            if (gpu::TvScreen(tv)) dl->PopClipRect();
-            return;
-        }
     }
+    // closed by back: this frame still drawn whole, the settings let go after it (returning here, half drawn, the
+    // paper and its title showed alone for a frame as the menu came back)
+    const bool closing = !rebinding && n.back;
     static int last_rebind = -1;
     if (last_rebind >= 0 && !rebinding) Saved();
     last_rebind = pc_input::Rebinding();
@@ -771,7 +788,7 @@ void Draw(double fps) {
         float y = kTop + r * kStep;
         bool on = i == g_sel;
         if (on) {
-            if (uint64_t id = gpu::UiTexture(kStrip)) dl->AddImage(ImTextureID(id), sc.P(110, y - 13), sc.P(517, y + 13));
+            if (uint64_t id = gpu::UiTexture(kStrip)) Picture(dl, id, sc.P(110, y - 13), sc.P(517, y + 13));
             else dl->AddRectFilled(sc.P(110, y - 13), sc.P(517, y + 13), IM_COL32(170, 162, 146, 255));
         }
         ImU32 ink = on ? kInk : kInkSoft;
@@ -884,13 +901,17 @@ void Draw(double fps) {
         Text(dl, g_type, 20 * sc.s, sc.P(x + ps + 8, py + 1), kStoneInk, Tr(p.word));
         x += widths[i] + gap;
     }
-    if (gpu::TvScreen(tv)) {
+    if (in_tv) {
         dl->PopClipRect();
         // the television again over the panel: its glass rounds the corners, its reflections lie over it
         float w = io.DisplaySize.x, h = io.DisplaySize.y;
         float vw = std::min(w, h * 16.0f / 9.0f), vh = vw * 9.0f / 16.0f;
         if (uint64_t id = gpu::UiTexture("ui/tv_frame.dds"))
             dl->AddImage(ImTextureID(id), ImVec2((w - vw) / 2, (h - vh) / 2), ImVec2((w + vw) / 2, (h + vh) / 2));
+    }
+    if (closing) {
+        g_open = false;
+        RestartIfNeeded();
     }
 }
 

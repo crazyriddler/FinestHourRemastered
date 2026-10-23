@@ -165,9 +165,19 @@ std::vector<uint8_t> Cap(const std::wstring& text, uint32_t size, const Style& s
     HGDIOBJ old_pen = SelectObject(dc, GetStockObject(NULL_PEN));
     HGDIOBJ old_brush = SelectObject(dc, GetStockObject(WHITE_BRUSH));
     const int pad = s / 16, rim = st.rim ? s / 20 : s / 40, round = s / 4;
+    // two keys ("Q E": both leans): two key caps side by side, each its own letter (in one cap the two letters were
+    // squeezed together)
+    const size_t gap_at = st.shape == 0 ? text.find(L' ') : std::wstring::npos;
+    const bool pair = gap_at != std::wstring::npos && gap_at > 0 && gap_at + 1 < text.size();
+    const int gap = s / 24, kw = (s - 2 * pad - gap) / 2, ky0 = (s - kw) / 2;
     auto shape = [&](int in) {
         int x0 = pad + in, x1 = s - pad - in, y0 = pad + in, y1 = s - pad - in;
-        if (st.shape == 1) Ellipse(dc, x0, y0, x1, y1);
+        if (pair) {
+            for (int k = 0; k < 2; k++) {
+                int kx = pad + k * (kw + gap);
+                RoundRect(dc, kx + in, ky0 + in, kx + kw - in, ky0 + kw - in, (round - in) / 2, (round - in) / 2);
+            }
+        } else if (st.shape == 1) Ellipse(dc, x0, y0, x1, y1);
         else if (st.shape == 2) RoundRect(dc, x0, y0 + s / 6, x1, y1 - s / 6, s / 3, s / 3);
         else RoundRect(dc, x0, y0, x1, y1, round - in, round - in);
     };
@@ -178,22 +188,36 @@ std::vector<uint8_t> Cap(const std::wstring& text, uint32_t size, const Style& s
     shape(rim);
     grab(inner);
     clear();
-    // the largest font the label fits in
-    const int room = s - 2 * (pad + rim) - (st.shape == 1 ? s / 5 : s / 10);
+    // the largest font the label fits in (each key's, for two)
+    const std::wstring first = pair ? text.substr(0, gap_at) : text, second = pair ? text.substr(gap_at + 1) : L"";
+    const int room = pair ? kw - 2 * rim - s / 12 : s - 2 * (pad + rim) - (st.shape == 1 ? s / 5 : s / 10);
     HFONT font = nullptr;
-    for (int h = s / 2; h > 8; h -= s / 64 + 1) {
+    for (int h = pair ? kw * 3 / 4 : s / 2; h > 8; h -= s / 64 + 1) {
         if (font) DeleteObject(font);
         font = CreateFontW(-h, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
                            ANTIALIASED_QUALITY, DEFAULT_PITCH, st.font);
         SelectObject(dc, font);
-        SIZE ext{};
-        GetTextExtentPoint32W(dc, text.c_str(), int(text.size()), &ext);
-        if (ext.cx <= room && ext.cy <= room) break;
+        bool fits = true;
+        for (const std::wstring* t : {&first, &second}) {
+            if (t->empty()) continue;
+            SIZE ext{};
+            GetTextExtentPoint32W(dc, t->c_str(), int(t->size()), &ext);
+            fits = fits && ext.cx <= room && ext.cy <= room;
+        }
+        if (fits) break;
     }
     SetBkMode(dc, TRANSPARENT);
     SetTextColor(dc, RGB(255, 255, 255));
-    RECT r{0, 0, s, s};
-    DrawTextW(dc, text.c_str(), int(text.size()), &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    if (pair) {
+        for (int k = 0; k < 2; k++) {
+            const std::wstring& t = k == 0 ? first : second;
+            RECT r{pad + k * (kw + gap), ky0, pad + k * (kw + gap) + kw, ky0 + kw};
+            DrawTextW(dc, t.c_str(), int(t.size()), &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        }
+    } else {
+        RECT r{0, 0, s, s};
+        DrawTextW(dc, text.c_str(), int(text.size()), &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    }
     grab(label);
     SelectObject(dc, old_pen);
     SelectObject(dc, old_brush);

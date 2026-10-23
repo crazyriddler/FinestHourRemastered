@@ -656,7 +656,7 @@ _Yes_No	$ms$ Sim  $mc$ Não
 @56184d98a6441db2	$ac$ é o seu botão de ação.
 @2d2c33b89e87060e	Quando o ícone Avançar aparecer...
 @54556f2cad856733	Vá até o mastro e pressione $ac$ para baixar a bandeira.
-@c7575f0639300230	Incline-se segurando $am$ e pressionando $lr$.
+@c7575f0639300230	Incline-se segurando $am$ e pressionando $lr$
 @8a48044ce658bf98	Para usar armas com bipé, como a MG42, deite-se e use $af$ para abrir e recolher o bipé.
 @8cc1b82c8cfbf8be	Assegure o edifício.{Edifício assegurado.
 @9cbf1cd9cda048f2	Repila o ataque à metralhadora aliada.{Ataque repelido.

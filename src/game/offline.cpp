@@ -25,10 +25,13 @@ constexpr uint32_t kMultiplayerMessage = 0x60C;  // the front end's id of urlMul
 struct Row {
     std::string_view key;  // with its comma
     const char* text[5];   // English, German, French, Italian, Spanish
+    // leading spaces more (or fewer, then after it) than the old text's: the old ones centred the old text's letters,
+    // the new is centred by measure (PC Settings sat 8 to 11 pixels right of the rows around it)
+    int lead[5] = {};
 };
 constexpr Row kRows[] = {
-    {"\n$multiplayer,", {"PC Settings", "PC-Einstellungen", "Options PC", "Opzioni PC", "Opciones de PC"}},
-    {"\n$multiplayerCaps,", {"PC SETTINGS", "PC-OPTIONEN", "OPTIONS PC", "OPZIONI PC", "OPCIONES DE PC"}},
+    {"\n$multiplayer,", {"PC Settings", "PC-Optionen", "Options PC", "Opzioni PC", "Ajustes de PC"}, {-1, 0, -2, -2, -1}},
+    {"\n$multiplayerCaps,", {"PC SETTINGS", "PC-OPTIONEN", "OPTIONS PC", "OPZIONI PC", "AJUSTES DE PC"}},
     // the title screen's, for the keyboard (Latin-1 as the table)
     {"\n$pressStartXbox,", {"Press ENTER", "ENTER dr\xFC" "cken", "Appuyez sur ENTR\xC9" "E", "Premi INVIO", "Pulsa INTRO"}},
 };
@@ -40,21 +43,22 @@ bool Rewrite(char* line, size_t len, const Row& row) {
     std::string_view old(line, len);
     std::string out(row.key.substr(1));
     size_t at = out.size();
-    std::string spaces[5], texts[5];
+    std::string spaces[5], texts[5], tails[5];
     for (int i = 0; i < 5; i++) {
         size_t end = i < 4 ? old.find(',', at) : old.size();
         if (end == std::string_view::npos) return false;
         std::string_view field = old.substr(at, end - at);
         size_t lead = field.find_first_not_of(' ');
         if (lead == std::string_view::npos) lead = field.size();
-        int keep = int(lead) + int(field.size() - lead) - int(std::strlen(row.text[i]));
+        int keep = int(lead) + int(field.size() - lead) - int(std::strlen(row.text[i])) + row.lead[i];
         spaces[i] = std::string(size_t(std::max(0, keep)), ' ');
+        tails[i] = std::string(size_t(std::max(0, -keep)), ' ');  // (fewer than none: spaces after it)
         texts[i] = row.text[i];
         at = end + 1;
     }
     auto build = [&] {
         std::string s(row.key.substr(1));
-        for (int i = 0; i < 5; i++) s += spaces[i] + texts[i] + (i < 4 ? "," : "");
+        for (int i = 0; i < 5; i++) s += spaces[i] + texts[i] + tails[i] + (i < 4 ? "," : "");
         return s;
     };
     out = build();

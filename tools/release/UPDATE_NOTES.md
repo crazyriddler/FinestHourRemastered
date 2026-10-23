@@ -133,6 +133,13 @@ The version installed is in `version.txt` beside the game. Unattended:
 - The installer and the updater work on Linux (Wine, Proton): they unpack the update with their own decoder now, and
   no longer stop at "This program has no update inside" (Wine lacks the Windows part they used). The update is
   smaller too.
+- PC Settings: no thin dark line across the page under the hints, no flash of the settings outside the television
+  as they open and close.
+- The main menu: PC Settings is centred like the other rows in every language (in Spanish it is now "Ajustes de
+  PC"), and up from Single Player goes round to Quit Game, as down from Extras does.
+- The loading screen with the Call of Duty logo shows the game's own picture, as the main menu's movie after it.
+- Extras: the gallery's and the credits' movies no longer flicker with the main menu's picture at their sides.
+- The lean hint's keys are two key caps, Q and E, each its own, with no full stop after them.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

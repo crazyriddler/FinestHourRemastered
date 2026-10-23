@@ -192,13 +192,14 @@ FILE* Dump() {
 
 // hints written again in every language, by their text's hash: the lean's named the d-pad in words ("the
 // directional button"), read as the arrow keys on a keyboard; with the left and right picture ($lr$) the hint shows the
-// lean keys (Q and E, prompts.cpp kInGame) or the controller's d-pad. UTF-8
+// lean keys (Q and E, prompts.cpp kInGame) or the controller's d-pad, no full stop after it (it read as part of the
+// picture, "E."). UTF-8
 const std::unordered_map<uint64_t, const char*>& Hints() {
     static const std::unordered_map<uint64_t, const char*> hints = {
-        {0xc7575f0639300230ull, "Lean by holding $am$ and pressing $lr$."},
-        {0x7540e4c29f9d37ecull, "Incl\xC3\xADnate manteniendo pulsado $am$ y pulsando $lr$.<X>Incl\xC3\xADnate manteniendo presionado $am$ y presionando $lr$."},
+        {0xc7575f0639300230ull, "Lean by holding $am$ and pressing $lr$"},
+        {0x7540e4c29f9d37ecull, "Incl\xC3\xADnate manteniendo pulsado $am$ y pulsando $lr$<X>Incl\xC3\xADnate manteniendo presionado $am$ y presionando $lr$"},
         {0x840e41130e68cbc5ull, "Maintenez $am$ et appuyez sur $lr$ pour vous pencher."},
-        {0x332fe3b9b6a62d67ull, "Sporgiti oltre gli angoli tenendo premuto $am$ e premendo $lr$."},
+        {0x332fe3b9b6a62d67ull, "Sporgiti oltre gli angoli tenendo premuto $am$ e premendo $lr$"},
         {0x896dd949da0c7dd5ull, "Lehnen Sie sich, indem Sie $am$ gedr\xC3\xBC" "ckt halten und $lr$ dr\xC3\xBC" "cken."},
     };
     return hints;

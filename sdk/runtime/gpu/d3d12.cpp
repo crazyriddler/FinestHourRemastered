@@ -2376,7 +2376,12 @@ void D3D12Backend::UploadTarget(Target& t, const Surface& s) {
     if (widen_ > 1.0f && t.gw == guest_w_ && t.gh == guest_h_) {
         cpu_frame_ = presents_;  // a movie: the television shows it too
         float black[4] = {0, 0, 0, 1};
-        if (!over) cl_->ClearRenderTargetView(Cpu(rtv_heap_.Get(), t.view, rtv_inc_), black, 0, nullptr);
+        // a movie's first frames into a buffer the menus drew: cleared too (its changed pixels alone go over, and a
+        // movie narrower than the screen, the gallery's and the credits', showed the menu's picture at its sides in
+        // every other frame, the one of the swap's buffers the menu was drawn in)
+        const bool starting = presents_ - t.cpu_at > 4;
+        t.cpu_at = presents_;
+        if (!over || starting) cl_->ClearRenderTargetView(Cpu(rtv_heap_.Get(), t.view, rtv_inc_), black, 0, nullptr);
         float vw = float(t.w) / widen_;
         D3D12_VIEWPORT vp{(float(t.w) - vw) / 2, 0, vw, float(t.h), 0, 1};
         SetViewport(vp);
@@ -5400,6 +5405,12 @@ void D3D12Backend::Layout2D(const State& s, const Assembled& a, bool prog, Guest
         c.layout[2] = 0;
     }
     const VertexElement& e = a.elements[0];
+    // XBE_LOG_2D: each 2D texture once, as it is first drawn (tests: which picture a screen is made of)
+    static const bool log2d = std::getenv("XBE_LOG_2D") != nullptr;
+    if (log2d && screen) {
+        static std::unordered_set<uint64_t> seen2d;
+        if (seen2d.insert(draw_tex0_).second) LOGR("2d: tex %016llx tag %u", (unsigned long long)draw_tex0_, s.layout2d);
+    }
     if (g_log_draws && screen) {
         float p[4] = {};
         if ((a.regs & 1) && e.buffer < a.buffer_count && a.buffers[e.buffer].src) std::memcpy(p, a.buffers[e.buffer].src + e.offset, 16);

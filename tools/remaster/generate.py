@@ -83,6 +83,9 @@ def write_index(mats, pack):
                                                          m["detail"], m["tiles"]))
 
 
+KEEP_ORIGINAL = {"5a176b81e5887757"}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("src")
@@ -107,6 +110,9 @@ def main():
         ids = [i for i in ids if classes[i]["class"] in want]
     if a.limit:
         ids = ids[:a.limit]
+    # kept as the game has them: the loading screen's banner (ldbanner_xbox, the Call of Duty logo with "Loading"), as
+    # the main menu's movie it leads to is the game's own
+    ids = [i for i in ids if i not in KEEP_ORIGINAL]
     models = pbr.Models()
     t0 = time.time()
     done = 0

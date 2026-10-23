@@ -16,27 +16,32 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 
 def read_patch(folder):
     """the latest update inside the installer or the updater (make_release.py): its files by path"""
-    import ctypes
+    import lzma
     import struct
     for name in ("FinestHourRemasteredSetup.exe", "FinestHourRemasteredUpdate.exe"):
         path = os.path.join(folder, name)
         if not os.path.exists(path):
             continue
         blob = open(path, "rb").read()
-        if blob[-8:] != b"FHRPATCH":
-            continue
         packed, raw = struct.unpack("<QQ", blob[-24:-8])
-        cab = ctypes.windll.cabinet
-        h = ctypes.c_void_p()
-        cab.CreateDecompressor(5, None, ctypes.byref(h))
-        out = ctypes.create_string_buffer(raw)
-        got = ctypes.c_size_t()
-        cab.Decompress.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t,
-                                   ctypes.POINTER(ctypes.c_size_t)]
-        if not cab.Decompress(h, blob[-24 - packed:-24], packed, out, raw, ctypes.byref(got)):
-            sys.exit("the update in %s cannot be unpacked" % name)
-        cab.CloseDecompressor(h)
-        data = out.raw[:got.value]
+        if blob[-8:] == b"FHRLZMA1":
+            data = lzma.decompress(blob[-24 - packed:-24], format=lzma.FORMAT_ALONE)
+        elif blob[-8:] == b"FHRPATCH":
+            # (the older updates: Windows' LZMS)
+            import ctypes
+            cab = ctypes.windll.cabinet
+            h = ctypes.c_void_p()
+            cab.CreateDecompressor(5, None, ctypes.byref(h))
+            out = ctypes.create_string_buffer(raw)
+            got = ctypes.c_size_t()
+            cab.Decompress.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t,
+                                       ctypes.POINTER(ctypes.c_size_t)]
+            if not cab.Decompress(h, blob[-24 - packed:-24], packed, out, raw, ctypes.byref(got)):
+                sys.exit("the update in %s cannot be unpacked" % name)
+            cab.CloseDecompressor(h)
+            data = out.raw[:got.value]
+        else:
+            continue
         end = data.index(b"\nend\n") + 5
         files, at = {}, end
         for line in data[:end].decode("utf-8").splitlines():

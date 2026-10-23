@@ -11,7 +11,6 @@
 #include <windows.h>
 #include <windowsx.h>
 #include <bcrypt.h>
-#include <compressapi.h>
 #include <d3d11.h>
 #include <shlobj.h>
 #include <shobjidl.h>
@@ -20,9 +19,12 @@
 #include <wincodec.h>
 #include <wrl/client.h>
 
+#include "LzmaDec.h"
+
 #include <algorithm>
 #include <atomic>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -372,8 +374,10 @@ uint32_t GameLanguage() {
 }
 
 // --- the update inside this exe -------------------------------------------------------------------------------------
-// make_release.py appends it: the packed update (Windows' compression API, LZMS), its packed and unpacked sizes and
-// "FHRPATCH". Unpacked: a text head, then each file's bytes in the head's order.
+// make_release.py appends it: the packed update (LZMA, the LZMA SDK's "alone" format: 5 bytes of properties, 8 of
+// size, the stream), its packed and unpacked sizes and "FHRLZMA1". Unpacked by the LZMA SDK's own decoder (LzmaDec.c),
+// no part of Windows: Wine's compression API (cabinet.dll, which the LZMS packing before used) is a stub, and on Linux
+// the updater found no update inside. Unpacked: a text head, then each file's bytes in the head's order.
 //   FHRU 1 / version <text> / file <size> <sha1> <path> / delete <path> / check <size> <path> / end
 // file: written to the installation; delete: an earlier version's file gone (the first release's exe); check: a base
 // file this update leaves alone, its size compared (an installation of any earlier version is brought up to date by
@@ -404,7 +408,7 @@ bool ReadPatch(Patch& p) {
     uint8_t tail[24];
     _fseeki64(f, -24, SEEK_END);
     int64_t end = _ftelli64(f);
-    bool ok = std::fread(tail, 1, 24, f) == 24 && std::memcmp(tail + 16, "FHRPATCH", 8) == 0;
+    bool ok = std::fread(tail, 1, 24, f) == 24 && std::memcmp(tail + 16, "FHRLZMA1", 8) == 0;
     uint64_t packed = 0, raw = 0;
     if (ok) std::memcpy(&packed, tail, 8), std::memcpy(&raw, tail + 8, 8);
     ok = ok && packed > 0 && packed <= uint64_t(end) && raw < (uint64_t(1) << 33);
@@ -416,12 +420,14 @@ bool ReadPatch(Patch& p) {
     }
     std::fclose(f);
     if (!ok) return false;
-    DECOMPRESSOR_HANDLE d = nullptr;
-    if (!CreateDecompressor(COMPRESS_ALGORITHM_LZMS, nullptr, &d)) return false;
+    if (blob.size() <= LZMA_PROPS_SIZE + 8) return false;
     p.data.resize(size_t(raw));
-    SIZE_T got = 0;
-    ok = Decompress(d, blob.data(), blob.size(), p.data.data(), p.data.size(), &got) && got == raw;
-    CloseDecompressor(d);
+    const ISzAlloc alloc = {[](ISzAllocPtr, size_t n) { return std::malloc(n); }, [](ISzAllocPtr, void* q) { std::free(q); }};
+    SizeT got = SizeT(raw), in = SizeT(blob.size() - LZMA_PROPS_SIZE - 8);
+    ELzmaStatus status;
+    ok = LzmaDecode(p.data.data(), &got, blob.data() + LZMA_PROPS_SIZE + 8, &in, blob.data(), LZMA_PROPS_SIZE, LZMA_FINISH_END,
+                    &status, &alloc) == SZ_OK &&
+         got == raw;
     if (!ok) return false;
     // the head: lines up to "end"
     size_t at = 0;

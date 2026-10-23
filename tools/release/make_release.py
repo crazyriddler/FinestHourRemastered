@@ -20,6 +20,7 @@ import ctypes
 import datetime
 import hashlib
 import io
+import lzma
 import os
 import shutil
 import stat
@@ -181,7 +182,8 @@ def base_manifest():
 
 
 def lzms(data, compress):
-    """Windows' compression API (cabinet.dll), LZMS: what the installer unpacks with"""
+    """Windows' compression API (cabinet.dll), LZMS: the updates' packing up to 2026-10-23 (read for --undo). Wine has
+    none of it (its cabinet.dll's compression API is a stub): their installer and updater failed on Linux"""
     cab = ctypes.windll.cabinet
     h = ctypes.c_void_p()
     make = cab.CreateCompressor if compress else cab.CreateDecompressor
@@ -198,14 +200,31 @@ def lzms(data, compress):
     return out.raw[:size.value]
 
 
+# the tail's mark: the update packed with LZMA (.lzma, LZMA SDK's "alone" format), which the installer unpacks with its
+# own decoder (the LZMA SDK's LzmaDec.c: no part of Windows needed, so Wine runs it); FHRPATCH: LZMS, the older ones
+MARK = b"FHRLZMA1"
+
+
+def pack(raw):
+    return lzma.compress(raw, format=lzma.FORMAT_ALONE, preset=9)
+
+
+def unpack_tail(data, name):
+    """the update inside an installer's or an updater's bytes, unpacked, either packing"""
+    packed, _ = struct.unpack("<QQ", data[-24:-8])
+    blob = data[-24 - packed:-24]
+    if data[-8:] == MARK:
+        return lzma.decompress(blob, format=lzma.FORMAT_ALONE)
+    if data[-8:] == b"FHRPATCH":
+        return lzms(blob, False)
+    sys.exit("%s: no update inside" % name)
+
+
 def patch_files(exe):
     """an update's files, read from its exe (write_installer's tail): {path: sha1}"""
     with open(exe, "rb") as f:
         data = f.read()
-    if data[-8:] != b"FHRPATCH":
-        sys.exit("%s: no update inside" % exe)
-    packed, _ = struct.unpack("<QQ", data[-24:-8])
-    raw = lzms(data[-24 - packed:-24], False)
+    raw = unpack_tail(data, exe)
     out = {}
     for line in raw[:raw.index(b"\nend\n") + 5].decode("utf-8").splitlines():
         if line.startswith("file "):
@@ -254,7 +273,7 @@ def build_patch(items, version, undo=None):
             head.append("check %d %s" % (size, r))
     head.append("end")
     raw = ("\n".join(head) + "\n").encode("utf-8") + b"".join(data)
-    return lzms(raw, True), len(raw), files
+    return pack(raw), len(raw), files
 
 
 def write_installer(setup, packed, raw_size, to):
@@ -262,7 +281,7 @@ def write_installer(setup, packed, raw_size, to):
         with open(setup, "rb") as f:
             o.write(f.read())
         o.write(packed)
-        o.write(struct.pack("<QQ", len(packed), raw_size) + b"FHRPATCH")
+        o.write(struct.pack("<QQ", len(packed), raw_size) + MARK)
 
 
 def github(version, rebase=False, undo=None):

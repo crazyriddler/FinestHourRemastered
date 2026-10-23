@@ -64,3 +64,8 @@ freely, subject to the following restrictions:
 2. Altered source versions must be plainly marked as such, and must not be
    misrepresented as being the original software.
 3. This notice may not be removed or altered from any source distribution.
+
+
+LZMA SDK 24.09 decoder, LzmaDec.c (https://github.com/ip7z/7zip; in the release's installer and updater)
+
+Igor Pavlov: public domain.

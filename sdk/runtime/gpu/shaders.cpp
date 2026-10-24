@@ -1760,6 +1760,9 @@ std::string MaterialSetup(int i, const std::string& uv) {
     // (from 14 m on the walk moves nothing: skipped). Its taps (and the soft height below) through s5, trilinear:
     // anisotropy over tens of taps a pixel costs much and shows nothing in where the walk stops
     s += "float mFade = saturate(1 - mP.z * 0.0007);\n";
+    // where a pixel spans several of the material's texels (its maps are 4 times the texture: from their second level
+    // on) the walk's shift is under a pixel and only flickers: it fades out from the first level to the third
+    s += "mFade *= saturate((2.5 - mnrm.CalculateLevelOfDetail(mtri, mUv)) / 1.5);\n";
     s += F("if (mtl[2].y > 0 && mtl[0].w > 0 && mFade > 0) {\n"
            "    float3 vt = float3(dot(mV, mT), dot(mV, mB), dot(mV, mN0));\n"
            "    float fade = mFade;\n"
@@ -1790,12 +1793,16 @@ std::string MaterialSetup(int i, const std::string& uv) {
            "}\n");
     s += F("float4 t%d = tex%d.SampleGrad(smp%d, mUv, mU1, mU2);\n", i, i, i);
     s += F("float3 mBase = t%d.rgb;\nfloat mAlpha = t%d.a;\n", i, i);
-    s += "float4 mMat = mmat.SampleGrad(" + MatSampler(i) + ", mUv, mU1, mU2);\n";
+    // (half a level softer, as the relief's normal: the cavity's cracks and the gloss finer than a pixel flickered)
+    s += "float4 mMat = mmat.SampleGrad(" + MatSampler(i) + ", mUv, mU1 * 1.5, mU2 * 1.5);\n";
     // the height and the texture's cover the blend follows (Height Blend): two levels softer, their shapes without the
     // fine grain (sharpened by the blend, the grain broke the edge of a blended layer into specks)
     s += "float mHs = mmat.SampleGrad(mtri, mUv, mU1 * 4, mU2 * 4).g;\n";
     s += F("float mAs = tex%d.SampleGrad(smp%d, mUv, mU1 * 4, mU2 * 4).a;\n", i, i);
-    s += "float2 mNt = mnrm.SampleGrad(" + MatSampler(i) + ", mUv, mU1, mU2).rg * 2 - 1;\n";
+    // the relief's normal half a level softer, and faint where it still turns from one pixel to the next (finer than
+    // a pixel it only sparkled as the view moved)
+    s += "float2 mNt = mnrm.SampleGrad(" + MatSampler(i) + ", mUv, mU1 * 1.5, mU2 * 1.5).rg * 2 - 1;\n";
+    s += "{ float2 nx = ddx(mNt), ny = ddy(mNt); mNt *= rsqrt(1 + 6 * (dot(nx, nx) + dot(ny, ny))); }\n";
     return s;
 }
 
@@ -1899,7 +1906,8 @@ std::string MaterialShade(int i) {
         "    snt.z = sqrt(saturate(1 - dot(snt.xy, snt.xy)));\n"
         "    float3 sN = normalize(sT * snt.x + sB * snt.y + mNs * snt.z);\n"
         "    float3 H = normalize(L + mV);\n"
-        "    float gl = exp2(1 + 6 * (1 - mMat.r));\n"
+        "    float4 sMat = mmat.SampleGrad(" + MatSampler(i) + ", mUv, mU1 * 4, mU2 * 4);\n"
+        "    float gl = exp2(1 + 6 * (1 - saturate(sMat.r + 0.15)));\n"
         "    float3 dnx = ddx(sN), dny = ddy(sN);\n"
         "    float ra = 2 / (gl + 2) + min(12 * (dot(dnx, dnx) + dot(dny, dny)), 0.7);\n"
         "    gl = 2 / ra - 2;\n"
@@ -1915,7 +1923,7 @@ std::string MaterialShade(int i) {
         "        sunvis.GetDimensions(ssz.x, ssz.y);\n"
         "        sun = sunvis.Load(int3(clamp(i.pos.xy + mv * ssz, 0, ssz - 1), 0)).g;\n"
         "    }\n"
-        "    float sp = min(mMat.a * pow(saturate(dot(sN, H)), gl) * (gl + 8) / 25.1, 0.6) * abs(mtl[1].w) * sun;\n"
+        "    float sp = min(sMat.a * pow(saturate(dot(sN, H)), gl) * (gl + 8) / 25.1, 0.6) * abs(mtl[1].w) * sun;\n"
         "    float3 shaded = outc.rgb * lerp(1, lf, mtl[0].w) * cav + sp * lit * saturate(dot(mNs, L) * 2 + 0.3);\n"
         "    outc.rgb = lerp(outc.rgb, shaded, saturate(fogin.a) * mFlat);\n"
         "    if (mtl[3].w > 0) {\n"
@@ -1927,14 +1935,18 @@ std::string MaterialShade(int i) {
         "        outc.a = lerp(outc.a, ha, mtl[3].w * saturate(fogin.a) * saturate(mAs * 4 - 2.4));\n"
         "    }\n"
         // the reflection buffer (d3d12.cpp's kSceneSsr): the normal (octahedral), the view depth, reflectivity and
-        // roughness (whole and fraction), metal by its sign. Metal is its bare parts: grey and smooth
+        // roughness (whole and fraction), metal by its sign. Metal is its bare parts: grey and smooth. The normal and
+        // the roughness the highlight's, two levels coarser than the relief's: a reflection off the finest relief
+        // turned from one pixel to the next and boiled as the view moved (metal above all, its colour the reflection)
         "    {\n"
-        "        float rough = saturate(mMat.r);\n"
+        "        float rough = saturate(sMat.r + 0.15);\n"
         "        float3 bc = mBase.rgb;\n"
         "        float sat = (max(max(bc.r, bc.g), bc.b) - min(min(bc.r, bc.g), bc.b)) / max(max(max(bc.r, bc.g), bc.b), 1e-3);\n"
         "        float metal = mrefl.y * saturate(1 - sat * 5) * smoothstep(0.5, 0.32, rough);\n"
-        "        float refl = mrefl.x * (1 - rough * 0.8) * mtl[0].w;\n"
-        "        float3 n = mN / (abs(mN.x) + abs(mN.y) + abs(mN.z));\n"
+        // (the reflectivity by the cube of the smoothness: a rough surface, the game's worn metal above all (too rough
+        // to count as bare metal, it took the rest's added reflection), reflected at half strength and read as wet)
+        "        float refl = mrefl.x * (1 - rough) * (1 - rough) * (1 - rough) * mtl[0].w;\n"
+        "        float3 n = sN / (abs(sN.x) + abs(sN.y) + abs(sN.z));\n"
         "        float2 oct = n.z >= 0 ? n.xy : (1 - abs(n.yx)) * (n.xy >= 0 ? 1 : -1);\n"
         "        float code = floor(saturate(refl) * 63) + rough * 0.95;\n"
         "        g_gbuf = float4(oct, mP.z, metal > 0.5 ? -code : code);\n"
@@ -1942,7 +1954,8 @@ std::string MaterialShade(int i) {
         "    if (mtl[3].x == 1) outc.rgb = mN * 0.5 + 0.5;\n"
         "    if (mtl[3].x == 2) outc.rgb = lf * 0.5 * cav;\n"
         "    if (mtl[3].x == 3) outc.rgb = mNs * 0.5 + 0.5;\n"
-        "    if (mtl[3].x == 5) outc.rgb = float3(1 - mFlat, mFlat, 0);\n"  // (the stretched texture's fade: red where gone)
+        "    if (mtl[3].x == 5) outc.rgb = float3(1 - mFlat, mFlat, 0);\n"
+        "    if (mtl[3].x == 6) outc.rgb = sp * lit * saturate(dot(mNs, L) * 2 + 0.3) * 4;\n"  // (the stretched texture's fade: red where gone)
         "}\n"
         // Detail Textures: the material's grain (a grey map, mean 0.5) in light and shade over the colour, tiled finer
         // than the texture's own pixels (a coarse grain about 1.3 detail pixels to one of the original's, a finer one 2.5

@@ -851,27 +851,27 @@ bool Setup(int2 xy, float2 uv, out Px o) {
     o.R = reflect(-o.V, o.N);
     float ndv = saturate(dot(o.N, o.V));
     // a broad Fresnel (the game's surfaces are rough, and a sheen at a grazing angle is what reads)
-    float f0 = o.metal ? 0.7 : 0.15;
+    float f0 = o.metal ? 0.5 : 0.15;
     float F = f0 + (1 - f0) * pow(1 - ndv, 3);
     o.amount = saturate(o.refl * F * 2);
     return o.amount >= 0.015;
 }
 // the walk: from just off the surface, a step of 1.5% of the depth growing 18% each, up to 40 m (fewer steps where the
-// reflection is faint). Out: where it met the world on the screen (xy), how sure (z: faded at the screen's edges and
+// reflection is faint); the same for every pixel (a start dithered pixel by pixel boiled without the temporal
+// anti-aliasing to average it). Out: where it met the world on the screen (xy), how sure (z: faded at the screen's edges and
 // with the way it went), 0 nothing met
 float3 Trace(Px f, float2 pos) {
     if (f.R.z <= -0.2) return 0;
     int steps = (int)lerp(14, 40, saturate(f.amount * 3));
     float3 X = f.P + f.N * (2 + f.z * 0.002);
     float step = max(f.z * 0.015, 4);
-    float dither = Hash(pos) * 0.5 + 0.5;
     float3 prev = X;
     float grow = steps < 40 ? 1.3 : 1.18;
     // the ray in front of what the screen shows where it was (a surface met is one it goes behind)
     float pgap = -1;
     [loop] for (int k = 0; k < steps; k++) {
         prev = X;
-        X += f.R * step * (k == 0 ? dither : 1);
+        X += f.R * step;
         step *= grow;
         if (X.z < 1 || length(X - f.P) > 4000) break;
         float2 q = ToScreen(X);
@@ -924,26 +924,32 @@ float4 ssr(O i) : SV_Target {
     if (!Setup(int2(i.pos.xy), i.uv, f)) return f.s;
     float4 s = f.s;
     float amount = f.amount, rough = f.rough;
-    // the walk's end from the half size one of the four about the pixel nearest in depth (an edge keeps its own
-    // side); none near: nothing met
+    // the walk's end from the half size ones about the pixel, blended by their nearness (bilinear) among those at
+    // its depth (an edge keeps its own side): taking the nearest alone drew the reflection's edges in steps of two
+    // pixels; none near: nothing met
     float2 hs = p[2].zw * 2;
     float2 t = i.uv / hs - 0.5;
     float2 base = (floor(t) + 0.5) * hs;
-    float best = 1e30;
-    float3 hit = 0;
+    float2 ft = frac(t);
+    float tol = max(3, f.z * 0.02);
+    // (wsum: the ones at its depth; met: those of them that met something, hq their mean end)
+    float wsum = 0, found = 0, met = 0;
+    float2 hq = 0;
     [unroll] for (int k = 0; k < 4; k++) {
         float4 tr = traced.SampleLevel(pnt, base + float2(k & 1, k >> 1) * hs, 0);
-        if (tr.w < 0) continue;
-        float dz = abs(tr.w - f.z);
-        if (dz < best) best = dz, hit = tr.xyz;
+        if (tr.w < 0 || abs(tr.w - f.z) > tol) continue;
+        float w = ((k & 1) ? ft.x : 1 - ft.x) * ((k >> 1) ? ft.y : 1 - ft.y) + 1e-3;
+        wsum += w;
+        found += tr.z * w;
+        if (tr.z > 0) hq += tr.xy * w, met += w;
     }
-    float found = best <= max(3, f.z * 0.02) ? hit.z : 0;
+    found = wsum > 0 ? found / wsum : 0;
     float3 hitc = 0;
-    if (found > 0) {
-        float2 hq = hit.xy;
+    if (found > 0 && met > 0) {
+        hq /= met;
         float3 B = ViewPos(hq, world.SampleLevel(pnt, hq, 0));
         // blurrier the rougher and the further
-        float2 o = rough * 0.012 * float2(p[2].y / p[2].x, 1) * (1 + length(B - f.P) * 0.002);
+        float2 o = rough * 0.03 * float2(p[2].y / p[2].x, 1) * (1 + length(B - f.P) * 0.002);
         hitc = (scene.SampleLevel(lin, hq, 0).rgb * 2 + scene.SampleLevel(lin, hq + o, 0).rgb +
                 scene.SampleLevel(lin, hq - o, 0).rgb + scene.SampleLevel(lin, hq + float2(o.x, -o.y), 0).rgb +
                 scene.SampleLevel(lin, hq - float2(o.x, -o.y), 0).rgb) / 6;
@@ -968,7 +974,9 @@ float4 ssr(O i) : SV_Target {
     float3 c = s.rgb;
     if (metal) {
         float3 tint = c / max(max(max(c.r, c.g), c.b), 0.05);
-        c = lerp(c, env * lerp(1, tint, 0.6) * 1.2, min(amount, 0.6));
+        // (the game's metal is worn and dirty: the rougher, the less it reflects, a third at the roughest; never more
+        // than a third of its colour: a clean reflection on it read as a wet floor)
+        c = lerp(c, env * lerp(1, tint, 0.6) * 1.2, min(amount * lerp(1, 0.35, rough), 0.35));
     } else {
         c += env * amount;
     }

@@ -1,7 +1,7 @@
 #pragma once
-// Motion (d3d12.cpp MotionPass, MotionBlurPass, TaaPass): the screen's velocity, each pixel's move since the frame
-// before in uv (rg all of it, ba the object's own: what the camera's turn and travel do not explain); the per object
-// motion blur; the temporal anti-aliasing that replaces SMAA.
+// Motion (renderer.cpp MotionPass, MotionBlurPass): the screen's velocity, each pixel's move since the frame before
+// in uv (rg all of it, ba the object's own: what the camera's turn and travel do not explain); the per object motion
+// blur. And the Anti-Aliasing (FxaaPass).
 namespace gpu {
 
 // The velocity passes' parameters: mv0 1 / P00, 1 / P11, P22, P32 (the camera's projection); mv1 the viewport's depth
@@ -118,100 +118,100 @@ float4 mblur(O i) : SV_Target {
 }
 )";
 
-// Temporal anti-aliasing: this frame (jittered) blended into the history reprojected along the velocity (Catmull-Rom),
-// the history clipped to the neighbourhood's colour box (YCoCg, tone mapped: no ghosts, no fireflies); faster where
-// things move; a reset (a cut, a new size) takes the frame as it is. The weapon in hand moves with the eye.
-inline constexpr char kTaaHlsl[] = R"(
-cbuffer T : register(b1) { float4 ta0; float4 ta1; };  // size xy, 1 / size; reset, the weapon's depth cleared
-Texture2D cur : register(t0);
-Texture2D hist : register(t1);
-Texture2D vel : register(t2);
-Texture2D<float> dnow : register(t3);
-float3 Tm(float3 c) { return c / (1 + max(max(c.r, c.g), c.b)); }
-float3 Itm(float3 c) { return c / max(1 - max(max(c.r, c.g), c.b), 1e-4); }
-float3 ToY(float3 c) { return float3(dot(c, float3(0.25, 0.5, 0.25)), dot(c, float3(0.5, 0, -0.5)), dot(c, float3(-0.25, 0.5, -0.25))); }
-float3 FromY(float3 y) { return float3(y.x + y.y - y.z, y.x + y.z, y.x - y.y - y.z); }
-float3 Hist(float2 uv) {
-    float2 sp = uv * ta0.xy;
-    float2 tc = floor(sp - 0.5) + 0.5;
-    float2 f = sp - tc;
-    float2 w0 = f * (-0.5 + f * (1 - 0.5 * f));
-    float2 w1 = 1 + f * f * (-2.5 + 1.5 * f);
-    float2 w2 = f * (0.5 + f * (2 - 1.5 * f));
-    float2 w3 = f * f * (-0.5 + 0.5 * f);
-    float2 w12 = w1 + w2;
-    float2 o12 = w2 / w12;
-    float2 t0 = (tc - 1) * ta0.zw, t3 = (tc + 2) * ta0.zw, t12 = (tc + o12) * ta0.zw;
-    float3 r = hist.SampleLevel(lin, float2(t12.x, t0.y), 0).rgb * (w12.x * w0.y) +
-               hist.SampleLevel(lin, float2(t0.x, t12.y), 0).rgb * (w0.x * w12.y) +
-               hist.SampleLevel(lin, t12, 0).rgb * (w12.x * w12.y) +
-               hist.SampleLevel(lin, float2(t3.x, t12.y), 0).rgb * (w3.x * w12.y) +
-               hist.SampleLevel(lin, float2(t12.x, t3.y), 0).rgb * (w12.x * w3.y);
-    float ws = w12.x * w0.y + w0.x * w12.y + w12.x * w12.y + w3.x * w12.y + w12.x * w3.y;
-    return max(r / ws, 0);
-}
-float4 taa(O i) : SV_Target {
-    int2 px = int2(i.pos.xy);
-    float4 c0 = cur.Load(int3(px, 0));
-    float3 cy = ToY(Tm(max(c0.rgb, 0)));
-    float3 m1 = 0, m2 = 0, lo = 1e9, hi = -1e9;
-    [unroll] for (int y = -1; y <= 1; y++)
-        [unroll] for (int x = -1; x <= 1; x++) {
-            float3 s = ToY(Tm(max(cur.Load(int3(px + int2(x, y), 0)).rgb, 0)));
-            m1 += s, m2 += s * s, lo = min(lo, s), hi = max(hi, s);
-        }
-    if (ta1.x > 0) return c0;
-    // the velocity: the pixel's, or a neighbour's moving thing's (its edge carries its motion)
-    // (not the sky's: its box goes with the camera, a moving thing to the velocity buffer; taken by the edges of
-    // what stands against it, their history was fetched from elsewhere and clipped away: no anti-aliasing there,
-    // stair steps along the roofs against the sky)
-    float4 v4 = vel.Load(int3(px, 0));
-    [unroll] for (int k = 0; k < 4; k++) {
-        int2 o = int2(k & 1 ? 1 : -1, k & 2 ? 1 : -1);
-        if (dnow.Load(int3(px + o, 0)) >= 0.99999) continue;
-        float4 n = vel.Load(int3(px + o, 0));
-        if (dot(n.zw, n.zw) > dot(v4.zw, v4.zw) * 1.5 + 1e-8) v4 = n;
-    }
-    float2 v = v4.xy;  // (the weapon in hand's own motion too: it sways with the eye)
-    float2 huv = i.uv - v;
-    if (any(huv < 0) || any(huv > 1)) return c0;
-    // the weapon in hand (in front, its own depth): it moves with the eye's every sway, its history held tighter and
-    // replaced faster (no double outline as it moves), still averaged where it rests (its fine grain)
-    bool weapon = ta1.y > 0 && dnow.Load(int3(px, 0)) < 1;
-    float3 mean = m1 / 9, sig = sqrt(abs(m2 / 9 - mean * mean));
-    float gamma = weapon ? 0.85 : 1.25;
-    float3 blo = max(lo, mean - sig * gamma), bhi = min(hi, mean + sig * gamma);
-    float3 h = ToY(Tm(Hist(huv)));
-    float3 pc = 0.5 * (bhi + blo), e = 0.5 * (bhi - blo) + 1e-4;
-    float3 d = h - pc;
-    float3 u = abs(d / e);
-    float ma = max(u.x, max(u.y, u.z));
-    if (ma > 1) h = pc + d / ma;
-    float speed = length(v * ta0.xy);
-    float a = lerp(0.09, 0.25, saturate(speed / 12));
-    if (weapon) a = lerp(0.2, 0.6, saturate(speed / 4));
-    float3 r = lerp(h, cy, a);
-    return float4(Itm(FromY(r)), c0.a);
-}
-)";
-
-// The film grain after the temporal anti-aliasing (its history keeps none: it would be averaged away): faint, fine,
-// in the mid tones (g0.x its strength, g0.y the time)
-inline constexpr char kGrainHlsl[] = R"(
-cbuffer G : register(b1) { float4 g0; };
+// Anti-Aliasing: FXAA 3.11 (quality, 12 steps) on the 3D scene before the 2D is drawn over it (the HUD and the text
+// stay sharp). Its luma from the colour tone mapped (the scene can go past white). f0: 1 / size, size.
+inline constexpr char kFxaaHlsl[] = R"(
+cbuffer F : register(b1) { float4 f0; };
 Texture2D scene : register(t0);
-float GHash(float2 q) {
-    float3 h = frac(float3(q.xyx) * 0.1031);
-    h += dot(h, h.yzx + 33.33);
-    return frac((h.x + h.y) * h.z);
+float FLuma(float3 c) {
+    c = max(c, 0) / (1 + max(max(c.r, c.g), max(c.b, 0)));
+    return sqrt(dot(c, float3(0.299, 0.587, 0.114)));
 }
-float4 grain(O i) : SV_Target {
-    float4 c = scene.Load(int3(i.pos.xy, 0));
-    float l = dot(saturate(c.rgb), float3(0.2126, 0.7152, 0.0722));
-    float2 q = i.pos.xy + float2(frac(g0.y * 7.31) * 613, frac(g0.y * 3.17) * 411);
-    float n = (GHash(q) + GHash(q + 17.3) - 1) * g0.x;
-    c.rgb += n * 4 * l * (1 - l);
-    return c;
+float FL(float2 uv) { return FLuma(scene.SampleLevel(lin, uv, 0).rgb); }
+float4 fxaa(O i) : SV_Target {
+    const float kSteps[12] = {1.0, 1.5, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 4.0, 8.0};
+    float2 rcp = f0.xy;
+    float2 uv = (floor(i.pos.xy) + 0.5) * rcp;
+    int2 p = int2(i.pos.xy);
+    float4 rgbM = scene.Load(int3(p, 0));
+    float lumaM = FLuma(rgbM.rgb);
+    float lumaS = FLuma(scene.Load(int3(p, 0), int2(0, 1)).rgb);
+    float lumaE = FLuma(scene.Load(int3(p, 0), int2(1, 0)).rgb);
+    float lumaN = FLuma(scene.Load(int3(p, 0), int2(0, -1)).rgb);
+    float lumaW = FLuma(scene.Load(int3(p, 0), int2(-1, 0)).rgb);
+    float rangeMax = max(max(max(lumaN, lumaW), max(lumaE, lumaS)), lumaM);
+    float rangeMin = min(min(min(lumaN, lumaW), min(lumaE, lumaS)), lumaM);
+    float range = rangeMax - rangeMin;
+    if (range < max(0.0625, rangeMax * 0.125)) return rgbM;
+    float lumaNW = FLuma(scene.Load(int3(p, 0), int2(-1, -1)).rgb);
+    float lumaSE = FLuma(scene.Load(int3(p, 0), int2(1, 1)).rgb);
+    float lumaNE = FLuma(scene.Load(int3(p, 0), int2(1, -1)).rgb);
+    float lumaSW = FLuma(scene.Load(int3(p, 0), int2(-1, 1)).rgb);
+    float lumaNS = lumaN + lumaS, lumaWE = lumaW + lumaE;
+    float subpixRcpRange = 1.0 / range;
+    float subpixNSWE = lumaNS + lumaWE;
+    float edgeHorz1 = -2.0 * lumaM + lumaNS, edgeVert1 = -2.0 * lumaM + lumaWE;
+    float lumaNESE = lumaNE + lumaSE, lumaNWNE = lumaNW + lumaNE;
+    float edgeHorz2 = -2.0 * lumaE + lumaNESE, edgeVert2 = -2.0 * lumaN + lumaNWNE;
+    float lumaNWSW = lumaNW + lumaSW, lumaSWSE = lumaSW + lumaSE;
+    float edgeHorz4 = abs(edgeHorz1) * 2.0 + abs(edgeHorz2), edgeVert4 = abs(edgeVert1) * 2.0 + abs(edgeVert2);
+    float edgeHorz3 = -2.0 * lumaW + lumaNWSW, edgeVert3 = -2.0 * lumaS + lumaSWSE;
+    float edgeHorz = abs(edgeHorz3) + edgeHorz4, edgeVert = abs(edgeVert3) + edgeVert4;
+    float subpixNWSWNESE = lumaNWSW + lumaNESE;
+    float lengthSign = rcp.x;
+    bool horzSpan = edgeHorz >= edgeVert;
+    float subpixA = subpixNSWE * 2.0 + subpixNWSWNESE;
+    if (!horzSpan) lumaN = lumaW, lumaS = lumaE;
+    else lengthSign = rcp.y;
+    float subpixB = subpixA * (1.0 / 12.0) - lumaM;
+    float gradientN = lumaN - lumaM, gradientS = lumaS - lumaM;
+    float lumaNN = lumaN + lumaM, lumaSS = lumaS + lumaM;
+    bool pairN = abs(gradientN) >= abs(gradientS);
+    float gradient = max(abs(gradientN), abs(gradientS));
+    if (pairN) lengthSign = -lengthSign;
+    float subpixC = saturate(abs(subpixB) * subpixRcpRange);
+    float2 posB = uv;
+    float2 offNP = horzSpan ? float2(rcp.x, 0) : float2(0, rcp.y);
+    if (!horzSpan) posB.x += lengthSign * 0.5;
+    else posB.y += lengthSign * 0.5;
+    float2 posN = posB - offNP * kSteps[0], posP = posB + offNP * kSteps[0];
+    float subpixD = -2.0 * subpixC + 3.0;
+    float lumaEndN = FL(posN), lumaEndP = FL(posP);
+    float subpixE = subpixC * subpixC;
+    if (!pairN) lumaNN = lumaSS;
+    float gradientScaled = gradient * 0.25;
+    float lumaMM = lumaM - lumaNN * 0.5;
+    float subpixF = subpixD * subpixE;
+    bool lumaMLTZero = lumaMM < 0.0;
+    lumaEndN -= lumaNN * 0.5;
+    lumaEndP -= lumaNN * 0.5;
+    bool doneN = abs(lumaEndN) >= gradientScaled, doneP = abs(lumaEndP) >= gradientScaled;
+    if (!doneN) posN -= offNP * kSteps[1];
+    if (!doneP) posP += offNP * kSteps[1];
+    [unroll] for (int k = 2; k < 12; k++) {
+        if (doneN && doneP) break;
+        if (!doneN) lumaEndN = FL(posN) - lumaNN * 0.5;
+        if (!doneP) lumaEndP = FL(posP) - lumaNN * 0.5;
+        doneN = abs(lumaEndN) >= gradientScaled;
+        doneP = abs(lumaEndP) >= gradientScaled;
+        if (!doneN) posN -= offNP * kSteps[k];
+        if (!doneP) posP += offNP * kSteps[k];
+    }
+    float dstN = horzSpan ? uv.x - posN.x : uv.y - posN.y;
+    float dstP = horzSpan ? posP.x - uv.x : posP.y - uv.y;
+    bool goodSpanN = (lumaEndN < 0.0) != lumaMLTZero, goodSpanP = (lumaEndP < 0.0) != lumaMLTZero;
+    float spanLengthRcp = 1.0 / (dstP + dstN);
+    bool directionN = dstN < dstP;
+    float dst = min(dstN, dstP);
+    bool goodSpan = directionN ? goodSpanN : goodSpanP;
+    float subpixG = subpixF * subpixF;
+    float pixelOffset = dst * -spanLengthRcp + 0.5;
+    float subpixH = subpixG * 0.75;
+    float pixelOffsetGood = goodSpan ? pixelOffset : 0.0;
+    float pixelOffsetSubpix = max(pixelOffsetGood, subpixH);
+    if (!horzSpan) uv.x += pixelOffsetSubpix * lengthSign;
+    else uv.y += pixelOffsetSubpix * lengthSign;
+    return float4(scene.SampleLevel(lin, uv, 0).rgb, rgbM.a);
 }
 )";
 

@@ -25,7 +25,7 @@ struct Settings {
     uint32_t speakers = 0;           // the sound: 0 stereo, 1 5.1 surround (from the next start)
     uint32_t aniso = 16;             // 0 as the game asks
     bool smaa = true;                // SMAA on the shown frame
-    bool taa = true;                 // Anti-Aliasing: 4x MSAA (cut outs' edges as coverage) and temporal of the 3D
+    bool fxaa = true;                // Anti-Aliasing: FXAA on the 3D scene (the HUD is drawn over it after)
     bool motion_blur = false;        // what moves blurs along its motion (retired: off, not offered)
     uint32_t sharpening = 0;         // contrast adaptive sharpening of the shown frame, 0 to 10
     bool hdr = true;                 // the scene in 16 bit float: light added past white keeps its brightness

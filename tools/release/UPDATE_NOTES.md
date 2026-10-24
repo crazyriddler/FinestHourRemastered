@@ -168,6 +168,15 @@ The version installed is in `version.txt` beside the game. Unattended:
   more texture samplers than Direct3D 12 allows; Windows drivers let it pass, vkd3d-proton does not.
 - Vulkan renderer: changing the graphics preset could hang the GPU on some drivers (Intel on Linux): a newly made
   render target could be written to before it had finished being cleared.
+- Anti-Aliasing is now FXAA, on the 3D scene only: the HUD and text stay sharp. It replaces 4x MSAA with temporal
+  anti-aliasing, which blurred the picture in motion and cost much more; for a sharper image still, raise
+  Render Scale.
+- Surface Materials no longer shimmer as the view moves: their relief, highlights and reflections are filtered so
+  detail finer than a pixel no longer sparkles (the temporal anti-aliasing used to hide it).
+- Reflections are steady and worn surfaces reflect much less: the game's dirty metal floors no longer look wet,
+  and every material is a little rougher.
+- Smoke from a blast covers what is inside it evenly: figures and rubble in the smoke no longer show as black
+  shapes (the blast's flash shadows darkened the smoke over them).
 - Underground Passage (the American sewers): the red warning light by the ladder blinks red and see-through again,
   instead of a black block.
 - Defend the Factory: the metal beams no longer flicker between light and dark as the view turns.

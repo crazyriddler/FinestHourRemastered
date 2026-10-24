@@ -161,7 +161,7 @@ enum Preset { kVeryHigh, kHigh, kMedium, kLow, kOriginal, kCustom };
 using SBool = bool app::Settings::*;
 using SUint = uint32_t app::Settings::*;
 constexpr SBool kPresetFlags[] = {
-    &app::Settings::smaa, &app::Settings::taa, &app::Settings::bloom, &app::Settings::ao, &app::Settings::contact_shadows,
+    &app::Settings::smaa, &app::Settings::fxaa, &app::Settings::bloom, &app::Settings::ao, &app::Settings::contact_shadows,
     &app::Settings::dynamic_lights, &app::Settings::light_halos, &app::Settings::soft_particles, &app::Settings::heat_haze,
     &app::Settings::sun_shafts, &app::Settings::aim_dof, &app::Settings::explosion_flash, &app::Settings::damage_shake,
     &app::Settings::flash_shadows, &app::Settings::character_detail, &app::Settings::weapon_materials,
@@ -194,7 +194,7 @@ app::Settings PresetValues(int p) {
     }
     if (p >= kLow) {
         v.shadow_quality = 1, v.aniso = 4;
-        v.taa = false, v.smaa = true;  // (the cheap anti-aliasing kept)
+        v.smaa = true;
         v.clouds = v.sun_moon = v.lens_flare = v.pixel_lighting = v.materials = v.parallax = v.detail = false;
         v.height_blend = v.weapon_materials = v.dynamic_lights = v.water = v.soft_particles = v.heat_haze = false;
         v.shockwaves = v.aim_dof = v.snow_tracks = false;
@@ -356,7 +356,7 @@ std::vector<Page> BuildPages() {
                                     [&s] { return int(std::min<uint32_t>(s.shadow_quality, 3)); },
                                     [&s](int i) { s.shadow_quality = uint32_t(i); },
                                     "Real time shadows from the scene's main light: sharper and further with each step."));
-    graphics.items.push_back(Toggle("Anti-Aliasing", &s.taa, "4x MSAA and temporal anti-aliasing: smooth edges, fences and foliage."));
+    graphics.items.push_back(Toggle("Anti-Aliasing", &s.fxaa, "FXAA: smooth edges on the 3D scene, the HUD and text stay sharp."));
     graphics.items.push_back(Slider("Sharpening", &s.sharpening, 0, 10, 1, "%d", "Contrast adaptive sharpening.",
                                     [](int v) { return v ? Fmt("%d", v) : std::string("Off"); }));
     graphics.items.push_back(Toggle("Remastered Textures", &s.remaster, "Every texture redrawn at four times the detail."));

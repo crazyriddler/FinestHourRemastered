@@ -66,7 +66,7 @@ constexpr uint32_t kRtvCount = 1024;
 // the scene passes': its copy, two occlusion targets, four bloom levels
 constexpr uint32_t kPostRtvs = 4, kSceneRtvs = 16;
 constexpr uint32_t kSceneVel = 12;   // full size: the screen's velocity (MotionPass)
-constexpr uint32_t kSceneHist = 13;  // full size, the scene's format: the temporal anti-aliasing's history
+constexpr uint32_t kSceneFree = 13;  // (none: the temporal anti-aliasing's history once)
 constexpr uint32_t kSceneAoHalf = 14;  // half size, two: the occlusion made and blurred (aoup brings it to scene_[1])
 constexpr uint32_t kSceneFog = 10;  // half size: the volumetric haze (FogPass)
 constexpr uint32_t kSceneGi = 11;   // half size: one bounce of light (kSceneAo's gi)
@@ -74,10 +74,7 @@ constexpr uint32_t kSceneBloomEnd = 7, kSceneShadow = 7;
 constexpr uint32_t kSceneRays = 8, kSceneDof = 9;  // half size: the sun's shafts, the blurred scene for aiming
 constexpr uint32_t kSkyConstantsAt = 86 * 4;  // floats: kSceneCommon's sky[6] after p, lcount, lpos, lcol, heat, heatz
 constexpr uint32_t kGradeAt = kSkyConstantsAt + 24;  // floats: kSceneCommon's grade[4], after sky[6] (the 1536 bytes' end)
-constexpr uint32_t kMsaaKey = 0x1000;         // PsoKey::topo: drawn into the scene's multisampled targets (MSAA), the
-                                              // sample count at bits 16..19
 constexpr uint32_t kPointSpriteKey = 0x100000;  // PsoKey::topo: points, each a square through PointSpriteGsHlsl
-constexpr uint32_t kA2cKey = 0x2000;          // PsoKey::topo: cut out by its alpha, the cut's edge alpha to coverage
 constexpr uint32_t kTessKey = 0x800;          // PsoKey::topo: PN triangle tessellation (TessHlsl)
 constexpr uint32_t kGbufKey = 0x400;          // PsoKey::topo: a material's second target, the reflection buffer
 constexpr uint32_t kGbufMaskKey = 0x200000;   // PsoKey::topo: with kGbufKey, the reflection buffer bound but not written
@@ -912,7 +909,7 @@ private:
         UINT sref;
         rhi::View rt[2], ds;
         uint32_t rt_count;
-        bool has_ds, msaa;
+        bool has_ds;
     };
     std::vector<LateDraw> sheets_late_;
     uint64_t sheets_gen_ = 0;
@@ -1059,14 +1056,10 @@ private:
     bool motion_ok_ = false;  // this frame's velocity drawn
     float prev_view_[16] = {}, prev_proj_[16] = {};
     bool prev_cam_ok_ = false;
-    float taa_jit_[2] = {};    // this frame's jitter, clip space
-    uint32_t taa_index_ = 0;
-    bool taa_hist_ok_ = false;
-    int taa_level_ = -9;
     void RecordMotion(const State& s, const Assembled& a, const DrawShaders& sh, const PsoKey& k);
     void MotionPass(Target& rt);
     void MotionBlurPass(Target& rt);
-    void TaaPass(Target& rt);
+    void FxaaPass(Target& rt);
     void MotionParams(float out[28]);
     uint64_t ring_gen_ = 0;     // the frame's uploads so far went (Submit(true), a wrapped descriptor ring)
     uint64_t casters_gen_ = 0;  // ring_gen_ the casters were recorded in
@@ -1217,21 +1210,6 @@ private:
     bool gbuf_used_ = false;   // written this frame
     bool gbuf_bound_ = false;  // bound beside bound_rt_
     rhi::View GbufRtv() { return Cpu(rhi::Heap::Rtv, kRtvCount + kFrames + kPostRtvs + kSceneRtvs); }
-    rhi::View MsaaRtv() { return Cpu(rhi::Heap::Rtv, kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 2); }
-    rhi::View MsaaGbufRtv() { return Cpu(rhi::Heap::Rtv, kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 3); }
-    // 4x MSAA of the scene (Anti-Aliasing): the world drawn into these from the frame's first full clear of the scene's
-    // targets until anything reads them (MsaaResolve), then resolved into them and the frame goes on single sampled
-    Ref<rhi::Resource> msaa_rt_, msaa_ds_, msaa_gbuf_;
-    D3D12_RESOURCE_STATES msaa_rt_state_ = D3D12_RESOURCE_STATE_RENDER_TARGET, msaa_ds_state_ = D3D12_RESOURCE_STATE_DEPTH_WRITE,
-                          msaa_gbuf_state_ = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    uint32_t msaa_w_ = 0, msaa_h_ = 0, msaa_dsv_ = ~0u;
-    DXGI_FORMAT msaa_fmt_ = DXGI_FORMAT_UNKNOWN;
-    bool msaa_active_ = false, msaa_done_ = false, msaa_bound_ = false, msaa_gbuf_used_ = false;
-    Target* msaa_for_rt_ = nullptr;
-    Target* msaa_for_ds_ = nullptr;
-    uint32_t msaa_samples_ = 0;
-    bool EnsureMsaa(const Target& rt, uint32_t samples);
-    void MsaaResolve();
     // the sky's colour, steady (SkyAverage, kSkyAverageHlsl): a texel written in turn into each, the last one read
     rhi::View SkyAvgRtv(uint32_t i) { return Cpu(rhi::Heap::Rtv, kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 14 + i); }
     Ref<rhi::Resource> sky_avg_[2];
@@ -1887,26 +1865,6 @@ bool Renderer::BindTargets(const State& s) {
     Target* ds = s.rs[kRsZEnable] || s.rs[kRsStencilEnable] ? EnsureTarget(s.zs, true) : nullptr;
     if (rt && ds && (rt->w != ds->w || rt->h != ds->h)) ds = nullptr;
     if (!rt && !ds) return false;
-    // the scene's pair while the multisampled targets stand for them; anything else uses the scene's own: resolved
-    if (msaa_active_) {
-        bool pair = rt == msaa_for_rt_ && (ds == msaa_for_ds_ || !ds);
-        if (!pair && (rt == msaa_for_rt_ || ds == msaa_for_ds_)) MsaaResolve();
-        else if (pair) {
-            if (rt != bound_rt_ || ds != bound_ds_ || !msaa_bound_) {
-                rhi::View rh = MsaaRtv();
-                rhi::View dh = Cpu(rhi::Heap::Dsv, msaa_dsv_);
-                cl_->SetTargets(1, &rh, ds ? &dh : nullptr);
-                bound_rt_ = rt;
-                bound_ds_ = ds;
-                gbuf_bound_ = false;
-                msaa_bound_ = true;
-            }
-            rt->drawn = true;
-            if (ds) ds->drawn = true;
-            return true;
-        }
-    }
-    if (msaa_bound_) msaa_bound_ = false, bound_rt_ = bound_ds_ = nullptr;
     if (rt) {
         if (LatchCpuWrite(*rt)) UploadTarget(*rt, s.rt);
         Transition(rt->res.Get(), rt->state, D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -1957,16 +1915,6 @@ bool Renderer::BindGbuf(bool on) {
     }
     rhi::View rh[2] = {Cpu(rhi::Heap::Rtv, bound_rt_->view), GbufRtv()};
     rhi::View dh = bound_ds_ ? Cpu(rhi::Heap::Dsv, bound_ds_->view) : rhi::View{};
-    if (msaa_bound_) {
-        rh[0] = MsaaRtv(), rh[1] = MsaaGbufRtv();
-        dh = Cpu(rhi::Heap::Dsv, msaa_dsv_);
-        if (on && !msaa_gbuf_used_) {
-            const float zero[4] = {0, 0, 0, 0};
-            Transition(msaa_gbuf_.Get(), msaa_gbuf_state_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-            cl_->ClearRtv(MsaaGbufRtv(), zero, 0, nullptr);
-            msaa_gbuf_used_ = true;
-        }
-    }
     cl_->SetTargets(on ? 2 : 1, rh, bound_ds_ ? &dh : nullptr);
     gbuf_bound_ = on;
     return true;
@@ -1982,152 +1930,6 @@ float ShadowDebug() {
     return float(g_shadow_debug.load());
 }
 bool SmaaMode();
-
-// the multisampled colour, depth (and reflection buffer) for a scene's target of this size and format
-bool Renderer::EnsureMsaa(const Target& rt, uint32_t samples) {
-    // the count the card takes for every target (8 down to 4, 2)
-    auto supported = [&](DXGI_FORMAT f, uint32_t n) { return dev_->SupportsSamples(f, n); };
-    while (samples > 2 && !(supported(rt.fmt, samples) && supported(DXGI_FORMAT_D24_UNORM_S8_UINT, samples) &&
-                            supported(DXGI_FORMAT_R16G16B16A16_FLOAT, samples)))
-        samples /= 2;
-    if (msaa_rt_ && msaa_w_ == rt.w && msaa_h_ == rt.h && msaa_fmt_ == rt.fmt && msaa_samples_ == samples) return true;
-    if (msaa_rt_) Release(std::move(msaa_rt_));
-    if (msaa_ds_) Release(std::move(msaa_ds_));
-    if (msaa_gbuf_) Release(std::move(msaa_gbuf_));
-    if (msaa_dsv_ == ~0u) {
-        if (free_dsv_.empty()) return false;
-        msaa_dsv_ = free_dsv_.back();
-        free_dsv_.pop_back();
-    }
-    const rhi::HeapType hp = rhi::HeapType::Default;
-    D3D12_RESOURCE_DESC td = Texture2DDesc(rt.fmt, rt.w, rt.h);
-    td.SampleDesc.Count = samples;
-    td.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-    D3D12_CLEAR_VALUE cv{};
-    cv.Format = rt.fmt;
-    msaa_rt_state_ = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    if (!CreateResource(hp, td, msaa_rt_state_, &cv, msaa_rt_)) return false;
-    dev_->CreateRtv(msaa_rt_.Get(), nullptr, MsaaRtv());
-    D3D12_RESOURCE_DESC dd = Texture2DDesc(DXGI_FORMAT_R24G8_TYPELESS, rt.w, rt.h);
-    dd.SampleDesc.Count = samples;
-    dd.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
-    D3D12_CLEAR_VALUE dv{};
-    dv.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-    dv.DepthStencil.Depth = 1;
-    msaa_ds_state_ = D3D12_RESOURCE_STATE_DEPTH_WRITE;
-    if (!CreateResource(hp, dd, msaa_ds_state_, &dv, msaa_ds_)) {
-        msaa_rt_.Reset();
-        return false;
-    }
-    D3D12_DEPTH_STENCIL_VIEW_DESC dsv{};
-    dsv.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-    dsv.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMS;
-    dev_->CreateDsv(msaa_ds_.Get(), &dsv, Cpu(rhi::Heap::Dsv, msaa_dsv_));
-    D3D12_RESOURCE_DESC gd = Texture2DDesc(DXGI_FORMAT_R16G16B16A16_FLOAT, rt.w, rt.h);
-    gd.SampleDesc.Count = samples;
-    gd.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-    D3D12_CLEAR_VALUE gv{};
-    gv.Format = gd.Format;
-    msaa_gbuf_state_ = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    if (!CreateResource(hp, gd, msaa_gbuf_state_, &gv, msaa_gbuf_)) {
-        msaa_rt_.Reset(), msaa_ds_.Reset();
-        return false;
-    }
-    dev_->CreateRtv(msaa_gbuf_.Get(), nullptr, MsaaGbufRtv());
-    msaa_w_ = rt.w, msaa_h_ = rt.h, msaa_fmt_ = rt.fmt, msaa_samples_ = samples;
-    LOGR("d3d12: %ux MSAA targets %ux%u", samples, rt.w, rt.h);
-    return true;
-}
-
-// The multisampled scene into the scene's own targets: the colour (and reflection buffer) resolved, the depth the
-// nearest of its samples (a full screen pass writing depth); then the frame goes on single sampled
-void Renderer::MsaaResolve() {
-    if (!msaa_active_) return;
-    msaa_active_ = false;
-    Target* rt = msaa_for_rt_;
-    Target* ds = msaa_for_ds_;
-    msaa_bound_ = false;
-    bound_rt_ = bound_ds_ = nullptr;
-    gbuf_bound_ = false;
-    if (rt) {
-        Transition(msaa_rt_.Get(), msaa_rt_state_, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
-        Transition(rt->res.Get(), rt->state, D3D12_RESOURCE_STATE_RESOLVE_DEST);
-        cl_->Resolve(rt->res.Get(), msaa_rt_.Get(), rt->fmt);
-        Transition(rt->res.Get(), rt->state, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    }
-    if (msaa_gbuf_used_ && gbuf_ && gbuf_w_ == msaa_w_ && gbuf_h_ == msaa_h_) {
-        Transition(msaa_gbuf_.Get(), msaa_gbuf_state_, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
-        Transition(gbuf_.Get(), gbuf_state_, D3D12_RESOURCE_STATE_RESOLVE_DEST);
-        cl_->Resolve(gbuf_.Get(), msaa_gbuf_.Get(), DXGI_FORMAT_R16G16B16A16_FLOAT);
-        Transition(gbuf_.Get(), gbuf_state_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        gbuf_used_ = true;
-    }
-    if (ds) {
-        auto& pso = blit_psos_[~0ull - 1];  // (beside DepthCopy's, kDepthCopyKey)
-        if (!pso) {
-            static const char* kHlsl = R"(
-Texture2DMS<float> msd : register(t0);
-float4 vs(uint id : SV_VertexID) : SV_Position {
-    float2 t = float2((id << 1) & 2, id & 2);
-    return float4(t * float2(2, -2) + float2(-1, 1), 0, 1);
-}
-float ps(float4 pos : SV_Position) : SV_Depth {
-    int2 p = int2(pos.xy);
-    uint w, h, n;
-    msd.GetDimensions(w, h, n);
-    float z = msd.Load(p, 0);
-    [loop] for (uint s = 1; s < n; s++) z = min(z, msd.Load(p, s));
-    return z;
-}
-)";
-            uint64_t h;
-            rhi::Blob* vs = Compile(kHlsl, "vs", "vs_5_0", h);
-            rhi::Blob* ps = Compile(kHlsl, "ps", "ps_5_0", h);
-            if (vs && ps) {
-                rhi::PipelineDesc p{};
-                p.VS = vs;
-                p.PS = ps;
-                p.SampleMask = UINT_MAX;
-                p.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-                p.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-                p.RasterizerState.DepthClipEnable = FALSE;
-                p.DepthStencilState.DepthEnable = TRUE;
-                p.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
-                p.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-                p.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-                p.NumRenderTargets = 0;
-                p.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
-                p.SampleDesc.Count = 1;
-                if (!(pso = dev_->CreatePipeline(p))) LOGE("d3d12: MSAA depth resolve pipeline failed");
-            }
-        }
-        if (pso) {
-            Transition(msaa_ds_.Get(), msaa_ds_state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-            Transition(ds->res.Get(), ds->state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-            uint32_t slot = AllocSrvSlots(7);
-            for (uint32_t i = 0; i < 7; i++) {
-                D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
-                sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-                if (i == 0) {
-                    sv.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
-                    sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
-                } else {
-                    sv.Format = kBgra;
-                    sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-                    sv.Texture2D.MipLevels = 1;
-                }
-                dev_->CreateSrv(i == 0 ? msaa_ds_.Get() : nullptr, &sv, Cpu(rhi::Heap::Srv, slot + i));
-            }
-            rhi::View dh = Cpu(rhi::Heap::Dsv, ds->view);
-            cl_->SetTargets(0, nullptr, &dh);
-            SetFullViewport(ds->w, ds->h);
-            Alloc cb = Upload(256, 256);
-            DrawFullScreen(pso.Get(), cb.gpu, slot);
-            Transition(msaa_ds_.Get(), msaa_ds_state_, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-        }
-    }
-    msaa_for_rt_ = msaa_for_ds_ = nullptr;
-}
 
 constexpr uint64_t kDepthCopyKey = ~0ull;  // DepthCopy's pipeline in blit_psos_
 
@@ -2190,7 +1992,6 @@ bool Renderer::DepthCopy(const State& s) {
     auto di = targets_.find(SizedTargetKey(mem::VirtualFromPhysical(s.rt.data), true, gw, gh));
     auto si = targets_.find(SizedTargetKey(d.data, true, d.width, d.height));
     if (di == targets_.end() || si == targets_.end() || di == si) return false;
-    MsaaResolve();
     Target& dst = di->second;
     Target& src = si->second;
     rhi::Pipeline* pso = EnsureDepthCopyPipeline();
@@ -2473,10 +2274,13 @@ std::string VeilPixelHlsl() {
     return DrawHlslHead() + R"(
 Texture2D tex0 : register(t0);
 SamplerState smp0 : register(s0);
-float4 main(VOut i) : SV_Target {
+struct VeilOut { float4 occ : SV_Target0; float4 shadow : SV_Target1; };
+VeilOut main(VOut i) {
     float2 uv = i.tc0.xy / (i.tc0.w == 0 ? 1 : i.tc0.w);
     // (wherever any smoke is seen, nothing of the corners' shade behind it shows; only its quad's empty edge not)
-    return smoothstep(0.004, 0.035, tex0.Sample(smp0, uv).a * saturate(i.d0.a)).xxxx;
+    VeilOut o;
+    o.occ = o.shadow = smoothstep(0.004, 0.035, tex0.Sample(smp0, uv).a * saturate(i.d0.a)).xxxx;
+    return o;
 }
 )";
 }
@@ -3233,7 +3037,6 @@ void Renderer::Pass(const char* hlsl, const char* entry, DXGI_FORMAT rtv, rhi::V
 
 // a copy of the target to read while drawing to it
 rhi::Resource* Renderer::Feedback(Target& t) {
-    MsaaResolve();
     if (!t.fb) {
         const rhi::HeapType hp = rhi::HeapType::Default;
         D3D12_RESOURCE_DESC td = t.res->GetDesc();
@@ -3323,9 +3126,8 @@ void Renderer::FillPipelineDesc(const PsoKey& k, rhi::Blob* vs, rhi::Blob* ps,
     d.NumRenderTargets = k.has_rt ? ((k.topo & kGbufKey) ? 2 : 1) : 0;
     d.RTVFormats[0] = k.has_rt ? DXGI_FORMAT(k.rtfmt) : DXGI_FORMAT_UNKNOWN;
     d.DSVFormat = k.has_ds ? DXGI_FORMAT_D24_UNORM_S8_UINT : DXGI_FORMAT_UNKNOWN;
-    d.SampleDesc.Count = (k.topo & kMsaaKey) ? (k.topo >> 16) & 0xF : 1;
+    d.SampleDesc.Count = 1;
     // the cut out's soft edge (the pixel shader's alpha past the reference, alphatest) as samples covered
-    d.BlendState.AlphaToCoverageEnable = (k.topo & kMsaaKey) && (k.topo & kA2cKey);
 }
 
 rhi::Pipeline* Renderer::EnsurePipeline(const PsoKey& k, rhi::Blob* vs, rhi::Blob* ps) {
@@ -3370,7 +3172,6 @@ rhi::Resource* Renderer::BindTargetTexture(const State& s, int stage, const Text
                                                 DrawTextures& stages) {
     TexInfo& info = stages.info[stage];
     D3D12_SHADER_RESOURCE_VIEW_DESC& sv = stages.sv[stage];
-    if (msaa_active_ && (&t == msaa_for_rt_ || &t == msaa_for_ds_)) MsaaResolve();
     if (&t == draw_ds_) return nullptr;
     bool feedback = &t == draw_rt_;
     stages.rt[stage] = true;
@@ -3792,8 +3593,8 @@ bool Renderer::BindStageTexturesAndTargets(const State& s, DrawTextures& stages)
     // textures may have recorded copies that unbound the targets; when nothing moved (the same targets bound, as they
     // were, none made or dropped) the bind just done stands
     if (version == targets_version_ && bound_rt_ == draw_rt_ && bound_ds_ == draw_ds_ && (bound_rt_ || bound_ds_) &&
-        (msaa_bound_ || ((!bound_rt_ || bound_rt_->state == D3D12_RESOURCE_STATE_RENDER_TARGET) &&
-                         (!bound_ds_ || bound_ds_->state == D3D12_RESOURCE_STATE_DEPTH_WRITE))))
+        (!bound_rt_ || bound_rt_->state == D3D12_RESOURCE_STATE_RENDER_TARGET) &&
+        (!bound_ds_ || bound_ds_->state == D3D12_RESOURCE_STATE_DEPTH_WRITE))
         return true;
     return BindTargets(s);
 }
@@ -4696,7 +4497,7 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
     // frame left under it (a ghost of the world while the view turned; hidden when our clouds cover the sky). The
     // frame's first 3D draw on the screen-sized target clears it first (black)
     if (colour_frame_ != frame_ && !flat && bound_rt_ && !bound_rt_->depth && bound_rt_->gw == guest_w_ &&
-        bound_rt_->gh == guest_h_ && !msaa_bound_) {
+        bound_rt_->gh == guest_h_) {
         colour_frame_ = frame_;
         Transition(bound_rt_->res.Get(), bound_rt_->state, D3D12_RESOURCE_STATE_RENDER_TARGET);
         const float black[4] = {0, 0, 0, 1};
@@ -5011,16 +4812,6 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
     if (pk.gbuf && !no_gbuf && BindGbuf(true)) k.topo |= kGbufKey;
     else if (gbuf_bound_ && k.has_rt) k.topo |= kGbufKey | kGbufMaskKey;
     else BindGbuf(false);
-    // multisampled: the sample count, and what is cut out by its alpha (foliage, fences, wires; drawn solid, the
-    // alpha past a reference) with its edge as coverage: smooth, not stair stepped
-    bool a2c = false;
-    if (msaa_bound_) {
-        k.topo |= kMsaaKey | (msaa_samples_ << 16);
-        uint32_t f = Cmp(SimpleState(s, kMAlphaFunc));
-        if (SimpleState(s, kMAlphaTestEnable) && !k.blend && k.has_rt &&
-            (f == D3D12_COMPARISON_FUNC_GREATER || f == D3D12_COMPARISON_FUNC_GREATER_EQUAL))
-            k.topo |= kA2cKey, a2c = true;
-    }
     static const bool ssr_log = std::getenv("XBE_SSR_LOG") != nullptr;
     if (ssr_log) {
         static int n = 0;
@@ -5093,8 +4884,7 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
             }
         }
     }
-    if (!flat && bound_rt_ && bound_rt_ == scene_rt_) c.jitter[0] = taa_jit_[0], c.jitter[1] = taa_jit_[1];
-    c.jitter[2] = a2c ? 1.0f : 0.0f;  // alphatest: the edge as coverage
+    c.jitter[2] = 0;  // (the alpha test's edge as coverage: multisampled, no more)
     if (points) {
         auto f = [&](int rs) { return std::bit_cast<float>(s.rs[rs]); };
         c.pts0[0] = f(kRsPointSize), c.pts0[1] = f(kRsPointSizeMin), c.pts0[2] = f(kRsPointSizeMax);
@@ -5508,22 +5298,6 @@ void Renderer::Clear(const State& s, uint32_t count, const uint8_t* rects, uint3
     Target* rt = (flags & kClearTarget) ? EnsureTarget(s.rt, false) : nullptr;
     if (rt && !rt->depth && rt->gw == guest_w_ && rt->gh == guest_h_ && count == 0) colour_frame_ = frame_;
     Target* ds = (flags & (kClearZ | kClearStencil)) ? EnsureTarget(s.zs, true) : nullptr;
-    // the frame's first full clear of the scene's colour and depth: the multisampled pair from now on (Anti-Aliasing)
-    if (msaa_active_) MsaaResolve();
-    if (!msaa_done_ && app::Get().taa && !SmaaMode() && rt && ds && count == 0 && (flags & kClearTarget) && (flags & kClearZ) &&
-        !rt->depth && rt->gw == guest_w_ && rt->gh == guest_h_ && rt->w == ds->w && rt->h == ds->h && EnsureMsaa(*rt, 4)) {
-        float col[4];
-        Color(color, col);
-        for (int i = 0; t_range_ok(rt) && i < 3; i++) col[i] /= rt->range;
-        Transition(msaa_rt_.Get(), msaa_rt_state_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        Transition(msaa_ds_.Get(), msaa_ds_state_, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-        cl_->ClearRtv(MsaaRtv(), col, 0, nullptr);
-        cl_->ClearDsv(Cpu(rhi::Heap::Dsv, msaa_dsv_), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL,
-                                   std::clamp(z, 0.0f, 1.0f), UINT8(stencil), 0, nullptr);
-        msaa_active_ = true, msaa_done_ = true, msaa_gbuf_used_ = false;
-        msaa_for_rt_ = rt, msaa_for_ds_ = ds;
-        bound_rt_ = bound_ds_ = nullptr, msaa_bound_ = false;
-    }
     // the world's depth is about to go (the weapon in hand clears it): its occlusion first
     if (ds && ds == scene_ds_ && (flags & kClearZ) && !occlusion_done_) {
         SceneOcclusion();
@@ -5701,7 +5475,6 @@ void Renderer::CopyByRegion(const Target& src_t, rhi::Resource* src_res, D3D12_R
 void Renderer::Copy(const Surface& src, const Surface& dst, uint32_t count, uint32_t src_rects,
                         uint32_t dst_points) {
     PerfScope perf_copy{g_perf.copy, g_draw_timers};
-    MsaaResolve();
     Target* src_t = FindTarget(src, false);
     if (g_log_draws) LOGR("draw: copy %08X (%s) to %08X, %u rects", src.data, src_t ? "target" : "memory", dst.data, count);
     if (cap_) {
@@ -6099,19 +5872,24 @@ bool Renderer::ShadowDesc(const ShadowKey& k, rhi::PipelineDesc& d,
         d.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
     }
     if (k.topo & kVeilKey) {
-        // the veil: the draw's coverage over the occlusion (R8), lifting it towards 1 by as much (the source's
-        // value times what is left: o + a (1 - o)), through the scene's depth, not written
+        // the veil: the draw's coverage over the occlusion (R8) and the shadow mask's multiplier (its red), lifting
+        // them towards 1 by as much (the source's value times what is left: o + a (1 - o)), through the scene's
+        // depth, not written. The shadows too: a blast's flash cast the figures' and the rubble's shadows behind
+        // them, and the mask darkened the smoke drawn over them as well (black figures in the smoke)
         d.RasterizerState.SlopeScaledDepthBias = 0;
         d.RasterizerState.DepthBiasClamp = 0;
         d.RasterizerState.DepthClipEnable = TRUE;
         d.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
-        d.NumRenderTargets = 1;
+        d.NumRenderTargets = 2;
         d.RTVFormats[0] = DXGI_FORMAT_R8_UNORM;
+        d.RTVFormats[1] = DXGI_FORMAT_R8G8B8A8_UNORM;
         auto& b = d.BlendState.RenderTarget[0];
         b.BlendEnable = TRUE;
         b.SrcBlend = D3D12_BLEND_INV_DEST_COLOR, b.DestBlend = D3D12_BLEND_ONE, b.BlendOp = D3D12_BLEND_OP_ADD;
         b.SrcBlendAlpha = D3D12_BLEND_ONE, b.DestBlendAlpha = D3D12_BLEND_ZERO, b.BlendOpAlpha = D3D12_BLEND_OP_ADD;
         b.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_RED;
+        d.BlendState.IndependentBlendEnable = TRUE;
+        d.BlendState.RenderTarget[1] = b;  // (the mask's red alone: its shadow, cascade and share kept)
         d.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
     }
     if (k.topo & kGuardKey) {
@@ -6276,7 +6054,7 @@ void Renderer::ResolveLight() {
 // to the frame before's by what they draw (their shader, vertices, texture) and their order among the alike
 void Renderer::RecordMotion(const State& s, const Assembled& a, const DrawShaders& sh, const PsoKey& k) {
     const app::Settings& set = app::Get();
-    if (!(set.taa || set.motion_blur) || s.layout2d || a.pretransformed || sh.quad) return;
+    if (!set.motion_blur || s.layout2d || a.pretransformed || sh.quad) return;
     if (!bound_rt_ || bound_rt_ != scene_rt_ || bound_ds_ != scene_ds_ || a.topology != Topology::Triangles) return;
     // what is drawn into the depth (solid, cut out), and what is seen through (smoke, sparks, fire, tracers: over
     // what is behind them, flagged)
@@ -6386,7 +6164,7 @@ void Renderer::MotionParams(float out[28]) {
     if (!shadow::Invert(cam_view_, inv)) std::memcpy(inv, cam_view_, sizeof(inv));
     shadow::Mul(pv, pp, vp);
     shadow::Mul(inv, vp, cam);
-    float mv2[4] = {taa_jit_[0], taa_jit_[1], 0, 0};
+    float mv2[4] = {0, 0, 0, 0};
     std::memcpy(out, mv0, 16), std::memcpy(out + 4, mv1, 16), std::memcpy(out + 8, cam, 64), std::memcpy(out + 24, mv2, 16);
 }
 
@@ -6504,85 +6282,30 @@ void Renderer::MotionBlurPass(Target& rt) {
     bound_rt_ = bound_ds_ = nullptr;
 }
 
-// Temporal anti-aliasing on the scene's target (kTaaHlsl), before the 2D; its result kept as the next frame's history
-void Renderer::TaaPass(Target& rt) {
-    if (!scene_ds_ || !scene_[kSceneHist] || !motion_ok_) {
-        taa_hist_ok_ = false;
-        return;
-    }
-    std::string text = std::string(kPassVs) + kTaaHlsl;
-    rhi::Pipeline* pso = EnsurePassPipeline(text.c_str(), "taa", rt.fmt, -1);
+// Anti-Aliasing: FXAA on the scene's target (kFxaaHlsl), before the 2D is drawn over it
+void Renderer::FxaaPass(Target& rt) {
+    std::string text = std::string(kPassVs) + kFxaaHlsl;
+    rhi::Pipeline* pso = EnsurePassPipeline(text.c_str(), "fxaa", rt.fmt, -1);
     if (!pso) return;
-    // a cut (the camera far from where it was, or turned away), a new level: the history starts over
-    bool reset = !taa_hist_ok_ || !prev_cam_ok_ || g_level.load() != taa_level_;
-    taa_level_ = g_level.load();
-    if (!reset) {
-        float a[16], b[16];
-        if (shadow::Invert(cam_view_, a) && shadow::Invert(prev_view_, b)) {
-            float d[3] = {a[12] - b[12], a[13] - b[13], a[14] - b[14]};
-            float fwd = a[8] * b[8] + a[9] * b[9] + a[10] * b[10];
-            reset = d[0] * d[0] + d[1] * d[1] + d[2] * d[2] > 300.0f * 300.0f || fwd < 0.9f;
-        }
-    }
-    Target& ds = *scene_ds_;
     CopyScene(rt);
-    Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    Transition(scene_[kSceneHist].Get(), scene_state_[kSceneHist], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    std::pair<rhi::Resource*, DXGI_FORMAT> src[4] = {{scene_[0].Get(), rt.fmt},
-                                                      {scene_[kSceneHist].Get(), rt.fmt},
-                                                      {scene_[kSceneVel].Get(), DXGI_FORMAT_R16G16B16A16_FLOAT},
-                                                      {ds.res.Get(), DXGI_FORMAT_R24_UNORM_X8_TYPELESS}};
     uint32_t slot = AllocSrvSlots(7);
     for (uint32_t i = 0; i < 7; i++) {
         D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
-        sv.Format = i < 4 ? src[i].second : kBgra;
+        sv.Format = i == 0 ? rt.fmt : kBgra;
         sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         sv.Texture2D.MipLevels = 1;
-        dev_->CreateSrv(i < 4 ? src[i].first : nullptr, &sv, Cpu(rhi::Heap::Srv, slot + i));
+        dev_->CreateSrv(i == 0 ? scene_[0].Get() : nullptr, &sv, Cpu(rhi::Heap::Srv, slot + i));
     }
     Transition(rt.res.Get(), rt.state, D3D12_RESOURCE_STATE_RENDER_TARGET);
     rhi::View rh = Cpu(rhi::Heap::Rtv, rt.view);
     cl_->SetTargets(1, &rh, nullptr);
     SetFullViewport(rt.w, rt.h);
     Alloc cb = Upload(256, 256);
-    float tp[8] = {float(rt.w), float(rt.h), 1.0f / rt.w, 1.0f / rt.h, reset ? 1.0f : 0.0f, world_depth_saved_ ? 1.0f : 0.0f, 0, 0};
-    std::memcpy(cb.cpu, tp, sizeof(tp));
+    float f[4] = {1.0f / rt.w, 1.0f / rt.h, float(rt.w), float(rt.h)};
+    std::memcpy(cb.cpu, f, sizeof(f));
     DrawFullScreen(pso, cb.gpu, slot);
-    Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-    // the history: this frame's result
-    Transition(rt.res.Get(), rt.state, D3D12_RESOURCE_STATE_COPY_SOURCE);
-    Transition(scene_[kSceneHist].Get(), scene_state_[kSceneHist], D3D12_RESOURCE_STATE_COPY_DEST);
-    cl_->CopyResource(scene_[kSceneHist].Get(), rt.res.Get());
-    Transition(scene_[kSceneHist].Get(), scene_state_[kSceneHist], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    taa_hist_ok_ = true;
     bound_rt_ = bound_ds_ = nullptr;
-    // the film grain, past the history
-    if (app::Get().film_grain) {
-        std::string gt = std::string(kPassVs) + kGrainHlsl;
-        rhi::Pipeline* gp = EnsurePassPipeline(gt.c_str(), "grain", rt.fmt, -1);
-        if (!gp) return;
-        CopyScene(rt);
-        uint32_t gs = AllocSrvSlots(7);
-        for (uint32_t i = 0; i < 7; i++) {
-            D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
-            sv.Format = i == 0 ? rt.fmt : kBgra;
-            sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-            sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-            sv.Texture2D.MipLevels = 1;
-            dev_->CreateSrv(i == 0 ? scene_[0].Get() : nullptr, &sv, Cpu(rhi::Heap::Srv, gs + i));
-        }
-        Transition(rt.res.Get(), rt.state, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        rhi::View grh = Cpu(rhi::Heap::Rtv, rt.view);
-        cl_->SetTargets(1, &grh, nullptr);
-        SetFullViewport(rt.w, rt.h);
-        static const auto t0 = std::chrono::steady_clock::now();
-        float g[4] = {0.012f, std::fmod(std::chrono::duration<float>(std::chrono::steady_clock::now() - t0).count(), 1000.0f), 0, 0};
-        Alloc gcb = Upload(256, 256);
-        std::memcpy(gcb.cpu, g, sizeof(g));
-        DrawFullScreen(gp, gcb.gpu, gs);
-        bound_rt_ = bound_ds_ = nullptr;
-    }
 }
 
 void Renderer::RecordCaster(const State& s, const Assembled& a, const DrawShaders& sh, const PixelKey& pk, const PsoKey& k,
@@ -6905,17 +6628,15 @@ bool Renderer::KeepLate(const Assembled& a, const PsoKey& k, bool flat) {
     d.vc = last_vc_, d.dc = last_dc_, d.srv = last_srv_, d.smp = last_smp_;
     d.vp = cmd_.vp, d.sc = cmd_.sc, d.sref = cmd_.sref;
     std::memcpy(d.bf, cmd_.bf, sizeof(d.bf));
-    // the targets as bound for it (the multisampled pair, the reflection buffer beside)
-    d.msaa = msaa_bound_;
-    d.rt[0] = msaa_bound_ ? MsaaRtv() : Cpu(rhi::Heap::Rtv, bound_rt_->view);
-    d.rt[1] = msaa_bound_ ? MsaaGbufRtv() : GbufRtv();
+    // the targets as bound for it (the reflection buffer beside)
+    d.rt[0] = Cpu(rhi::Heap::Rtv, bound_rt_->view);
+    d.rt[1] = GbufRtv();
     d.rt_count = gbuf_bound_ ? 2 : 1;
     d.has_ds = bound_ds_ != nullptr;
-    d.ds = msaa_bound_ ? Cpu(rhi::Heap::Dsv, msaa_dsv_)
-                       : bound_ds_ ? Cpu(rhi::Heap::Dsv, bound_ds_->view) : rhi::View{};
+    d.ds = bound_ds_ ? Cpu(rhi::Heap::Dsv, bound_ds_->view) : rhi::View{};
     static const bool slog = std::getenv("XBE_SHEETS_LOG") != nullptr;
     if (slog && presents_ % 120 == 0)
-        LOGR("sheets: kept %zu count %u msaa %d rts %u ds %d zwrite %d zbias %d", sheets_late_.size(), d.count, int(d.msaa), d.rt_count,
+        LOGR("sheets: kept %zu count %u rts %u ds %d zwrite %d zbias %d", sheets_late_.size(), d.count, d.rt_count,
              int(d.has_ds), int(k.zwrite), k.zbias);
     sheets_late_.push_back(d);
     return true;
@@ -6928,24 +6649,12 @@ void Renderer::DrawLate() {
         sheets_late_.clear();
         return;
     }
-    if (sheets_late_[0].msaa) {
-        if (!msaa_active_) {
-            sheets_late_.clear();
-            return;
-        }
-        Transition(msaa_rt_.Get(), msaa_rt_state_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        Transition(msaa_ds_.Get(), msaa_ds_state_, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-    } else {
-        if (scene_rt_) Transition(scene_rt_->res.Get(), scene_rt_->state, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        if (scene_ds_) Transition(scene_ds_->res.Get(), scene_ds_->state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-    }
+    if (scene_rt_) Transition(scene_rt_->res.Get(), scene_rt_->state, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    if (scene_ds_) Transition(scene_ds_->res.Get(), scene_ds_->state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
     cl_->SetLayout(rhi::Layout::Main);
     cl_->SetTable(4, sun_table_);
     for (const LateDraw& d : sheets_late_) {
-        if (d.rt_count == 2) {
-            if (d.msaa) Transition(msaa_gbuf_.Get(), msaa_gbuf_state_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-            else Transition(gbuf_.Get(), gbuf_state_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        }
+        if (d.rt_count == 2) Transition(gbuf_.Get(), gbuf_state_, D3D12_RESOURCE_STATE_RENDER_TARGET);
         cl_->SetTargets(d.rt_count, d.rt, d.has_ds ? &d.ds : nullptr);
         SetPso(d.pso);
         cl_->SetCbv(0, d.vc);
@@ -6967,7 +6676,7 @@ void Renderer::DrawLate() {
     }
     sheets_late_.clear();
     bound_rt_ = bound_ds_ = nullptr;
-    gbuf_bound_ = false, msaa_bound_ = false;
+    gbuf_bound_ = false;
 }
 
 // the veil over the occlusion (scene_[1]): the see-through draws again through the scene's depth (DrawVeil's kVeilKey)
@@ -6983,10 +6692,11 @@ void Renderer::DrawVeil(Target& ds) {
     }
     Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_DEPTH_WRITE);  // (its view is not read only; not written)
     Transition(scene_[1].Get(), scene_state_[1], D3D12_RESOURCE_STATE_RENDER_TARGET);
-    rhi::View rh = SceneRtv(1), dh = Cpu(rhi::Heap::Dsv, ds.view);
+    Transition(scene_[kSceneShadow].Get(), scene_state_[kSceneShadow], D3D12_RESOURCE_STATE_RENDER_TARGET);
+    rhi::View rh[2] = {SceneRtv(1), SceneRtv(kSceneShadow)}, dh = Cpu(rhi::Heap::Dsv, ds.view);
     static const bool vlog = std::getenv("XBE_VEIL_LOG") != nullptr;
     if (vlog && presents_ % 120 == 0) LOGR("veil: %zu draws over the occlusion (%ux%u, scene_[1] %p)", veil_.size(), ds.w, ds.h, (void*)scene_[1].Get());
-    cl_->SetTargets(1, &rh, &dh);
+    cl_->SetTargets(2, rh, &dh);
     SetFullViewport(ds.w, ds.h);
     rhi::Pipeline* bound = nullptr;
     for (const VeilDraw& v : veil_) {
@@ -7006,6 +6716,7 @@ void Renderer::DrawVeil(Target& ds) {
     }
     veil_.clear();
     Transition(scene_[1].Get(), scene_state_[1], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    Transition(scene_[kSceneShadow].Get(), scene_state_[kSceneShadow], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     bound_rt_ = bound_ds_ = nullptr;
 }
 
@@ -8151,7 +7862,8 @@ bool Renderer::EnsureSceneTargets(DXGI_FORMAT fmt, uint32_t w, uint32_t h) {
     scene_w_ = scene_h_ = 0;
     const rhi::HeapType hp = rhi::HeapType::Default;
     for (uint32_t i = 0; i < kSceneRtvs; i++) {
-        DXGI_FORMAT f = i == 0 || i == kSceneHist ? fmt
+        if (i == kSceneFree) continue;
+        DXGI_FORMAT f = i == 0 ? fmt
                         : i < 3 || i >= kSceneAoHalf ? DXGI_FORMAT_R8_UNORM
                         : i == kSceneShadow       ? DXGI_FORMAT_R8G8B8A8_UNORM
                                                   : DXGI_FORMAT_R16G16B16A16_FLOAT;
@@ -8168,7 +7880,6 @@ bool Renderer::EnsureSceneTargets(DXGI_FORMAT fmt, uint32_t w, uint32_t h) {
         dev_->CreateRtv(scene_[i].Get(), nullptr, SceneRtv(i));
     }
     scene_w_ = w, scene_h_ = h, scene_fmt_ = fmt;
-    taa_hist_ok_ = false;
     return true;
 }
 
@@ -8702,7 +8413,6 @@ void Renderer::SaveWorldDepth(Target& ds) {
 bool Renderer::CopyDepth(Target& ds) {
     static const bool no_copy = std::getenv("XBE_TEST_NO_DEPTH_COPY") != nullptr;  // tests: no copy
     if (no_copy) return false;
-    MsaaResolve();
     D3D12_RESOURCE_DESC d = ds.res->GetDesc();
     if (world_depth_) {
         D3D12_RESOURCE_DESC have = world_depth_->GetDesc();
@@ -9000,7 +8710,6 @@ void Renderer::SceneParams(const Target& rt, float p[16]) {
 
 // the copy of the scene's target the passes read while they draw over it
 void Renderer::CopyScene(Target& rt) {
-    MsaaResolve();
     Transition(rt.res.Get(), rt.state, D3D12_RESOURCE_STATE_COPY_SOURCE);
     Transition(scene_[0].Get(), scene_state_[0], D3D12_RESOURCE_STATE_COPY_DEST);
     cl_->CopyResource(scene_[0].Get(), rt.res.Get());
@@ -9012,8 +8721,6 @@ void Renderer::CopyScene(Target& rt) {
 void Renderer::SceneOcclusion() {
     DrawLate();
     GpuMark("scene draws");
-    MsaaResolve();
-    GpuMark("msaa resolve");
     occlusion_done_ = true;
     const app::Settings& set = app::Get();
     ResolveLight();
@@ -9107,7 +8814,6 @@ void Renderer::SceneOcclusion() {
 
 // Bloom and the highlights' roll off on the 3D, before the 2D is drawn over it
 void Renderer::ScenePost() {
-    MsaaResolve();
     scene_done_ = true;
     if (!occlusion_done_) SceneOcclusion();
     const app::Settings& set = app::Get();
@@ -9120,7 +8826,7 @@ void Renderer::ScenePost() {
     uint32_t w = rt.w, h = rt.h;
     motion_ok_ = false;
     GpuMark("weapon and late draws");
-    if ((set.taa || set.motion_blur) && cam_ok_) MotionPass(rt);
+    if (set.motion_blur && cam_ok_) MotionPass(rt);
     GpuMark("motion");
     CopyScene(rt);
     if (set.auto_exposure) Exposure(rt);
@@ -9219,9 +8925,8 @@ void Renderer::ScenePost() {
     DrawSplashes(rt);
     GpuMark("splashes");
     if (set.motion_blur && motion_ok_) MotionBlurPass(rt);
-    if (set.taa) TaaPass(rt);
-    else taa_hist_ok_ = false;
-    GpuMark("taa");
+    if (set.fxaa) FxaaPass(rt);
+    GpuMark("fxaa");
     world_depth_saved_ = false;
 }
 
@@ -9712,7 +9417,7 @@ void Renderer::Grade() {
     }
     bool on = set.auto_exposure || set.color_grade;
     float g[16] = {exposure, sat, 1, on ? 1.0f : 0.0f, gain[0], gain[1], gain[2], 0, lift[0], lift[1], lift[2], 0,
-                   set.film_grain && !set.taa ? 0.012f : 0.0f, 0, 0, 0};
+                   set.film_grain ? 0.012f : 0.0f, 0, 0, 0};
     std::memcpy(grade_cb_, g, sizeof(g));
 }
 
@@ -10026,7 +9731,7 @@ rhi::Resource* Renderer::PostProcess(Target& t, DXGI_FORMAT& fmt) {
     const app::Settings& set = app::Get();
     rhi::Resource* src = t.res.Get();
     fmt = t.fmt;
-    const bool smaa = set.taa && SmaaMode();
+    const bool smaa = SmaaMode();
     if (!smaa && !set.sharpening) return src;
     if (!EnsurePostTargets(t.fmt, t.w, t.h)) return src;
     uint32_t w = t.w, h = t.h;
@@ -10656,8 +10361,6 @@ void LogPerf(Perf& rec_start_perf_) {
 }
 
 void Renderer::Present(const Surface& front) {
-    MsaaResolve();
-    msaa_done_ = false;
     sky_phase_ = true, sky_layer_ = 0;
     PerfScope perf_present{g_perf.present};
     if (cap_) {
@@ -10687,19 +10390,6 @@ void Renderer::Present(const Surface& front) {
     motion_.clear();
     prev_cam_ok_ = cam_ok_;
     if (cam_ok_) std::memcpy(prev_view_, cam_view_, sizeof(prev_view_)), std::memcpy(prev_proj_, cam_proj_, sizeof(prev_proj_));
-    // the next frame's jitter: Halton (2, 3) over 8 frames, within a pixel
-    if (app::Get().taa && scene_w_ > 0 && scene_h_ > 0) {
-        auto halton = [](uint32_t i, uint32_t b) {
-            float f = 1, r = 0;
-            for (; i > 0; i /= b) f /= float(b), r += f * float(i % b);
-            return r;
-        };
-        uint32_t i = taa_index_++ % 8 + 1;
-        taa_jit_[0] = (2 * halton(i, 2) - 1) / float(scene_w_);
-        taa_jit_[1] = (2 * halton(i, 3) - 1) / float(scene_h_);
-    } else {
-        taa_jit_[0] = taa_jit_[1] = 0;
-    }
     cam_ok_ = false;
     shadows_drawn_ = false;
     scene_drawn_ = scene_rt_ != nullptr;
@@ -10787,7 +10477,6 @@ bool Renderer::TargetStale(uint32_t data) const {
 
 // the CPU reads a surface the GPU drew: bring the pixels back
 void Renderer::Sync(uint32_t data, uint32_t) {
-    MsaaResolve();
     auto it = targets_.find(TargetMapKey(data, false));
     if (it == targets_.end() || !it->second.drawn || TargetStale(data)) return;
     PerfScope perf_sync{g_perf.sync};

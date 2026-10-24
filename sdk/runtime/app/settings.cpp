@@ -69,7 +69,7 @@ void Load() {
     s.speakers = t["speakers"].value_or(std::string(s.speakers ? "5.1" : "stereo")) == "5.1" ? 1 : 0;
     s.aniso = t["anisotropic_filtering"].value_or(s.aniso);
     s.smaa = t["smaa"].value_or(s.smaa);
-    s.taa = t["taa"].value_or(s.taa);
+    s.fxaa = t["fxaa"].value_or(s.fxaa);
     s.language = t["language"].value_or(s.language);
     // the remaster's look, on unless the player turned a part of it off (PC settings, Graphics and Effects)
     s.remaster = t["remaster"].value_or(s.remaster);
@@ -153,7 +153,7 @@ toml::table Table() {
                   {"speakers", s.speakers ? "5.1" : "stereo"},
                   {"anisotropic_filtering", int64_t(s.aniso)},
                   {"smaa", s.smaa},
-                  {"taa", s.taa},
+                  {"fxaa", s.fxaa},
                   {"language", int64_t(s.language)},
                   {"sharpening", int64_t(s.sharpening)},
                   {"shadow_quality", int64_t(s.shadow_quality)},

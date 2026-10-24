@@ -120,7 +120,7 @@ bool* Effect(const std::string& name) {
         {"pixel_lighting", &app::Settings::pixel_lighting},
         {"height_blend", &app::Settings::height_blend},
         {"smaa", &app::Settings::smaa},
-        {"taa", &app::Settings::taa},
+        {"fxaa", &app::Settings::fxaa},
         {"motion_blur", &app::Settings::motion_blur},
     };
     for (const auto& [n, member] : kEffects)

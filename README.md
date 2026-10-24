@@ -181,7 +181,7 @@ game's own look and textures. The render scale is never part of a preset: it sta
 - **Soft Particles**, **Animated Fire**, **Shockwaves** (an explosion's shock ripples through the air),
   **Explosion Flash**, **Barrel Heat** (the barrel shimmers and smokes after a burst).
 - **Hit Reactions**: soldiers flinch where bullets hit them. **Damage Shake**.
-- **Anti-Aliasing**: 4x MSAA with temporal anti-aliasing, **Motion Blur**, **Aim Depth of Field**.
+- **Anti-Aliasing**: FXAA on the 3D scene (the HUD and text stay sharp), **Aim Depth of Field**.
 
 ### Controls
 - **Keyboard and mouse** with raw input, sensitivity, invert and every action rebindable; mouse support in the menus.
@@ -273,7 +273,8 @@ Requirements: `pip install -r tools\remaster\requirements.txt` (PyTorch with CUD
 - [XenonRecomp](https://github.com/hedge-dev/XenonRecomp), [Zydis](https://github.com/zyantific/zydis),
   [toml++](https://github.com/marzer/tomlplusplus), [Dear ImGui](https://github.com/ocornut/imgui),
   [SDL](https://github.com/libsdl-org/SDL).
-- [SMAA](https://github.com/iryoku/smaa) by Jorge Jimenez et al.; sharpening after AMD FidelityFX CAS.
+- FXAA after Timothy Lottes (NVIDIA); [SMAA](https://github.com/iryoku/smaa) by Jorge Jimenez et al.; sharpening after
+  AMD FidelityFX CAS.
 - [PBRify_Remix](https://github.com/Kim2091/PBRify_Remix) by Kim2091 (CC0), [spandrel](https://github.com/chaiNNer-org/spandrel),
   [OpenCLIP](https://github.com/mlfoundations/open_clip), [DirectXTex](https://github.com/microsoft/DirectXTex).
 - [Input Prompts](https://kenney.nl/assets/input-prompts) by Kenney (CC0).

@@ -476,11 +476,18 @@ std::vector<Page> BuildPages() {
                                        [&s](int i) { s.language = codes[i]; },
                                        "Text and speech. The game starts again in it when you leave these settings."));
     }
-    // the Free Camera (the players asked for it; the testers' keys stay with developer = true)
-    general.items.push_back(Toggle("Free Camera", cod::wide::FlyEnabled(),
-                                       "Fly through the level and its walls: move with WASD or the left stick, look with the mouse or "
-                                       "the right stick, Jump up, Crouch down, Fire faster. The player stays still."));
     pages.push_back(std::move(general));
+
+    // the cheats (the players asked for them; all off by default; the testers' keys stay with developer = true)
+    Page cheats{"CHEATS", {}};
+    cheats.items.push_back(Toggle("Free Camera", cod::wide::FlyEnabled(),
+                                  "F11 in play flies the camera through the level and its walls, F11 again comes back: move with "
+                                  "WASD or the left stick, look with the mouse or the right stick, Jump up, Crouch down, Fire "
+                                  "faster. The player stays still."));
+    cheats.items.push_back(Toggle("God Mode", &c.god_mode, "You take no damage."));
+    cheats.items.push_back(Toggle("Infinite Ammo", &c.infinite_ammo, "Your weapons' ammunition, grenades and mines never run out."));
+    cheats.items.push_back(Toggle("No Reload", &c.no_reload, "The magazine of the weapon in your hands stays full: no reloading."));
+    pages.push_back(std::move(cheats));
     return pages;
 }
 
@@ -689,7 +696,7 @@ void Draw(double fps) {
     const float title_y = 62;
     Text(dl, g_title, 26 * sc.s, sc.P(308, title_y), kInk, Tr(pages[size_t(g_page)].title), 0.5f);
     {
-        float half = Width(g_title, 26 * sc.s, pages[size_t(g_page)].title) / sc.s / 2 + 26;
+        float half = Width(g_title, 26 * sc.s, Tr(pages[size_t(g_page)].title)) / sc.s / 2 + 26;
         Prompt(dl, sc.P(308 - half, title_y), 20 * sc.s, 'Q', "lb", "Q");
         Prompt(dl, sc.P(308 + half, title_y), 20 * sc.s, 'E', "rb", "E");
         // the page's dots

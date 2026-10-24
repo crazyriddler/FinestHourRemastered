@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <string>
 
+struct X86Context;
+
 namespace cod {
 
 struct Settings {
@@ -37,6 +39,11 @@ struct Settings {
     uint32_t stick_outer_boost = 115; // percent: the turn at the stick's full tilt against its curve's (the centre kept)
     bool invert_stick_y = false;
     bool look_acceleration = false;   // the game's eased turn (ramps up, drifts on after the stick lets go)
+    // cheats (PC Settings, Cheats; all off by default)
+    bool free_camera = false;    // F11 flies the camera through the level (common/widescreen.cpp)
+    bool god_mode = false;       // the player takes no damage
+    bool infinite_ammo = false;  // every weapon's reserve kept full, grenades and mines never run out
+    bool no_reload = false;      // the weapon in hand's magazine kept full: it never needs reloading
 };
 
 Settings& Get();
@@ -73,5 +80,7 @@ void EndLevel(int next);
 void GiveWeapon(int n);
 // tests: n of a thrown item (a grenade's, a mine's id), chosen as the one thrown next
 void GiveItem(int id, int count);
+// the cheats' work in the player's update (game/cheats.cpp, from game/player_tests.cpp's hook)
+void CheatsStep(X86Context& ctx, uint32_t player);
 
 }  // namespace cod

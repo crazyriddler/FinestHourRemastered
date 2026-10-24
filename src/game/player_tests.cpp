@@ -140,6 +140,11 @@ X86_EXTERN_FUNC(__imp__sub_000CE790);
 X86_FUNC(sub_000CE790) {
     uint32_t self = ctx.ecx;
     __imp__sub_000CE790(ctx, base);
+    if (self && self == cod::PlayerEntity()) {
+        uint32_t eax = ctx.eax;
+        cod::CheatsStep(ctx, self);
+        ctx.eax = eax;
+    }
     if (self && self == cod::PlayerEntity() && (g_want >= 0 || g_request.load() >= 0 || g_item.load() >= 0 || g_end_level.load() >= 0)) {
         uint32_t eax = ctx.eax;
         Step(ctx, self);

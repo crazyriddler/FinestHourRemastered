@@ -151,13 +151,18 @@ bool FreeCameraAt(float pos[3], float& yaw, float& pitch) {
 }
 
 namespace {
-bool g_fly_setting = false;
+std::atomic<bool> g_fly_on{false};    // F11 with the Free Camera cheat on
+std::atomic<bool> g_fly_test{false};  // tests and the testers' flight: flown whatever the setting
 std::atomic<bool> g_fly{false};
 float g_fly_pos[3] = {}, g_fly_yaw = 0, g_fly_pitch = 0;
 std::chrono::steady_clock::time_point g_fly_last;
 }  // namespace
 
-bool* FlyEnabled() { return &g_fly_setting; }
+bool* FlyEnabled() { return &cod::Get().free_camera; }
+void FlyToggle() {
+    if (cod::Get().free_camera) g_fly_on = !g_fly_on;
+}
+void FlyForce(bool on) { g_fly_test = on; }
 bool FlyActive() { return g_fly; }
 
 void FlyLook(int counts_x, int counts_y, float sensitivity) {
@@ -175,7 +180,8 @@ void FlyUpdate(input::Pad& pad) {
     auto now = std::chrono::steady_clock::now();
     float dt = std::clamp(std::chrono::duration<float>(now - g_fly_last).count(), 0.0f, 0.1f);
     g_fly_last = now;
-    bool want = g_fly_setting && !g_front_end;
+    if (!cod::Get().free_camera) g_fly_on = false;
+    bool want = (g_fly_on || g_fly_test) && !g_front_end;
     if (!want) {
         if (g_fly) SetFreeCameraAt(false, nullptr, 0, 0), g_fly = false;
         return;

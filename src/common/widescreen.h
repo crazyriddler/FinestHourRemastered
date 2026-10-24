@@ -32,10 +32,13 @@ bool FreeCameraAt(float pos[3], float& yaw, float& pitch);
 // a moving free camera (shots): from one place and view to another over seconds, eased, from now (FreeCameraAt
 // gives where it is each frame); then it stays at the end
 void SetFreeCameraPath(const float from[5], const float to[5], float seconds);
-// Free Camera (PC Options): the camera flown through the level, walls and all, the player held still. FlyEnabled the
-// setting (not saved); FlyActive while it flies; FlyLook the mouse's counts; FlyUpdate takes port 0's controller
-// (keyboard included) for the flight and hands the game a still one
+// Free Camera (PC Settings, Cheats): the camera flown through the level, walls and all, the player held still.
+// FlyEnabled the setting (F11 allowed); FlyToggle F11's, in and out of the flight; FlyForce tests' and the testers'
+// flight, whatever the setting; FlyActive while it flies; FlyLook the mouse's counts; FlyUpdate takes port 0's
+// controller (keyboard included) for the flight and hands the game a still one
 bool* FlyEnabled();
+void FlyToggle();
+void FlyForce(bool on);
 bool FlyActive();
 void FlyLook(int counts_x, int counts_y, float sensitivity);
 // tests ("fly at x y z yaw pitch"): the flying camera put there, as an F9 mark's "freecam at" gives it

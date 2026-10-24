@@ -238,9 +238,9 @@ void TestFlight() {
     if (on) {
         Command("god on");
         Command("noclip on");
-        *cod::wide::FlyEnabled() = true;
+        cod::wide::FlyForce(true);
     } else {
-        *cod::wide::FlyEnabled() = false;
+        cod::wide::FlyForce(false);
         Command("noclip off");
         Command("god off");
     }
@@ -256,6 +256,15 @@ bool Message(void* hwnd, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* resu
         return true;
     }
     // F9: a screenshot in logs/marks (named by the time), a mark in the log, and in the recording when there is one
+    // F11: in and out of the Free Camera, with its cheat on (PC Settings, Cheats)
+    if (msg == WM_KEYDOWN && wp == VK_F11) {
+        if (!(lp & (1 << 30)) && cod::Get().free_camera && !cod::OverlayOpen()) {
+            cod::wide::FlyToggle();
+            LOGR("free camera: F11");
+        }
+        *result = 0;
+        return true;
+    }
     if (msg == WM_KEYDOWN && wp == VK_F9 && !(lp & (1 << 30))) {
         static int marks = 0;
         char text[48];
@@ -643,7 +652,7 @@ void Command(const std::string& line_in) {
         if (line == "freecam off") cod::wide::SetFreeCamera(false, 0, 0, 0), cod::wide::SetFreeCameraAt(false, nullptr, 0, 0);
         if (float fa[5]; std::sscanf(line.c_str(), "fly at %f %f %f %f %f", &fa[0], &fa[1], &fa[2], &fa[3], &fa[4]) == 5)
             cod::wide::FlyAt(fa, fa[3], fa[4]), LOGR("fly: at %.1f %.1f %.1f yaw %.1f pitch %.1f", fa[0], fa[1], fa[2], fa[3], fa[4]);
-        if (line == "fly on" || line == "fly off") *cod::wide::FlyEnabled() = line == "fly on";  // the Free Camera (tests)
+        if (line == "fly on" || line == "fly off") cod::wide::FlyForce(line == "fly on");  // the Free Camera (tests)
         // the level script's checkpoint register (SetCheckPointRegister, 0x39450, keeps it at 0x3B4740): which
         // checkpoint a restart of the level starts from
         int cp = 0;
@@ -787,6 +796,10 @@ const app::GameInfo app::kGame = {
             {"stick_sensitivity_y", nullptr, &cod::Get().stick_sens_y},
             {"invert_stick_y", &cod::Get().invert_stick_y, nullptr},
             {"look_acceleration", &cod::Get().look_acceleration, nullptr},
+            {"free_camera", &cod::Get().free_camera, nullptr},
+            {"god_mode", &cod::Get().god_mode, nullptr},
+            {"infinite_ammo", &cod::Get().infinite_ammo, nullptr},
+            {"no_reload", &cod::Get().no_reload, nullptr},
         },
     .load = LoadSettings,
     .save = SaveSettings,

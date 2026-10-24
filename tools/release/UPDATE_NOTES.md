@@ -157,7 +157,9 @@ The version installed is in `version.txt` beside the game. Unattended:
   nobody can see the difference.
 - New Renderer option (PC Settings, Display): Direct3D 12 (the default) or Vulkan, the same picture through either.
   Vulkan is new and experimental; the change takes effect the next time the game starts.
-- Free Camera (PC Settings, General) is available to everyone, no longer only with a hidden setting.
+- New Cheats page in PC Settings, everything off by default: Free Camera (F11 in play flies the camera through the
+  level and its walls, F11 again comes back), God Mode, Infinite Ammo (grenades and mines included) and No Reload
+  (the magazine of the weapon in hand stays full).
 - Cloud Shadows is gone: it made no visible difference on the ground and cost GPU time every frame.
 - Linux (Wine, Proton): the game no longer crashes at the start with the Direct3D 12 renderer. It asked for a few
   more texture samplers than Direct3D 12 allows; Windows drivers let it pass, vkd3d-proton does not.

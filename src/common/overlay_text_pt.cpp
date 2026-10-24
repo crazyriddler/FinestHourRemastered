@@ -80,10 +80,20 @@ const PtRow kPtRows[] = {
      "Sombras em tempo real da luz principal da cena: mais nítidas e distantes a cada nível."},
     {"Anti-Aliasing", "Anti-aliasing"},
     {"Free Camera", "Câmera livre"},
-    {"Fly through the level and its walls: move with WASD or the left stick, look with the mouse or the right stick, "
-     "Jump up, Crouch down, Fire faster. The player stays still.",
-     "Voe pela fase e através das paredes: mova-se com WASD ou o analógico esquerdo, olhe com o mouse ou o analógico "
-     "direito, Pular para subir, Agachar para descer, Atirar para ir mais rápido. O jogador fica parado."},
+    {"F11 in play flies the camera through the level and its walls, F11 again comes back: move with WASD or the left "
+     "stick, look with the mouse or the right stick, Jump up, Crouch down, Fire faster. The player stays still.",
+     "F11 na partida faz a câmera voar pela fase e através das paredes, F11 de novo a traz de volta: mova-se com WASD ou "
+     "o analógico esquerdo, olhe com o mouse ou o analógico direito, Pular para subir, Agachar para descer, Atirar para "
+     "ir mais rápido. O jogador fica parado."},
+    {"CHEATS", "TRAPAÇAS"},
+    {"God Mode", "Modo Deus"},
+    {"You take no damage.", "Você não sofre dano."},
+    {"Infinite Ammo", "Munição infinita"},
+    {"Your weapons' ammunition, grenades and mines never run out.",
+     "A munição das suas armas, as granadas e as minas nunca acabam."},
+    {"No Reload", "Sem recarregar"},
+    {"The magazine of the weapon in your hands stays full: no reloading.",
+     "O pente da arma na sua mão fica sempre cheio: sem recarregar."},
     {"4x MSAA and temporal anti-aliasing: smooth edges, fences and foliage.",
      "MSAA 4x e anti-aliasing temporal: bordas, cercas e folhagens suaves."},
     {"TAA: temporal, the smoothest edges, fences and foliage. SMAA: on each frame alone.",

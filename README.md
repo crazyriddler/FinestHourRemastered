@@ -192,6 +192,13 @@ game's own look and textures. The render scale is never part of a preset: it sta
 - **Button Prompts** follow the device in hand: keys, Xbox, PlayStation or Switch buttons.
 - **Skip Intros**, **Language** (English, French, Italian, Spanish, Portuguese).
 
+### Cheats
+All off by default, in **PC Settings > Cheats**:
+- **Free Camera**: F11 in play flies the camera through the level and its walls, F11 again comes back.
+- **God Mode**: no damage.
+- **Infinite Ammo**: the weapons' ammunition, grenades and mines never run out.
+- **No Reload**: the magazine of the weapon in hand stays full.
+
 ## Controls
 
 | Action | Keys | Action | Keys |

@@ -1124,6 +1124,15 @@ void VkList::ZeroFill(VkRes* r) {
         VkClearColorValue z{};
         vkCmdClearColorImage(cb, r->img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &z, 1, &b.subresourceRange);
     }
+    // the clear done before what comes next: a copy into the image would otherwise pass as a copy after copies
+    // (Transition: no barrier between them) and race the clear (a write after write; seen after a preset change,
+    // and Intel's Linux driver lost the device after one)
+    b.srcStageMask = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
+    b.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    b.dstStageMask = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
+    b.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT | VK_ACCESS_2_TRANSFER_READ_BIT;
+    b.oldLayout = b.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    vkCmdPipelineBarrier2(cb, &di);
     r->use = kCopyDst;
 }
 

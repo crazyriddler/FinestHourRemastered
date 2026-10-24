@@ -451,6 +451,23 @@ float2 trailstep(O i) : SV_Target {
     }
     return t;
 }
+// the trail softened for the snow that reads it (q0.z the size): its depth through nine bilinear taps 1.5 texels
+// apart (about six texels, 15 cm: the prints are drawn texel by texel and a diagonal edge was a staircase), its
+// height the pressed taps' (a fringe of depth where no height was kept would not show, the edge back as it was)
+SamplerState tlin : register(s0);
+float2 trailblur(O i) : SV_Target {
+    float2 px = 1.0 / q0.zz;
+    float2 uv = (floor(i.pos.xy) + 0.5) * px;
+    float r = 0, g = 0, gw = 0;
+    [unroll] for (int y = -1; y <= 1; y++)
+        [unroll] for (int x = -1; x <= 1; x++) {
+            float w = (x == 0 ? 0.5 : 0.25) * (y == 0 ? 0.5 : 0.25);
+            float2 t = trail.SampleLevel(tlin, uv + float2(x, y) * 1.5 * px, 0);
+            r += t.r * w;
+            if (t.r != 0) g += t.g * w, gw += w;
+        }
+    return float2(r, gw > 0 ? g / gw : 0);
+}
 )";
 
 // The sky's colour, one texel (d3d12.cpp SkyAverage): the sky the frame shows (an even grid of 32 x 18 taps, those on

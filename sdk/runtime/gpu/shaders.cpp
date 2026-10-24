@@ -295,13 +295,17 @@ const char* kVsEpilogue = R"(
     // of the far edges on D3D12's, which upscaled leaves the last host columns and rows undrawn
     if (abs(p.x - (surf.x - 0.5)) < 1e-3) p.x = surf.x;
     if (abs(p.y - (surf.y - 0.5)) < 1e-3) p.y = surf.y;
+    // wind (Wind): the leaves' sway, its phase by their texture's place (a phase by the place on the screen turned with
+    // the camera: the leaves, and their shadows, swung as it turned); none in the shadows (NO_WIND: their casters)
+#ifndef NO_WIND
     if (mrefl.w > 0) {
         float tip = saturate(1.2 - oT0.y);
-        float ph = tess2.y + p.x * 0.004 + p.y * 0.003;
+        float ph = tess2.y + oT0.x * 6.0 + oT0.y * 4.0;
         float gust = sin(ph * 1.3) * 0.6 + sin(ph * 2.9 + 1.7) * 0.3 + sin(ph * 6.1) * 0.1;
         p.x += gust * tip * mrefl.w / max(p.w, 1);
         p.y += sin(ph * 2.3 + 0.5) * tip * mrefl.w * 0.25 / max(p.w, 1);
     }
+#endif
     p.x = p.x * layout2d.x + layout2d.y;
     p.y = p.y * layout2y.x + layout2y.y;
     q.x = p.x * 2 / surf.x - 1;
@@ -1396,6 +1400,7 @@ ProgramLightInfo ProgramLight(const std::vector<uint32_t>& prog, uint16_t regs) 
 }
 
 std::string ShadowVertexHlsl(std::string s) {
+    s = "#define NO_WIND\n" + s;
     auto sub = [&](const char* a, const std::string& b) {
         size_t p = s.find(a);
         if (p == std::string::npos) return false;
@@ -1877,14 +1882,23 @@ std::string MaterialShade(int i) {
         "        float4 t = trailf.SampleLevel(wavelin, tu, 0);\n"
         "        float near = saturate(2 - abs(dot(vp, trail[1]) - t.g) / 40) * tf;\n"
         "        if (near > 0 && t.r != 0) {\n"
+        // the field read smoothed (its texels are centimetres wide: a print's diagonal edge, read texel by texel, drew
+        // its rim as a saw of dark steps): the pressed depth a tent of five taps, the slope over two texels each way,
+        // three rows of it
         "            const float te = 1.0 / 2048;\n"
-        "            float dx = trailf.SampleLevel(wavelin, tu + float2(te, 0), 0).r - trailf.SampleLevel(wavelin, tu - float2(te, 0), 0).r;\n"
-        "            float dz = trailf.SampleLevel(wavelin, tu + float2(0, te), 0).r - trailf.SampleLevel(wavelin, tu - float2(0, te), 0).r;\n"
-        "            mN = normalize(mN + (wave[0].xyz * dx + wave[1].xyz * dz) * abs(trail[0].w) * near);\n"
-        // its walls lit or shaded by the light's side, the pressed snow darker, the rim a touch lighter
+        "            float r = (t.r * 2 + trailf.SampleLevel(wavelin, tu + float2(te, te), 0).r + trailf.SampleLevel(wavelin, tu + float2(-te, te), 0).r +\n"
+        "                       trailf.SampleLevel(wavelin, tu + float2(te, -te), 0).r + trailf.SampleLevel(wavelin, tu - float2(te, te), 0).r) / 6;\n"
+        "            float dx = 0, dz = 0;\n"
+        "            [unroll] for (int k = -1; k <= 1; k++) {\n"
+        "                float w = k == 0 ? 0.5 : 0.25, o = k * 1.5 * te;\n"
+        "                dx += (trailf.SampleLevel(wavelin, tu + float2(2 * te, o), 0).r - trailf.SampleLevel(wavelin, tu + float2(-2 * te, o), 0).r) * 0.5 * w;\n"
+        "                dz += (trailf.SampleLevel(wavelin, tu + float2(o, 2 * te), 0).r - trailf.SampleLevel(wavelin, tu + float2(o, -2 * te), 0).r) * 0.5 * w;\n"
+        "            }\n"
+        // deeper: the walls steeper, lit and shaded more by the light's side, the pressed snow darker
+        "            mN = normalize(mN + (wave[0].xyz * dx + wave[1].xyz * dz) * abs(trail[0].w) * 1.8 * near);\n"
         "            float3 sl = (wave[0].xyz * dx + wave[1].xyz * dz) * near;\n"
-        "            float side = clamp(1 + dot(sl, mtl[1].xyz) * 2.5, 0.55, 1.4);\n"
-        "            outc.rgb *= side * (1 - (0.32 * saturate(t.r) - 0.1 * saturate(-t.r)) * near);\n"
+        "            float side = clamp(1 + dot(sl, mtl[1].xyz) * 4.5, 0.4, 1.6);\n"
+        "            outc.rgb *= side * (1 - (0.48 * saturate(r) - 0.12 * saturate(-r)) * near);\n"
         "        }\n"
         // XBE_SNOW_DEBUG: pressed red, raised blue, where the height agrees green
         "        if (trail[0].w < 0) outc.rgb = float3(saturate(t.r), near * 0.5, saturate(-t.r) * 2) + 0.02 * tf;\n"

@@ -986,6 +986,8 @@ private:
     // Snow Tracks: the trail (kTrailHlsl, R16G16F twice) about the eye, the steps pressed in, the snow reading it
     Ref<rhi::Resource> trail_[2];
     D3D12_RESOURCE_STATES trail_st_[2] = {};
+    Ref<rhi::Resource> trail_soft_;  // the trail softened (kTrailHlsl trailblur), what the snow reads
+    D3D12_RESOURCE_STATES trail_soft_st_ = {};
     int trail_cur_ = 0;
     bool trail_ok_ = false, trail_bound_ = false;
     float trail_x0_ = 0, trail_z0_ = 0;
@@ -1657,7 +1659,7 @@ void Renderer::BindSunVisibility() {
     dev_->CreateSrv(wf, &sv, Cpu(rhi::Heap::Srv, slot + 1));
     wave_bound_ = wf != nullptr;
     // t9: the snow's trail (Snow Tracks)
-    rhi::Resource* tr = trail_ok_ && trail_[trail_cur_] && trail_st_[trail_cur_] == kRead ? trail_[trail_cur_].Get() : nullptr;
+    rhi::Resource* tr = trail_ok_ && trail_soft_ && trail_soft_st_ == kRead ? trail_soft_.Get() : nullptr;
     sv.Format = DXGI_FORMAT_R16G16_FLOAT;
     dev_->CreateSrv(tr, &sv, Cpu(rhi::Heap::Srv, slot + 2));
     trail_bound_ = tr != nullptr;
@@ -7457,6 +7459,23 @@ void Renderer::SnowTracks() {
         Pass(kTrailHlsl, "trailstep", DXGI_FORMAT_R16G16_FLOAT, WaveRtv(5 + uint32_t(dst)), n, n, srcs, fmts, q, -1);
         Transition(trail_[dst].Get(), trail_st_[dst], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         trail_cur_ = dst;
+        // the snow reads it softened
+        if (!trail_soft_) {
+            D3D12_RESOURCE_DESC td = Texture2DDesc(DXGI_FORMAT_R16G16_FLOAT, n, n);
+            td.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+            D3D12_CLEAR_VALUE cv{};
+            cv.Format = td.Format;
+            trail_soft_st_ = D3D12_RESOURCE_STATE_RENDER_TARGET;
+            if (CreateResource(rhi::HeapType::Default, td, trail_soft_st_, &cv, trail_soft_))
+                dev_->CreateRtv(trail_soft_.Get(), nullptr, WaveRtv(7));
+        }
+        if (trail_soft_) {
+            Transition(trail_soft_.Get(), trail_soft_st_, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            rhi::Resource* bsrc[3] = {trail_[dst].Get(), nullptr, nullptr};
+            DXGI_FORMAT bfmt[3] = {DXGI_FORMAT_R16G16_FLOAT, kBgra, kBgra};
+            Pass(kTrailHlsl, "trailblur", DXGI_FORMAT_R16G16_FLOAT, WaveRtv(7), n, n, bsrc, bfmt, q, -1);
+            Transition(trail_soft_.Get(), trail_soft_st_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        }
     }
     static const bool slog = std::getenv("XBE_SNOW_LOG") != nullptr;
     if (slog && !steps.empty()) LOGR("snow: %zu steps pressed, first at %.0f %.0f %.0f", steps.size(), steps[0].x, steps[0].y, steps[0].z);

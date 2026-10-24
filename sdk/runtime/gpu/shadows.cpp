@@ -140,7 +140,10 @@ Light Tracker::Resolve(double now, int level) {
                      direct, ambient);
             }
         } else {
-            std::memcpy(target_, dir, sizeof(dir));
+            // small turns: followed, but not the static models' light (the level's sun): its sum over the models in
+            // view leaned a few degrees as the camera turned and other models came into view, and the shadows on the
+            // ground swam with it; the level's light stays where it was found
+            if (!(source == kStatic && source_ == kStatic)) std::memcpy(target_, dir, sizeof(dir));
             pending_since_ = -1;
         }
         float k = 1 - float(std::exp(-dt / 0.15));

@@ -182,6 +182,10 @@ The version installed is in `version.txt` beside the game. Unattended:
 - The sewers' falling water from the pipe meets the water on the floor without a pale disc around its foot.
 - Wind now shows: the trees' leaves sway (and flags and cloth hung in the world, half as much). It moved them a tenth
   of a pixel before, and left out the trees the game lights as models.
+- Wind: the trees' shadows no longer jump about as the camera turns (the sway followed the leaves' place on the
+  screen; it follows the leaves themselves now, and the shadows stay still).
+- Shadows no longer drift a little on the ground as the camera turns: the level's sun keeps its direction.
+- Snow Tracks: the tanks' prints have smooth edges instead of stair-stepped lines, and look deeper.
 - Underground Passage (the American sewers): the red warning light by the ladder blinks red and see-through again,
   instead of a black block.
 - Defend the Factory: the metal beams no longer flicker between light and dark as the view turns.

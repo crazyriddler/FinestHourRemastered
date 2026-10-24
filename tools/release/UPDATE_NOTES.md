@@ -166,6 +166,8 @@ The version installed is in `version.txt` beside the game. Unattended:
 - Cloud Shadows is gone: it made no visible difference on the ground and cost GPU time every frame.
 - Linux (Wine, Proton): the game no longer crashes at the start with the Direct3D 12 renderer. It asked for a few
   more texture samplers than Direct3D 12 allows; Windows drivers let it pass, vkd3d-proton does not.
+- Vulkan renderer: changing the graphics preset could hang the GPU on some drivers (Intel on Linux): a newly made
+  render target could be written to before it had finished being cleared.
 - Underground Passage (the American sewers): the red warning light by the ladder blinks red and see-through again,
   instead of a black block.
 - Defend the Factory: the metal beams no longer flicker between light and dark as the view turns.

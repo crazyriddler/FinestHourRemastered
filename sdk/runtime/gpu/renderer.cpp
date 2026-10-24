@@ -79,6 +79,7 @@ constexpr uint32_t kTessKey = 0x800;          // PsoKey::topo: PN triangle tesse
 constexpr uint32_t kGbufKey = 0x400;          // PsoKey::topo: a material's second target, the reflection buffer
 constexpr uint32_t kGbufMaskKey = 0x200000;   // PsoKey::topo: with kGbufKey, the reflection buffer bound but not written
 constexpr uint32_t kWeaponCullKey = 0x200;    // PsoKey::topo: the weapon in hand's triangles through WeaponCullGsHlsl
+constexpr uint32_t kVeilLiftKey = 0x80000;  // ShadowKey::topo: with kVeilKey, it lifts the shadow mask too (smoke)
 constexpr uint32_t kVeilKey = 0x8000;         // ShadowKey::topo: a see-through draw's veil over the occlusion (DrawVeil)
 constexpr uint32_t kGuardKey = 0x4000;        // ShadowKey::topo: the guard band's depth pipeline (DrawGuard)
 constexpr uint32_t kTopKey = 0x10000;        // ShadowKey::topo: seen from above onto the wave field (WaterInteraction)
@@ -1930,6 +1931,7 @@ float ShadowDebug() {
     return float(g_shadow_debug.load());
 }
 bool SmaaMode();
+uint32_t SimpleState(const State& s, uint32_t method);
 
 constexpr uint64_t kDepthCopyKey = ~0ull;  // DepthCopy's pipeline in blit_psos_
 
@@ -3428,7 +3430,14 @@ rhi::Resource* Renderer::BindTexture(const State& s, int stage, DrawTextures& st
     sv.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
     sv.Texture2D.MipLevels = 1;
     TextureDesc d;
-    if (!s.textures[size_t(stage)]) return nullptr;
+    if (!s.textures[size_t(stage)]) {
+        // no texture reads white (Direct3D's rule: the American sewers' red warning light, tinted by its material; the
+        // 2D's fades), except in the world with the default white material: there it reads nothing, as before (the
+        // sewers' bright disc under the pipe's stream and the stream's pale base, level 5's shading over the beams)
+        const float* m = s.material.data();
+        if (!s.layout2d && m[0] == 1 && m[1] == 1 && m[2] == 1 && m[3] == 1) info.flags |= kTexUnusable;
+        return nullptr;
+    }
     if (!Describe(s.textures[size_t(stage)], d)) {
         info.flags |= kTexUnusable;
         return nullptr;
@@ -4934,15 +4943,22 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
     draw_character_ = (sh.prog && pk.lit) || (sh.fixed_transform && (sh.fk.light & 1));
     // (not the water: level 1's Volga is a skinned mesh its bones heave, lit by its program, but water all the same)
     if (stages.mat && stages.mat->m && stages.mat->m->water) draw_character_ = false;
-    // wind (Wind): foliage and flags (the remaster's classes), cut out by their alpha, sway; their strength in pixels
-    // at depth 1 (the program's position in pixels before the divide: about 6 cm at 1 m), the time
+    // wind (Wind): foliage and flags (the remaster's classes; not the cloth characters wear), cut out by their alpha,
+    // sway; their reach at the texture's top in the world (6 units, about 15 cm; cloth half), as pixels at depth 1
+    // through the camera's projection (the vertex shader divides by the depth), and the time. (It was 4% of the
+    // screen at depth 1: a tenth of a pixel ten metres off, never seen.)
     if (app::Get().wind && !flat && !tess_draw_ && draw_tex0_ && SimpleState(s, kMAlphaTestEnable) && occlusion_done_ == false) {
         if (const remaster::Material* m = remaster::Find(draw_tex0_)) {
-            if (m->sway > 0) {
+            // (the trees are lit models as characters are: foliage sways lit or not, cloth only where no one wears it)
+            if (m->sway >= 1 || (m->sway > 0 && !draw_character_)) {
                 static const auto t0 = std::chrono::steady_clock::now();
                 float t = std::chrono::duration<float>(std::chrono::steady_clock::now() - t0).count();
-                c.mrefl[3] = m->sway * float(size.h) * 0.04f;
+                float p11 = cam_ok_ && cam_proj_[5] > 0 ? cam_proj_[5] : 1.6f;
+                c.mrefl[3] = m->sway * 6.0f * float(size.h) * 0.5f * p11;
                 c.tess2[1] = std::fmod(t, 1000.0f);
+                static const bool wlog = std::getenv("XBE_WIND_LOG") != nullptr;  // tests: what sways
+                static std::unordered_set<uint64_t> told;
+                if (wlog && told.insert(draw_tex0_).second) LOGR("wind: tex %016llx sway %.1f", (unsigned long long)draw_tex0_, m->sway);
             }
         }
     }
@@ -5890,6 +5906,9 @@ bool Renderer::ShadowDesc(const ShadowKey& k, rhi::PipelineDesc& d,
         b.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_RED;
         d.BlendState.IndependentBlendEnable = TRUE;
         d.BlendState.RenderTarget[1] = b;  // (the mask's red alone: its shadow, cascade and share kept)
+        // (the shadows lifted under the effects' smoke and fire alone: a vehicle's dark blob under it, a decal, lifted
+        // the sun's shadow about it into a light patch)
+        if (!(k.topo & kVeilLiftKey)) d.BlendState.RenderTarget[1].RenderTargetWriteMask = 0;
         d.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
     }
     if (k.topo & kGuardKey) {
@@ -6577,7 +6596,7 @@ void Renderer::RecordVeil(const State& s, const Assembled& a, const DrawShaders&
     if (told_veil++ < 3) LOGR("veil: recorded tex %016llx count %u", (unsigned long long)draw_tex0_, a.index_count ? a.index_count : a.draw_count);
     if (!veil_ps_) return;
     ShadowKey key{};
-    key.vs = sh.vh, key.ps = veil_ps_, key.regs = k.regs, key.topo = (k.topo & 0xFF) | kVeilKey;
+    key.vs = sh.vh, key.ps = veil_ps_, key.regs = k.regs, key.topo = (k.topo & 0xFF) | kVeilKey | (draw_emitter_ ? kVeilLiftKey : 0);
     std::memcpy(key.elements, k.elements, sizeof(key.elements));
     rhi::Pipeline* pso = EnsureShadowPipeline(key);
     if (!pso) {

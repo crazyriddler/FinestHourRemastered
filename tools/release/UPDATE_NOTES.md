@@ -177,6 +177,11 @@ The version installed is in `version.txt` beside the game. Unattended:
   and every material is a little rougher.
 - Smoke from a blast covers what is inside it evenly: figures and rubble in the smoke no longer show as black
   shapes (the blast's flash shadows darkened the smoke over them).
+- Vehicles no longer leave a light patch under them in the shade (the smoke fix above also lifted the shadow under
+  their dark blob).
+- The sewers' falling water from the pipe meets the water on the floor without a pale disc around its foot.
+- Wind now shows: the trees' leaves sway (and flags and cloth hung in the world, half as much). It moved them a tenth
+  of a pixel before, and left out the trees the game lights as models.
 - Underground Passage (the American sewers): the red warning light by the ladder blinks red and see-through again,
   instead of a black block.
 - Defend the Factory: the metal beams no longer flicker between light and dark as the view turns.

@@ -58,6 +58,7 @@ weapons rounded) or Original.
 - [New: Remastered Models](#new-remastered-models)
 - [Requirements](#requirements)
 - [Installation](#installation)
+- [Linux and Steam Deck](#linux-and-steam-deck)
 - [Features](#features)
 - [Controls](#controls)
 - [Building from source](#building-from-source)
@@ -65,7 +66,7 @@ weapons rounded) or Original.
 - [Credits](#credits)
 
 ## Requirements
-- Windows 10 or 11, 64-bit.
+- Windows 10 or 11, 64-bit. On Linux and Steam Deck, through Proton (see [Linux and Steam Deck](#linux-and-steam-deck)).
 - A Direct3D 12 GPU with 4 GB of video memory or more. With every effect on at 1440p a recent mid-range GPU holds
   its 60 FPS.
 - About 10 GB of disk: the game's files, the remastered textures and models.
@@ -99,6 +100,22 @@ and saved games are kept. The installed version is in `version.txt` beside the g
 
 Settings are kept in `codfh.toml` beside the exe, saved games in `hdd`, the prepared shaders in `shadercache`.
 Choose **PC Settings** in the main menu (or press **F10** at any time) for every option below.
+
+## Linux and Steam Deck
+Linux is supported through **Proton** (or Wine with vkd3d-proton): the Windows build runs there as is, its Direct3D 12
+translated to Vulkan. The installer and the updater work under Proton and Wine too.
+
+1. Install the game with `FinestHourRemasteredSetup.exe` under Proton or Wine (in Steam: *Add a Non-Steam Game*,
+   pick the installer, and in its *Properties > Compatibility* force a recent Proton), as on Windows.
+2. Add the installed `CODFH.exe` to Steam the same way (Proton forced) and play. On the Steam Deck, the controller
+   works out of the box.
+3. Updates: run `FinestHourRemasteredUpdate.exe` the same way, or unattended:
+   `wine FinestHourRemasteredUpdate.exe --update "Z:\path	o\Finest Hour Remastered" --log update.log`.
+
+If something does not work under Proton, please [open an issue](https://github.com/crazyriddler/FinestHourRemastered/issues)
+with your distribution or device, the Proton version and the log (`logs\codfh.log` beside the game), and I'll fix it.
+A native Linux build may come later: the renderer is a heavily customised Direct3D 12 one, with its own shaders, and
+porting it is a large piece of work.
 
 ## Features
 

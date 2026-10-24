@@ -110,7 +110,7 @@ translated to Vulkan. The installer and the updater work under Proton and Wine t
 2. Add the installed `CODFH.exe` to Steam the same way (Proton forced) and play. On the Steam Deck, the controller
    works out of the box.
 3. Updates: run `FinestHourRemasteredUpdate.exe` the same way, or unattended:
-   `wine FinestHourRemasteredUpdate.exe --update "Z:\path	o\Finest Hour Remastered" --log update.log`.
+   `wine FinestHourRemasteredUpdate.exe --update "Z:\home\you\Games\Finest Hour Remastered" --log update.log`.
 
 If something does not work under Proton, please [open an issue](https://github.com/crazyriddler/FinestHourRemastered/issues)
 with your distribution or device, the Proton version and the log (`logs\codfh.log` beside the game), and I'll fix it.

@@ -319,8 +319,9 @@ private:
         size_t first = cur_->bytes.size();
         // (the simple states and the vertex program's constants: the pieces written since, MarkSimple and MarkVsc;
         // ranges_[0] starts with simple's 128 pieces, ranges_[2] with vsc's 48)
-        const std::array<uint64_t, 2> simple = g_simple_dirty;
-        const uint64_t vsc = g_vsc_dirty;
+        static const bool all = std::getenv("XBE_TEST_ALL_DIRTY") != nullptr;  // tests: every piece compared
+        const std::array<uint64_t, 2> simple = all ? std::array<uint64_t, 2>{~0ull, ~0ull} : g_simple_dirty;
+        const uint64_t vsc = all ? ~0ull : g_vsc_dirty;
         g_simple_dirty = {0, 0}, g_vsc_dirty = 0;
         uint8_t* sent = reinterpret_cast<uint8_t*>(&sent_);
         for (int w = 0; w < 2; w++)

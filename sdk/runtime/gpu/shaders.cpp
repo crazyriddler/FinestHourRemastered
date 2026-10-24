@@ -1408,7 +1408,7 @@ std::string ShadowVertexHlsl(std::string s) {
     if (sub("VOut main(VIn i) {", "VOut vmain(VIn i) {")) param = "VIn i", arg = "i";
     else if (sub("VOut main(VRaw ri) {", "VOut vmain(VRaw ri) {")) param = "VRaw ri", arg = "ri";
     else return {};
-    s += "struct SOut { float4 pos : SV_Position; float4 tc0 : TEXCOORD0; float4 clip : SV_ClipDistance0; float back : SV_ClipDistance1; };\n";
+    s += "struct SOut { float4 pos : SV_Position; float4 tc0 : TEXCOORD0; float da : TEXCOORD1; float4 clip : SV_ClipDistance0; float back : SV_ClipDistance1; };\n";
     s += "SOut main(" + param + ", uint sid : SV_InstanceID) {\n    VOut o = vmain(" + arg + ");\n";
     s += R"(    uint k = sid + (uint)shv.z;
     // the camera's clip position is linear in its view space: x = view x * P00, y = view y * P11, w = view depth
@@ -1421,6 +1421,7 @@ std::string ShadowVertexHlsl(std::string s) {
     // out; what lies just past it is flattened onto its near end
     r.back = l.z + 0.15;
     r.tc0 = o.tc0;
+    r.da = o.d0.a;
     return r;
 }
 )";
@@ -1469,10 +1470,10 @@ std::string GuardVertexHlsl(std::string s) {
     if (sub("VOut main(VIn i) {", "VOut vmain(VIn i) {")) param = "VIn i", arg = "i";
     else if (sub("VOut main(VRaw ri) {", "VOut vmain(VRaw ri) {")) param = "VRaw ri", arg = "ri";
     else return {};
-    s += "struct SOut { float4 pos : SV_Position; float4 tc0 : TEXCOORD0; float4 clip : SV_ClipDistance0; float back : SV_ClipDistance1; };\n";
+    s += "struct SOut { float4 pos : SV_Position; float4 tc0 : TEXCOORD0; float da : TEXCOORD1; float4 clip : SV_ClipDistance0; float back : SV_ClipDistance1; };\n";
     s += "SOut main(" + param + ") {\n    VOut o = vmain(" + arg + ");\n";
     s += F("    SOut r;\n    r.pos = float4(o.cpos.xy * %.6f, o.cpos.zw);\n", kGuardScale);
-    s += "    r.clip = 1;\n    r.back = 1;\n    r.tc0 = o.tc0;\n    return r;\n}\n";
+    s += "    r.clip = 1;\n    r.back = 1;\n    r.tc0 = o.tc0;\n    r.da = o.d0.a;\n    return r;\n}\n";
     return s;
 }
 
@@ -1509,11 +1510,11 @@ std::string MotionVertexHlsl(const std::string& s, unsigned wvp_at) {
     return out;
 }
 
-std::string ShadowAlphaHlsl(bool proj) {
+std::string ShadowAlphaHlsl(bool proj, bool blended) {
     std::string s = R"(cbuffer DC : register(b1) { float4 surf; float4 fogp; float4 fogcolor; float4 misc; };
 Texture2D tex0 : register(t0);
 SamplerState smp0 : register(s0);
-struct SOut { float4 pos : SV_Position; float4 tc0 : TEXCOORD0; float4 clip : SV_ClipDistance0; float back : SV_ClipDistance1; };
+struct SOut { float4 pos : SV_Position; float4 tc0 : TEXCOORD0; float da : TEXCOORD1; float4 clip : SV_ClipDistance0; float back : SV_ClipDistance1; };
 void main(SOut i) {
 )";
     s += proj ? "    float2 uv = i.tc0.xy / (i.tc0.w == 0 ? 1 : i.tc0.w);\n" : "    float2 uv = i.tc0.xy;\n";
@@ -1522,8 +1523,12 @@ void main(SOut i) {
     int v = (int)round(a * 255), r = (int)misc.x;
     bool ok = f == 0 ? false : f == 1 ? v < r : f == 2 ? v == r : f == 3 ? v <= r : f == 4 ? v > r : f == 5 ? v != r : f == 6 ? v >= r : true;
     if (!ok || a == 0) discard;
-}
 )";
+    // a blended layer (rubble and dirt laid over the ground, its colour's alpha fading it out): seen through where its
+    // colour's alpha is low, there it casts nothing (it threw a solid shadow the shape of its whole mesh, level 8's
+    // dark patch before the tank); only what is drawn mostly opaque casts
+    if (blended) s += "    if (a * i.da < 0.5) discard;\n";
+    s += "}\n";
     return s;
 }
 
@@ -1740,6 +1745,16 @@ std::string MaterialSetup(int i, const std::string& uv) {
     s += "float3 mT = mDyP * mU1.x + mDxP * mU2.x, mB = mDyP * mU1.y + mDxP * mU2.y;\n";
     s += "float mInv = rsqrt(max(max(dot(mT, mT), dot(mB, mB)), 1e-30));\n";
     s += "mT *= mInv; mB *= mInv;\n";
+    // the texture stretched over the surface (its texels several times longer one way than the other in the world:
+    // the game's own mapping along a wall or a beam): the relief, the walk and the detail fade out there, else the
+    // remastered maps drawn out with it read as streaks
+    s += "float mJd = mU1.x * mU2.y - mU2.x * mU1.y;\n"
+         "float3 mPu = mDx * mU2.y - mDy * mU1.y, mPv = mDy * mU1.x - mDx * mU2.x;\n"
+         // (the stretch's own axes, sheared or not: the ratio of the mapping's singular values, from its two sides' lengths
+         // and the area between them)
+         "float mSs = dot(mPu, mPu) + dot(mPv, mPv), mSa = length(cross(mPu, mPv));\n"
+         "float mSq = sqrt(max(mSs * mSs - 4 * mSa * mSa, 0));\n"
+         "float mFlat = abs(mJd) > 1e-20 ? 1 - smoothstep(2, 4, sqrt((mSs + mSq) / max(mSs - mSq, 1e-30 * mSs + 1e-30))) : 1;\n";
     s += "float3 mV = normalize(-mP);\n";
     // parallax occlusion: the view walks into the height field, nearer surfaces only
     // (from 14 m on the walk moves nothing: skipped). Its taps (and the soft height below) through s5, trilinear:
@@ -1750,7 +1765,7 @@ std::string MaterialSetup(int i, const std::string& uv) {
            "    float fade = mFade;\n"
            "    float steps = lerp(10, 40, 1 - saturate(vt.z));\n"
            "    float uvw = sqrt((dot(mU1, mU1) + dot(mU2, mU2)) / max(dot(mDx, mDx) + dot(mDy, mDy), 1e-12));\n"
-           "    float depth = min(mtl[2].y * mtl[3].z * uvw, mtl[2].y);\n"
+           "    float depth = min(mtl[2].y * mtl[3].z * uvw, mtl[2].y) * mFlat;\n"
            "    float2 walk = -vt.xy / max(vt.z, 0.45) * depth * fade * lerp(0.35, 1, saturate(vt.z * 1.6));\n"
            // (the whole walk's length on the screen in pixels: under half a pixel it moves nothing, and a step a pixel
            // and a third or so is all a shorter one needs; the steps by the angle stand where it is long)
@@ -1808,7 +1823,7 @@ std::string MaterialShade(int i) {
         "    }\n"
         "}\n"
         "if (mtl[0].w > 0) {\n"
-        "    float3 nt = float3(mNt * float2(1, mtl[0].z) * mtl[2].x, 0);\n"
+        "    float3 nt = float3(mNt * float2(1, mtl[0].z) * mtl[2].x * mFlat, 0);\n"
         "    if (mtl[2].w >= 0 && mtl[3].y > 0) {\n"
         "        float fd = saturate(1.6 - mP.z / (250 * mtl[3].z)) * mtl[3].y;\n"
         "        if (fd > 0) nt.xy += (mdet.SampleGrad(" + MatSampler(i) + ", float3(frac(mUv * 2), mtl[2].w), mU1 * 2, mU2 * 2).rg * 2 - 1)"
@@ -1902,7 +1917,7 @@ std::string MaterialShade(int i) {
         "    }\n"
         "    float sp = min(mMat.a * pow(saturate(dot(sN, H)), gl) * (gl + 8) / 25.1, 0.6) * abs(mtl[1].w) * sun;\n"
         "    float3 shaded = outc.rgb * lerp(1, lf, mtl[0].w) * cav + sp * lit * saturate(dot(mNs, L) * 2 + 0.3);\n"
-        "    outc.rgb = lerp(outc.rgb, shaded, saturate(fogin.a));\n"
+        "    outc.rgb = lerp(outc.rgb, shaded, saturate(fogin.a) * mFlat);\n"
         "    if (mtl[3].w > 0) {\n"
         // (the layer's cover as drawn, its texture's part taken softer: the vertices' fade times the soft cover; the
         // blend eased in over the texture's cover from 60% to 85%, not switched on at 95%: blotches with hard edges)
@@ -1927,6 +1942,7 @@ std::string MaterialShade(int i) {
         "    if (mtl[3].x == 1) outc.rgb = mN * 0.5 + 0.5;\n"
         "    if (mtl[3].x == 2) outc.rgb = lf * 0.5 * cav;\n"
         "    if (mtl[3].x == 3) outc.rgb = mNs * 0.5 + 0.5;\n"
+        "    if (mtl[3].x == 5) outc.rgb = float3(1 - mFlat, mFlat, 0);\n"  // (the stretched texture's fade: red where gone)
         "}\n"
         // Detail Textures: the material's grain (a grey map, mean 0.5) in light and shade over the colour, tiled finer
         // than the texture's own pixels (a coarse grain about 1.3 detail pixels to one of the original's, a finer one 2.5
@@ -1941,7 +1957,7 @@ std::string MaterialShade(int i) {
         "    float g = 0;\n"
         "    if (f1 > 0) g += (mdet.SampleGrad(" + MatSampler(i) + ", float3(mUv * rep, dtl.x), mU1 * rep, mU2 * rep).r - 0.5) * 2 * f1;\n"
         "    if (f2 > 0) g += (mdet.SampleGrad(" + MatSampler(i) + ", float3(mUv * rep * 2.5, dtl.x), mU1 * rep * 2.5, mU2 * rep * 2.5).g - 0.5) * 1.2 * f2;\n"
-        "    outc.rgb *= lerp(1, 1 + 0.3 * tanh(g * dtl.y * 1.2), fogin.a * (1 - skin));  // (soft, at most a third either way: a deep trough went black)\n"
+        "    outc.rgb *= lerp(1, 1 + 0.3 * tanh(g * dtl.y * 1.2), fogin.a * (1 - skin) * mFlat);  // (soft, at most a third either way: a deep trough went black)\n"
         "}\n";
 }
 
@@ -2071,10 +2087,11 @@ std::string PixelHlsl(const PixelKey& k) {
             else if (t.kind == kTex2D) body += F("float4 t%d = tex%d.Sample(smp%d, %s);\n", i, i, i, uv.c_str());
             else if (t.kind == kTexCube && !(cube = Hooks().Cube(t, i, F("tc%d.xyz", i))).empty()) body += F("float4 t%d = %s;\n", i, cube.c_str());
             else if (t.kind) body += F("float4 t%d = tex%d.Sample(smp%d, tc%d.xyz);\n", i, i, i, i);
-            // a stage that reads a texture with none set: the console's texture unit is off and reads 0 (colour and
-            // alpha: xemu's PS_TEXTUREMODES_NONE), so a draw modulating it is unseen. As white, the sewers' lamp lit
-            // passes (a waterfall's second pass, a splash's disc under a pipe) came out as flat white shapes
-            else body += F("float4 t%d = float4(0,0,0,0);\n", i);
+            // a stage that reads a texture with none set reads white, as Direct3D's (the American sewers' red warning
+            // light by the ladder: its red material fading in, see-through, then whole); one whose texture is set but
+            // cannot be read (kTexUnusable) reads 0, its draw unseen (the sewers' lamp lit passes, a waterfall's
+            // second pass and a splash's disc under a pipe, as flat white shapes)
+            else body += F("float4 t%d = float4(%s);\n", i, (t.flags & kTexUnusable) ? "0,0,0,0" : "1,1,1,1");
             body += Hooks().Fetched(t, i);
             if ((k.alphakill >> i) & 1) body += F("if (t%d.a == 0) discard;\n", i);
             const char* dst = f[8] == 5 ? "tmp" : "cur";

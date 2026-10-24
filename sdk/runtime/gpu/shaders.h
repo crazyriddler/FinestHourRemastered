@@ -21,6 +21,7 @@ struct TexInfo {
 enum : uint8_t {
     kTexWide = 4,  // an upscaled target shrunk by the pass: each tap averaged over console texels
     kTexMaterial = 8,  // remastered: normal and material maps at t4 and t5, constants in mtl (one stage a draw)
+    kTexUnusable = 16,  // a texture set that cannot be read (its header not one known): the stage reads 0
 };
 
 struct PixelKey {
@@ -97,7 +98,7 @@ void RunCpuProgram(const CpuProgram& p, const float in[16][4], const std::array<
 std::string ShadowVertexHlsl(std::string vs);
 // the casters' pixel shader where the draw's alpha test cuts the shape out of stage 0's texture (proj: coordinates
 // divided by w)
-std::string ShadowAlphaHlsl(bool proj);
+std::string ShadowAlphaHlsl(bool proj, bool blended);
 // The motion variant of a draw's vertex shader (d3d12.cpp MotionPass): its main run twice, with this frame's constants
 // and the frame before's (b2 its vertex constants, b3 its draw constants: wvp at the float4 wvp_at), out both clip
 // positions; entry "motion"

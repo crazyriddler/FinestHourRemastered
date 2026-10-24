@@ -58,7 +58,9 @@ constexpr uint64_t kUploadSize = 64ull << 20;
 // a draw starting with less than this left in the frame's ring waits for the GPU and starts the ring over
 constexpr uint64_t kUploadReserve = 8ull << 20;
 constexpr uint32_t kSrvCount = 3 * 32768;
-constexpr uint32_t kSamplerCount = 2048;
+// the draws' samplers; the overlay's 4 after them: 2048 in all, Direct3D 12's most for a sampler heap the shaders see
+// (2052 failed on Linux's vkd3d-proton, which keeps to it: no heap, a crash at the start)
+constexpr uint32_t kSamplerCount = 2048 - 4;
 constexpr uint32_t kRtvCount = 1024;
 // views of the passes on the shown frame, after the back buffers': SMAA edges, weights and blend, sharpened; then
 // the scene passes': its copy, two occlusion targets, four bloom levels
@@ -1494,7 +1496,7 @@ private:
         return it == stable_of_.end() ? h : it->second;
     }
     uint64_t FixedShader(uint64_t id, const std::string& src, const char* entry, const char* profile);
-    uint64_t shadow_alpha_ps_[2] = {}, mask_ps_ = 0;
+    uint64_t shadow_alpha_ps_[4] = {}, mask_ps_ = 0;  // [blended * 2 + projected]
     std::unordered_set<uint64_t> passes_known_;  // passes.bin's
     void PassDesc(rhi::Blob* vs, rhi::Blob* ps, DXGI_FORMAT rtv, float blend, rhi::PipelineDesc& d) const;
     KeyMap<uint64_t, uint32_t> samplers_;
@@ -2407,7 +2409,7 @@ constexpr uint64_t kPixelKeySalt = 0x9E3779B97F4A7C15ull;
 enum : uint8_t { kVariantMain, kVariantShadow, kVariantGuard, kVariantTop };
 uint64_t VertexRecipeId(uint64_t vkey, uint8_t variant) { return variant ? Hash(&variant, 1, vkey) : vkey; }
 // the fixed shaders' ids
-constexpr uint64_t kShadowAlphaId[2] = {0x5AD0A1FA00000000ull, 0x5AD0A1FA00000001ull};
+constexpr uint64_t kShadowAlphaId[4] = {0x5AD0A1FA00000000ull, 0x5AD0A1FA00000001ull, 0x5AD0A1FA00000007ull, 0x5AD0A1FA00000008ull};
 constexpr uint64_t kMaskId = 0x5AD0A1FA00000002ull, kVeilId = 0x5AD0A1FA00000003ull;
 constexpr uint64_t kTopWaterId = 0x5AD0A1FA00000004ull, kTopCoverId = 0x5AD0A1FA00000005ull, kTopTreadId = 0x5AD0A1FA00000006ull;
 
@@ -2609,8 +2611,8 @@ void Renderer::LoadShaderCache() {
         fixed_blobs.push_back(h);
     }
     // the casters' and the veil's own
-    shadow_alpha_ps_[0] = FixedShader(kShadowAlphaId[0], ShadowAlphaHlsl(false), "main", "ps_5_0");
-    shadow_alpha_ps_[1] = FixedShader(kShadowAlphaId[1], ShadowAlphaHlsl(true), "main", "ps_5_0");
+    for (int k = 0; k < 4; k++)
+        shadow_alpha_ps_[k] = FixedShader(kShadowAlphaId[k], ShadowAlphaHlsl((k & 1) != 0, k >= 2), "main", "ps_5_0");
     mask_ps_ = FixedShader(kMaskId, "float4 main(float4 pos : SV_Position) : SV_Target { return 1; }", "main", "ps_5_0");
     veil_ps_ = FixedShader(kVeilId, VeilPixelHlsl(), "main", "ps_5_0");
     // the top view's (Water Interaction): the water's height; what crosses it, how far up the slab about the water's
@@ -3625,7 +3627,11 @@ rhi::Resource* Renderer::BindTexture(const State& s, int stage, DrawTextures& st
     sv.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
     sv.Texture2D.MipLevels = 1;
     TextureDesc d;
-    if (!s.textures[size_t(stage)] || !Describe(s.textures[size_t(stage)], d)) return nullptr;
+    if (!s.textures[size_t(stage)]) return nullptr;
+    if (!Describe(s.textures[size_t(stage)], d)) {
+        info.flags |= kTexUnusable;
+        return nullptr;
+    }
     const FormatInfo& fi = Format(d.format);
     info.kind = TextureKind(d);
     info.rect = d.linear;
@@ -4972,6 +4978,16 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
         if (k.blend && !flat && !in_order && std::find(std::begin(kSheets), std::end(kSheets), draw_tex0_) != std::end(kSheets))
             k.zbias -= bias, k.zslope -= 1.0f;
     }
+    // the game's shading laid over the world (a mesh of its own, no texture, its colour's alpha the shade: level 5's
+    // metal beams): drawn after the surface it shades, its points the same but not to the bit, it lost the depth test
+    // to the surface every other half degree the view turned, a flicker; pulled a hair towards the eye it wins as
+    // drawn on the console
+    {
+        static const int bias = [] { const char* e = std::getenv("XBE_SHADE_BIAS"); return e ? std::atoi(e) : 64; }();
+        constexpr uint32_t kLessEqual = 0x203;
+        if (k.blend && !k.zwrite && k.zen && k.zfunc == kLessEqual && !flat && !draw_tex0_ && !stages.id[0])
+            k.zbias -= bias, k.zslope -= 1.0f;
+    }
     // a character's triangles (a program lit by itself, drawn with the world: not the weapon in hand, its hard edges
     // would swell), smoothed by tessellation
     tess_draw_ = false;
@@ -5340,6 +5356,14 @@ void Renderer::Layout2D(const State& s, const Assembled& a, bool prog, GuestExte
         LOGR("draw: tex %016llx blend %u tag %u prog %d pre %d regs %04X fmt %u count %u cull %.2f v0 %.1f %.1f %.3f %.3f",
              (unsigned long long)draw_tex0_, SimpleState(s, kMBlendEnable), s.layout2d, prog, a.pretransformed, a.regs, e.format, a.vertex_count, c.layout[2],
              p[0], p[1], p[2], p[3]);
+        const auto& t0 = s.tss[0];
+        LOGR("draw:   stage0 tex %08X colour op %u args %X %X alpha op %u args %X %X | atest %u func %X ref %u | diffuse src %u | blend %u "
+             "src %X dst %X op %X | material %.2f %.2f %.2f %.2f emissive %.2f %.2f %.2f | lighting %u",
+             s.textures[0], t0[kTssColorOp], t0[kTssColorArg1], t0[kTssColorArg2], t0[kTssAlphaOp], t0[kTssAlphaArg1], t0[kTssAlphaArg2],
+             SimpleState(s, kMAlphaTestEnable), SimpleState(s, kMAlphaFunc), SimpleState(s, kMAlphaRef), s.rs[kRsDiffuseMaterialSource],
+             SimpleState(s, kMBlendEnable), SimpleState(s, kMSrcBlend), SimpleState(s, kMDestBlend), SimpleState(s, kMBlendOp),
+             s.material[0], s.material[1], s.material[2], s.material[3], s.material[12], s.material[13], s.material[14],
+             s.rs[kRsLighting]);
     }
     auto seen = g_seen_2d.load();
     if (!(a.pretransformed || s.layout2d) || !screen) return;
@@ -6599,7 +6623,7 @@ void Renderer::RecordCaster(const State& s, const Assembled& a, const DrawShader
     key.vs = vit->second;
     if (alpha) {
         bool proj = (pk.proj & 1) != 0;
-        key.ps = shadow_alpha_ps_[proj];
+        key.ps = shadow_alpha_ps_[(k.blend ? 2 : 0) + (proj ? 1 : 0)];
         if (!key.ps) return;
     }
     key.regs = k.regs, key.topo = k.topo & 0xFF;  // the primitive type alone (not the draw's tessellation or targets)
@@ -10705,7 +10729,10 @@ void Renderer::Present(const Surface& front) {
     presents_++;
     presents_seen_.store(presents_);
     g_presented.fetch_add(1, std::memory_order_relaxed);
-    if (g_log_draws > 0 && --g_log_draws == 0) LOGR("draw: end of frame");
+    if (g_log_draws > 0) {
+        const int left = --g_log_draws;
+        LOGR("draw: end of frame (%d more)", left);
+    }
     frame_++;
     ReleaseOldTextures();
     ResetFrame();

@@ -110,8 +110,11 @@ void Line(std::string line) {
                 stick = i, value = name[2] == '+' ? 32767 : -32768;
         g_test_stick = stick, g_test_stick_value = value;
         g_test_buttons = b, g_test_analog = an, g_test_pad_until = SteadyMs() + ms;
-    } else if (line == "draws") {
-        gpu::g_log_draws = 3;
+    } else if (line == "draws" || line.rfind("draws ", 0) == 0) {
+        // (draws N: that many frames, each ended in the log)
+        int n = 3;
+        std::sscanf(line.c_str(), "draws %d", &n);
+        gpu::g_log_draws = std::max(n, 1);
     } else if (line == "quit") {  // a test's end: the log kept, the process gone
         LOGR("control: quit");
         logx::Flush();

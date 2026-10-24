@@ -159,6 +159,14 @@ The version installed is in `version.txt` beside the game. Unattended:
   Vulkan is new and experimental; the change takes effect the next time the game starts.
 - Free Camera (PC Settings, General) is available to everyone, no longer only with a hidden setting.
 - Cloud Shadows is gone: it made no visible difference on the ground and cost GPU time every frame.
+- Linux (Wine, Proton): the game no longer crashes at the start with the Direct3D 12 renderer. It asked for a few
+  more texture samplers than Direct3D 12 allows; Windows drivers let it pass, vkd3d-proton does not.
+- Underground Passage (the American sewers): the red warning light by the ladder blinks red and see-through again,
+  instead of a black block.
+- Defend the Factory: the metal beams no longer flicker between light and dark as the view turns.
+- Into Red Square (the tank): no more dark patch on the cobbles ahead that came and went as the tank drew near (the
+  shadow of a nearly see-through layer of rubble and dirt, cast as if it were solid).
+- Surface Materials: less streaking where the game's own texture is stretched along a surface (walls, beams).
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

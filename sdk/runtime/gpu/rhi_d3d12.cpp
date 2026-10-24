@@ -359,7 +359,10 @@ public:
             hd.Type = t;
             hd.NumDescriptors = n;
             hd.Flags = visible ? D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE : D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-            dev->CreateDescriptorHeap(&hd, IID_PPV_ARGS(&x.heap));
+            if (FAILED(dev->CreateDescriptorHeap(&hd, IID_PPV_ARGS(&x.heap)))) {
+                LOGE("d3d12: no descriptor heap (type %d, %u)", int(t), n);
+                return;
+            }
             x.inc = dev->GetDescriptorHandleIncrementSize(t);
             x.cpu = x.heap->GetCPUDescriptorHandleForHeapStart();
             if (visible) x.gpu = x.heap->GetGPUDescriptorHandleForHeapStart();

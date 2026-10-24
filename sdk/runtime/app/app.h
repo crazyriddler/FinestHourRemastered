@@ -22,6 +22,7 @@ struct Settings {
     uint32_t fps_cap = 60;           // 0 unlimited (no setting: the game's speed follows its frame rate)
     bool vsync = true;
     uint32_t renderer = 0;           // the graphics API: 0 Direct3D 12, 1 Vulkan (from the next start)
+    uint32_t speakers = 0;           // the sound: 0 stereo, 1 5.1 surround (from the next start)
     uint32_t aniso = 16;             // 0 as the game asks
     bool smaa = true;                // SMAA on the shown frame
     bool taa = true;                 // Anti-Aliasing: 4x MSAA (cut outs' edges as coverage) and temporal of the 3D

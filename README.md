@@ -191,6 +191,8 @@ game's own look and textures. The render scale is never part of a preset: it sta
   zone, sensitivity and look acceleration settings.
 - **Button Prompts** follow the device in hand: keys, Xbox, PlayStation or Switch buttons.
 - **Skip Intros**, **Language** (English, French, Italian, Spanish, Portuguese).
+- **Sound**: Stereo or **5.1 Surround** (PC Settings > General): the game mixes for Dolby Digital as on a console
+  connected to a surround receiver, the battle placed around you on the front, centre, back and subwoofer.
 
 ### Cheats
 All off by default, in **PC Settings > Cheats**:

@@ -9,6 +9,7 @@
 #include <thread>
 #include <vector>
 
+#include "app/app.h"
 #include "audio/audio.h"
 #include "xbe/xbe.h"
 #include "xdk/dsound.h"
@@ -135,6 +136,7 @@ std::condition_variable_any g_done_cv;
 thread_local std::vector<Done> t_flushed;  // run by the STREAM call that flushed them, once g_lock is let go
 std::atomic<int64_t> g_pumped{0};          // the last DirectSoundDoWork, steady ms
 bool g_started = false;
+uint32_t g_out = 2;  // the mix's channels: 2, or 6 for 5.1 (app::Settings speakers, at the start)
 uint32_t g_ds = 0;
 
 float Db(int32_t hundredths) { return hundredths <= -10000 ? 0.0f : std::pow(10.0f, hundredths / 2000.0f); }
@@ -250,6 +252,79 @@ void Levels(Voice& v, float g[2][2]) {
     }
 }
 
+// 5.1 (app::Settings speakers): gain of voice channel c on the six speakers (front left, front right, centre,
+// subwoofer, back left, back right). The bins as the console's speakers take them: 0 to 5 those six, the 3D voices'
+// 6 to 9 (front left, front right, back left, back right) the four corners; 10 and up are effect sends. A 3D voice's
+// level goes round the four corners by its place about the listener, as the console's virtualizer put it there.
+void Levels6(Voice& v, float g[2][6]) {
+    static const uint8_t kFront[2] = {0, 1};
+    static const int8_t kSpeaker[10] = {0, 1, 2, 3, 4, 5, 0, 1, 4, 5};
+    const uint8_t* bin = v.nbins ? v.bin : kFront;
+    uint32_t n = v.nbins ? v.nbins : 2, voices = (std::max<uint32_t>(v.channels, 1) - 1) / 2 + 1;
+    uint32_t per = std::max<uint32_t>(n / voices, 2), step = v.channels == 1 ? 1 : 2;
+    bool speakers = false;
+    for (uint32_t s = 0; s < n; s++) speakers |= bin[s] < 10;
+    for (uint32_t c = 0; c < 2; c++) {
+        for (float& x : g[c]) x = 0;
+        for (uint32_t s = c; c < v.channels && s < per && s < n; s += step) {
+            uint32_t b = bin[s];
+            if (speakers && b > 9) continue;  // effect sends
+            float x = Db(v.bin_mb[b]) * v.volume * v.headroom;
+            if (!speakers) {
+                g[c][0] = std::max(g[c][0], x), g[c][1] = std::max(g[c][1], x);
+                continue;
+            }
+            int k = kSpeaker[b];
+            g[c][k] = std::max(g[c][k], x);
+        }
+    }
+    if (!v.is3d || v.mode == 2) return;
+    bool rel = v.mode == 1;  // the position is already in listener space
+    float d[3] = {v.p[0], v.p[1], v.p[2]};
+    for (int i = 0; i < 3 && !rel; i++) d[i] -= g_listener[i];
+    float dist = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    float att = 1;
+    if (dist > v.min_dist && v.curve.empty()) {
+        att = v.min_dist / std::min(dist, v.max_dist);
+    } else if (dist > v.min_dist && v.max_dist > v.min_dist) {
+        float at = (std::min(dist, v.max_dist) - v.min_dist) / (v.max_dist - v.min_dist) * v.curve.size();
+        size_t i = std::min(size_t(at), v.curve.size() - 1);
+        float from = i ? v.curve[i - 1] : 1.0f;
+        att = from + (v.curve[i] - from) * (at - i);
+    }
+    float right[3] = {g_top[1] * g_front[2] - g_top[2] * g_front[1], g_top[2] * g_front[0] - g_top[0] * g_front[2],
+                      g_top[0] * g_front[1] - g_top[1] * g_front[0]};
+    float side = rel ? d[0] : d[0] * right[0] + d[1] * right[1] + d[2] * right[2];
+    float ahead = rel ? d[2] : d[0] * g_front[0] + d[1] * g_front[1] + d[2] * g_front[2];
+    // the angle from straight ahead, right positive; the corners at the ITU's 30 and 110 degrees, each pair panned at
+    // constant power (straight ahead as loud on the front pair as stereo puts it on both sides)
+    constexpr float kPi = 3.14159265f;
+    float a = (side * side + ahead * ahead > 1e-6f) ? std::atan2(side, ahead) * 180.0f / kPi : 0.0f;
+    struct Pair {
+        float from, to;
+        int a, b;
+    };
+    static const Pair kPairs[4] = {{-30, 30, 0, 1}, {30, 110, 1, 5}, {110, 250, 5, 4}, {-110, -30, 4, 0}};
+    if (a < -110) a += 360;  // (behind on the left: the back pair's range)
+    float spk[6] = {};
+    for (const Pair& pr : kPairs)
+        if (a >= pr.from && a <= pr.to) {
+            float t = (a - pr.from) / (pr.to - pr.from) * kPi / 2;
+            spk[pr.a] = std::cos(t) * 1.4142f;
+            spk[pr.b] = std::sin(t) * 1.4142f;
+            break;
+        }
+    // with Dolby Digital the game also gives its 3D voices the centre and the subwoofer (bins 2 and 3): the centre
+    // fills in what is ahead, the subwoofer takes its own share wherever the sound is
+    if (std::fabs(a) < 30) spk[2] = 0.5f * std::cos(a / 30 * kPi / 2);
+    for (int c = 0; c < 2; c++) {
+        float level = std::max({g[c][0], g[c][1], g[c][4], g[c][5]}), centre = g[c][2] > 0 ? 1.0f : 0.0f, sub = g[c][3];
+        for (int k = 0; k < 6; k++) g[c][k] = level * att * spk[k];
+        g[c][2] *= centre;
+        g[c][3] = sub * att;
+    }
+}
+
 // a stream goes quiet: the synch hold ends, a started one loses its pause as well
 void Deactivate(Voice& v) {
     v.sync = false;
@@ -257,12 +332,19 @@ void Deactivate(Voice& v) {
 }
 
 void Render(float* out, uint32_t frames) {
-    std::memset(out, 0, frames * 2 * sizeof(float));
+    const uint32_t nc = g_out;
+    std::memset(out, 0, frames * nc * sizeof(float));
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     for (auto& [obj, v] : g_voices) {
         if (v.paused || v.sync || (!v.stream && !v.playing)) continue;
-        float g[2][2];
-        Levels(v, g);
+        float g[2][6];
+        if (nc == 6) {
+            Levels6(v, g);
+        } else {
+            float s[2][2];
+            Levels(v, s);
+            for (int c = 0; c < 2; c++) g[c][0] = s[c][0], g[c][1] = s[c][1];
+        }
         uint32_t base = v.data + v.play_start;
         double step = double(v.freq ? v.freq : v.rate) / audio::kRate;
         for (uint32_t i = 0; i < frames; i++) {
@@ -317,12 +399,12 @@ void Render(float* out, uint32_t frames) {
             float t = float(v.pos - f);
             a += (a1 - a) * t;
             b += (b1 - b) * t;
-            out[i * 2] += a * g[0][0] + b * g[1][0];
-            out[i * 2 + 1] += a * g[0][1] + b * g[1][1];
+            float* o = out + size_t(i) * nc;
+            for (uint32_t k = 0; k < nc; k++) o[k] += a * g[0][k] + b * g[1][k];
             v.pos += step;
         }
     }
-    for (uint32_t i = 0; i < frames * 2; i++) out[i] = std::clamp(out[i], -1.0f, 1.0f);
+    for (uint32_t i = 0; i < frames * nc; i++) out[i] = std::clamp(out[i], -1.0f, 1.0f);
 }
 
 int64_t NowMs() {
@@ -337,7 +419,8 @@ void Run(X86Context& ctx, const std::vector<Done>& done) {
 void Start() {
     if (g_started) return;
     g_started = true;
-    audio::StartOutput(Render);
+    g_out = app::Get().speakers == 1 ? 6 : 2;
+    audio::StartOutput(Render, g_out);
     // for a title that never calls DirectSoundDoWork: its callbacks come from here instead
     StartHostThread("dsound", [](X86Context& ctx) {
         constexpr int64_t kPumpMs = 250;
@@ -376,6 +459,14 @@ void SetBins(Voice& v, uint32_t mixbins) {
         v.bin_mb[v.bin[i]] = int32_t(R32(pairs + i * 8 + 4));
     }
     v.nbins = uint8_t(n);
+    // tests (XBE_DSOUND_BINS): the bins each kind of voice is given
+    static const bool log = std::getenv("XBE_DSOUND_BINS") != nullptr;
+    if (log) {
+        char text[96];
+        int k = std::snprintf(text, sizeof(text), "dsound: bins %s %uch 3d %d:", v.stream ? "stream" : "buffer", v.channels, int(v.is3d));
+        for (uint32_t i = 0; i < n && k < 90; i++) k += std::snprintf(text + k, sizeof(text) - size_t(k), " %u", v.bin[i]);
+        LOGR("%s", text);
+    }
 }
 // volumes only, the bins stay
 void SetBinVolumes(Voice& v, uint32_t mixbins) {
@@ -485,7 +576,8 @@ HLE_STDCALL(IDirectSound_Release, 1) { return 0; }
 HLE_STDCALL(DirectSoundUseFullHRTF, 0) { return 0; }
 HLE_STDCALL(DirectSoundUseLightHRTF, 0) { return 0; }
 HLE_STDCALL(IDirectSound_GetSpeakerConfig, 2) {
-    W32(a[1], 0);  // DSSPEAKER_STEREO
+    LOG_FIRST(4, "dsound: GetSpeakerConfig");
+    W32(a[1], app::Get().speakers == 1 ? 0x10002u : 0u);  // DSSPEAKER_SURROUND with Dolby Digital, or DSSPEAKER_STEREO
     return 0;
 }
 HLE_STDCALL(IDirectSound_SetEffectData, 6) { return 0; }

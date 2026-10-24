@@ -66,6 +66,7 @@ void Load() {
     s.render_percent = t["render_percent"].value_or(s.render_percent);
     s.vsync = t["vsync"].value_or(s.vsync);
     s.renderer = t["renderer"].value_or(std::string(s.renderer ? "vulkan" : "d3d12")) == "vulkan" ? 1 : 0;
+    s.speakers = t["speakers"].value_or(std::string(s.speakers ? "5.1" : "stereo")) == "5.1" ? 1 : 0;
     s.aniso = t["anisotropic_filtering"].value_or(s.aniso);
     s.smaa = t["smaa"].value_or(s.smaa);
     s.taa = t["taa"].value_or(s.taa);
@@ -149,6 +150,7 @@ toml::table Table() {
                   {"render_percent", int64_t(s.render_percent)},
                   {"vsync", s.vsync},
                   {"renderer", s.renderer ? "vulkan" : "d3d12"},
+                  {"speakers", s.speakers ? "5.1" : "stereo"},
                   {"anisotropic_filtering", int64_t(s.aniso)},
                   {"smaa", s.smaa},
                   {"taa", s.taa},

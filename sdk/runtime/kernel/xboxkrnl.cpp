@@ -1237,13 +1237,17 @@ KERNEL_EXPORT(29, ExSaveNonVolatileSetting, 4) {
 // widescreen (a 4:3 output plays the console's 4:3), 480p
 static uint32_t VideoFlags() { return (app::Widescreen() ? 0x00010000 : 0) | 0x00080000; }
 
+// the dashboard's audio setting as the game reads it: as ever (0x10001), or surround with Dolby Digital for 5.1
+// (app::Settings speakers)
+static uint32_t AudioFlags() { return app::Get().speakers == 1 ? 0x00010002 : 0x00010001; }
+
 KERNEL_EXPORT(24, ExQueryNonVolatileSetting, 5) {
     uint32_t index = a[0], type_out = a[1], value = a[2], len = a[3], result_len = a[4];
     uint32_t v = 0;
     switch (index) {
         case 7: v = app::ConsoleLanguage(); break;  // XC_LANGUAGE
         case 8: v = VideoFlags(); break;          // XC_VIDEO_FLAGS
-        case 9: v = 0x00010001; break;             // XC_AUDIO_FLAGS stereo
+        case 9: v = AudioFlags(); break;           // XC_AUDIO_FLAGS
         case 0x103: v = 0x00400100; break;         // XC_FACTORY_AV_REGION NTSC-M
         case 0x104: v = 1; break;                  // XC_FACTORY_GAME_REGION north america
         case 0x12: v = 1; break;                   // XC_DVD_REGION
@@ -1256,7 +1260,7 @@ KERNEL_EXPORT(24, ExQueryNonVolatileSetting, 5) {
         if (value && len >= 0x100) {
             W32(value + 0xE8, app::ConsoleLanguage());  // language
             W32(value + 0xEC, VideoFlags());          // video flags
-            W32(value + 0xF0, 0x00010001);            // audio flags
+            W32(value + 0xF0, AudioFlags());          // audio flags
             W32(value + 0x58, 0x00400100);            // factory video standard
             W32(value + 0x2C, 1);                     // factory game region
         }

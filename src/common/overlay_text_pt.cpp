@@ -86,6 +86,13 @@ const PtRow kPtRows[] = {
      "o analógico esquerdo, olhe com o mouse ou o analógico direito, Pular para subir, Agachar para descer, Atirar para "
      "ir mais rápido. O jogador fica parado."},
     {"CHEATS", "TRAPAÇAS"},
+    {"Sound", "Som"},
+    {"Stereo", "Estéreo"},
+    {"5.1 Surround", "Surround 5.1"},
+    {"5.1 puts the battle around you on a surround system: front, centre, back and subwoofer. Takes effect at the next "
+     "start.",
+     "O 5.1 coloca a batalha ao seu redor em um sistema surround: frente, centro, traseira e subwoofer. Vale a partir do "
+     "próximo início."},
     {"God Mode", "Modo Deus"},
     {"You take no damage.", "Você não sofre dano."},
     {"Infinite Ammo", "Munição infinita"},

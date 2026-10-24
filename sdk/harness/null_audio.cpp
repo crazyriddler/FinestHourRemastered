@@ -7,9 +7,9 @@
 
 namespace audio {
 
-void StartOutput(std::function<void(float*, uint32_t)> render) {
-    std::thread([render] {
-        std::vector<float> b(kRate / 100 * 2);
+void StartOutput(std::function<void(float*, uint32_t)> render, uint32_t channels) {
+    std::thread([render, channels] {
+        std::vector<float> b(kRate / 100 * channels);
         for (;;) {
             render(b.data(), kRate / 100);
             std::this_thread::sleep_for(std::chrono::milliseconds(10));

@@ -160,6 +160,9 @@ The version installed is in `version.txt` beside the game. Unattended:
 - New Cheats page in PC Settings, everything off by default: Free Camera (F11 in play flies the camera through the
   level and its walls, F11 again comes back), God Mode, Infinite Ammo (grenades and mines included) and No Reload
   (the magazine of the weapon in hand stays full).
+- New Sound option (PC Settings, General): Stereo or 5.1 Surround. In 5.1 the game mixes for Dolby Digital, as
+  on a console connected to a surround receiver: gunfire and explosions around you on the front, back,
+  centre and subwoofer. It takes effect the next time the game starts.
 - Cloud Shadows is gone: it made no visible difference on the ground and cost GPU time every frame.
 - Linux (Wine, Proton): the game no longer crashes at the start with the Direct3D 12 renderer. It asked for a few
   more texture samplers than Direct3D 12 allows; Windows drivers let it pass, vkd3d-proton does not.

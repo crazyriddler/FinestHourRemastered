@@ -476,6 +476,10 @@ std::vector<Page> BuildPages() {
                                        [&s](int i) { s.language = codes[i]; },
                                        "Text and speech. The game starts again in it when you leave these settings."));
     }
+    general.items.push_back(Choice("Sound", {"Stereo", "5.1 Surround"}, [&s] { return int(std::min<uint32_t>(s.speakers, 1)); },
+                                   [&s](int i) { s.speakers = uint32_t(i); },
+                                   "5.1 puts the battle around you on a surround system: front, centre, back and subwoofer. "
+                                   "Takes effect at the next start."));
     pages.push_back(std::move(general));
 
     // the cheats (the players asked for them; all off by default; the testers' keys stay with developer = true)

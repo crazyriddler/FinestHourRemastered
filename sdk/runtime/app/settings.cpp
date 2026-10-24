@@ -65,6 +65,7 @@ void Load() {
     s.height = t["height"].value_or(s.height);
     s.render_percent = t["render_percent"].value_or(s.render_percent);
     s.vsync = t["vsync"].value_or(s.vsync);
+    s.renderer = t["renderer"].value_or(std::string(s.renderer ? "vulkan" : "d3d12")) == "vulkan" ? 1 : 0;
     s.aniso = t["anisotropic_filtering"].value_or(s.aniso);
     s.smaa = t["smaa"].value_or(s.smaa);
     s.taa = t["taa"].value_or(s.taa);
@@ -84,7 +85,6 @@ void Load() {
     s.damage_shake = t["damage_shake"].value_or(s.damage_shake);
     s.flash_shadows = t["flash_shadows"].value_or(s.flash_shadows);
     s.auto_exposure = t["auto_exposure"].value_or(s.auto_exposure);
-    s.cloud_shadows = t["cloud_shadows"].value_or(s.cloud_shadows);
     s.volumetric_fog = t["volumetric_fog"].value_or(s.volumetric_fog);
     s.soft_shadows = t["soft_shadows"].value_or(s.soft_shadows);
     s.bounce_light = t["bounce_light"].value_or(s.bounce_light);
@@ -148,6 +148,7 @@ toml::table Table() {
                   {"height", int64_t(s.height)},
                   {"render_percent", int64_t(s.render_percent)},
                   {"vsync", s.vsync},
+                  {"renderer", s.renderer ? "vulkan" : "d3d12"},
                   {"anisotropic_filtering", int64_t(s.aniso)},
                   {"smaa", s.smaa},
                   {"taa", s.taa},
@@ -174,7 +175,6 @@ toml::table Table() {
                   {"damage_shake", s.damage_shake},
                   {"flash_shadows", s.flash_shadows},
                   {"auto_exposure", s.auto_exposure},
-                  {"cloud_shadows", s.cloud_shadows},
                   {"volumetric_fog", s.volumetric_fog},
                   {"soft_shadows", s.soft_shadows},
                   {"bounce_light", s.bounce_light},
@@ -202,6 +202,7 @@ toml::table Table() {
                   {"brightness", int64_t(s.brightness)},
                   {"join_ip", s.join_ip}};
     for (const Option& o : kGame.options) {
+        if (o.hidden && !(o.flag && *o.flag)) continue;
         if (o.flag) t.insert(o.key, *o.flag);
         else t.insert(o.key, int64_t(*o.value));
     }

@@ -1,14 +1,6 @@
 #pragma once
-// A game's additions to the D3D12 renderer: hooks at fixed points of the console path, none of which run without one
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#include <d3d12.h>
-#include <wrl/client.h>
+// A game's additions to the renderer: hooks at fixed points of the console path, none of which run without one
+#include "gpu/rhi.h"
 
 #include <cstdint>
 #include <memory>
@@ -22,7 +14,7 @@ namespace gpu {
 
 // a console surface the renderer draws into
 struct Target {
-    Microsoft::WRL::ComPtr<ID3D12Resource> res;
+    rhi::Ref<rhi::Resource> res;
     bool depth = false;
     uint32_t gw = 0, gh = 0, w = 0, h = 0;
     uint32_t view = 0;
@@ -32,7 +24,7 @@ struct Target {
     bool drawn = false;           // the GPU wrote it since the last readback
     std::vector<uint8_t> read;    // what Sync left in guest memory
     uint64_t cpu_at = 0;          // the present of the CPU's last whole frame into it (a movie's)
-    Microsoft::WRL::ComPtr<ID3D12Resource> fb;  // copy read by draws that sample the target they render to
+    rhi::Ref<rhi::Resource> fb;  // copy read by draws that sample the target they render to
     D3D12_RESOURCE_STATES fb_state = D3D12_RESOURCE_STATE_COPY_DEST;
     DXGI_FORMAT fmt = DXGI_FORMAT_B8G8R8A8_UNORM;
     float range = 1;         // colour held divided by it until the extension resolves the target
@@ -42,19 +34,19 @@ struct Target {
 // what the renderer lends an extension, on the render thread
 class Context {
 public:
-    virtual ID3D12Device* Device() = 0;
-    virtual ID3D12GraphicsCommandList* List() = 0;
-    virtual void Transition(ID3D12Resource* r, D3D12_RESOURCE_STATES& cur, D3D12_RESOURCE_STATES want) = 0;
-    virtual void Release(Microsoft::WRL::ComPtr<ID3D12Resource> r) = 0;  // once the GPU is past this frame
-    virtual D3D12_CPU_DESCRIPTOR_HANDLE View(const Target& t) = 0;       // a colour target's RTV
-    virtual void Unbind() = 0;                                           // the next draw binds its targets again
-    virtual ID3D12Resource* Feedback(Target& t) = 0;                     // a copy of t to read while drawing to it
+    virtual rhi::Device* Device() = 0;
+    virtual rhi::List* List() = 0;
+    virtual void Transition(rhi::Resource* r, D3D12_RESOURCE_STATES& cur, D3D12_RESOURCE_STATES want) = 0;
+    virtual void Release(rhi::Ref<rhi::Resource> r) = 0;  // once the GPU is past this frame
+    virtual rhi::View View(const Target& t) = 0;           // a colour target's RTV
+    virtual void Unbind() = 0;                             // the next draw binds its targets again
+    virtual rhi::Resource* Feedback(Target& t) = 0;        // a copy of t to read while drawing to it
     // src over the bound viewport; taps per axis, colour times mul
-    virtual void Blit(ID3D12Resource* src, DXGI_FORMAT fmt, const float uvrect[4], bool gamma, bool alpha, uint32_t taps, float mul,
+    virtual void Blit(rhi::Resource* src, DXGI_FORMAT fmt, const float uvrect[4], bool gamma, bool alpha, uint32_t taps, float mul,
                       DXGI_FORMAT rtv) = 0;
     // a full screen pass: hlsl holds vs and entry, src is t0 to t2, p is b1, blend >= 0 blends by that factor
-    virtual void Pass(const char* hlsl, const char* entry, DXGI_FORMAT rtv, D3D12_CPU_DESCRIPTOR_HANDLE rh, uint32_t w, uint32_t h,
-                      ID3D12Resource* const src[3], const DXGI_FORMAT fmt[3], const float p[8], float blend) = 0;
+    virtual void Pass(const char* hlsl, const char* entry, DXGI_FORMAT rtv, rhi::View rh, uint32_t w, uint32_t h,
+                      rhi::Resource* const src[3], const DXGI_FORMAT fmt[3], const float p[8], float blend) = 0;
     virtual void Capture(Target& t, const char* tag, float mul) = 0;  // F3: saves t as NNNN_tag_data
     virtual float Scale() const = 0;                                  // render scale
     virtual void GuestSize(uint32_t& w, uint32_t& h) const = 0;       // the title's back buffer

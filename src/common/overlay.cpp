@@ -168,7 +168,7 @@ constexpr SBool kPresetFlags[] = {
     &app::Settings::sharp_distance, &app::Settings::lens_flare, &app::Settings::water, &app::Settings::water_interaction,
     &app::Settings::snow_tracks, &app::Settings::shockwaves, &app::Settings::animated_fire, &app::Settings::barrel_heat,
     &app::Settings::wind, &app::Settings::ambient_particles, &app::Settings::lit_smoke, &app::Settings::character_light,
-    &app::Settings::bounce_light, &app::Settings::soft_shadows, &app::Settings::volumetric_fog, &app::Settings::cloud_shadows,
+    &app::Settings::bounce_light, &app::Settings::soft_shadows, &app::Settings::volumetric_fog,
     &app::Settings::auto_exposure, &app::Settings::color_grade, &app::Settings::film_grain, &app::Settings::hit_reactions,
     &app::Settings::reflections, &app::Settings::sun_moon, &app::Settings::clouds,
     &app::Settings::remaster, &app::Settings::materials, &app::Settings::parallax, &app::Settings::detail,
@@ -189,7 +189,7 @@ app::Settings PresetValues(int p) {
     if (p >= kMedium) {
         v.shadow_quality = 2, v.aniso = 8;
         v.smaa = v.ao = v.contact_shadows = v.reflections = v.ambient_particles = v.soft_shadows = false;
-        v.water_interaction = v.light_halos = v.sun_shafts = v.cloud_shadows = v.lit_smoke = false;
+        v.water_interaction = v.light_halos = v.sun_shafts = v.lit_smoke = false;
         v.character_detail = v.sharp_distance = false;
     }
     if (p >= kLow) {
@@ -292,6 +292,9 @@ std::vector<Page> BuildPages() {
                                    "The game is drawn at this share of the screen's resolution: above 100% supersamples."));
     // (no frame rate setting: the game runs at 60 FPS always, its speed follows the frame rate)
     display.items.push_back(Toggle("V-Sync", &s.vsync));
+    display.items.push_back(Choice("Renderer", {"Direct3D 12", "Vulkan"}, [&s] { return int(s.renderer); },
+                                   [&s](int i) { s.renderer = uint32_t(i); },
+                                   "The graphics API (Vulkan is experimental). Takes effect at the next start."));
     display.items.push_back(Toggle("Television Frame", &c.tv_frame,
                                    "On a wide screen, the menus and movies play in a 1940s television."));
     // the field of view in play (cutscenes and the weapon in hand keep the game's: common/widescreen.cpp FovScale)
@@ -405,7 +408,6 @@ std::vector<Page> BuildPages() {
                                    "The sun's shadows sharp at their foot, softer further from what casts them."));
     effects.items.push_back(Toggle("Volumetric Fog", &s.volumetric_fog,
                                    "A light haze in the air, lit by the sun through the gaps and by the flashes."));
-    effects.items.push_back(Toggle("Cloud Shadows", &s.cloud_shadows, "The clouds' shadows drift over the sunlit ground."));
     effects.items.push_back(Toggle("Sun Shafts", &s.sun_shafts, "Beams of sunlight past columns and ruins."));
     effects.items.push_back(Toggle("Aim Depth of Field", &s.aim_dof, "Aiming down the sights blurs the edges and the background."));
     effects.items.push_back(Toggle("Eye Adaptation", &s.auto_exposure,
@@ -474,9 +476,8 @@ std::vector<Page> BuildPages() {
                                        [&s](int i) { s.language = codes[i]; },
                                        "Text and speech. The game starts again in it when you leave these settings."));
     }
-    // the Free Camera: a tester's tool (developer = true in codfh.toml), not the player's
-    if (c.developer)
-        general.items.push_back(Toggle("Free Camera", cod::wide::FlyEnabled(),
+    // the Free Camera (the players asked for it; the testers' keys stay with developer = true)
+    general.items.push_back(Toggle("Free Camera", cod::wide::FlyEnabled(),
                                        "Fly through the level and its walls: move with WASD or the left stick, look with the mouse or "
                                        "the right stick, Jump up, Crouch down, Fire faster. The player stays still."));
     pages.push_back(std::move(general));

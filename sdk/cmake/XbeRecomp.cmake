@@ -7,6 +7,7 @@ file(TO_NATIVE_PATH "${XBE_SDK_DIR}" XBE_SDK_DIR_NATIVE)
 file(WRITE ${CMAKE_BINARY_DIR}/sdk_dir.txt "${XBE_SDK_DIR_NATIVE}\n")
 
 include(FetchContent)
+option(XBE_CODEGEN "recompile the xbe into generated/ when it, its config or the recompiler change" ON)
 set(ZYDIS_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 set(ZYDIS_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(ZYDIS_BUILD_DOXYGEN OFF CACHE BOOL "" FORCE)
@@ -22,6 +23,15 @@ set(SDL_GPU OFF CACHE BOOL "" FORCE)
 set(SDL_CAMERA OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(SDL3 GIT_REPOSITORY https://github.com/libsdl-org/SDL.git GIT_TAG release-3.4.16 GIT_SHALLOW TRUE)
 FetchContent_MakeAvailable(zydis tomlplusplus imgui SDL3)
+# Vulkan (the renderer's second graphics API, gpu/rhi_vulkan.cpp): its headers, volk (the functions loaded from the
+# driver, none linked) and the Vulkan Memory Allocator, all headers and sources compiled in
+FetchContent_Declare(vulkan_headers GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Headers.git
+                     GIT_TAG vulkan-sdk-1.4.350.0 GIT_SHALLOW TRUE SOURCE_SUBDIR none)
+FetchContent_Declare(volk GIT_REPOSITORY https://github.com/zeux/volk.git GIT_TAG vulkan-sdk-1.4.350.0 GIT_SHALLOW TRUE
+                     SOURCE_SUBDIR none)
+FetchContent_Declare(vma GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git GIT_TAG v3.3.0
+                     GIT_SHALLOW TRUE SOURCE_SUBDIR none)
+FetchContent_MakeAvailable(vulkan_headers volk vma)
 
 # x86 to C++ recompiler
 file(GLOB XBE_RECOMP_SOURCES CONFIGURE_DEPENDS ${XBE_SDK_DIR}/tools/recomp/*.cpp)
@@ -41,8 +51,7 @@ set(XBE_IMGUI_SOURCES
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_win32.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_dx12.cpp)
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_win32.cpp)
 
 file(GLOB XBE_RUNTIME_SOURCES CONFIGURE_DEPENDS ${XBE_SDK_DIR}/runtime/*/*.cpp)
 # SDL's headers go to the input code alone (it is linked LINK_ONLY), so the generated sources' compile line stays the same
@@ -59,16 +68,21 @@ function(add_xbe_image target xbe config partitions game_dir)
         list(APPEND GEN_SOURCES ${GEN}/x86_recomp.${i}.cpp)
     endforeach()
     file(GLOB configs CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/config/*.toml ${XBE_SDK_DIR}/xdk/*/*.toml)
-    add_custom_command(
-        OUTPUT ${GEN}/codegen.stamp
-        BYPRODUCTS ${GEN_SOURCES} ${GEN}/x86_recomp_shared.h ${GEN}/image_symbols.h
-        COMMAND xbe_recomp config/${config} --xdk ${XBE_SDK_DIR}/xdk
-        COMMAND ${CMAKE_COMMAND} -E touch ${GEN}/codegen.stamp
-        DEPENDS xbe_recomp ${configs} ${CMAKE_CURRENT_SOURCE_DIR}/assets/${xbe}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Recompiling ${xbe}"
-        VERBATIM)
-    add_custom_target(recompile_${target} DEPENDS ${GEN}/codegen.stamp)
+    # XBE_CODEGEN off: a second build tree on the generated sources another one keeps (never written from this one)
+    if(XBE_CODEGEN)
+        add_custom_command(
+            OUTPUT ${GEN}/codegen.stamp
+            BYPRODUCTS ${GEN_SOURCES} ${GEN}/x86_recomp_shared.h ${GEN}/image_symbols.h
+            COMMAND xbe_recomp config/${config} --xdk ${XBE_SDK_DIR}/xdk
+            COMMAND ${CMAKE_COMMAND} -E touch ${GEN}/codegen.stamp
+            DEPENDS xbe_recomp ${configs} ${CMAKE_CURRENT_SOURCE_DIR}/assets/${xbe}
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            COMMENT "Recompiling ${xbe}"
+            VERBATIM)
+        add_custom_target(recompile_${target} DEPENDS ${GEN}/codegen.stamp)
+    else()
+        add_custom_target(recompile_${target})
+    endif()
     set_source_files_properties(${GEN_SOURCES} PROPERTIES GENERATED TRUE
         COMPILE_OPTIONS "-O2;-fno-strict-aliasing;-Wno-unused-label;-Wno-parentheses-equality;-Wno-unused-variable")
     file(GLOB GAME_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/${game_dir}/*.cpp)
@@ -86,10 +100,13 @@ function(add_xbe_image target xbe config partitions game_dir)
     file(SHA1 ${xbe_file} xbe_sha1)
     set(XBE_HASH ${CMAKE_CURRENT_BINARY_DIR}/${target}_xbe.cpp)
     file(CONFIGURE OUTPUT ${XBE_HASH} CONTENT "extern const char kImageSha1[] = \"${xbe_sha1}\";\n")
-    add_executable(${target} WIN32 ${XBE_RUNTIME_SOURCES} ${XBE_HOST_SOURCES} ${GAME_SOURCES} ${GEN_SOURCES} ${XBE_IMGUI_SOURCES} ${XBE_HASH})
+    add_executable(${target} WIN32 ${XBE_RUNTIME_SOURCES} ${XBE_HOST_SOURCES} ${GAME_SOURCES} ${GEN_SOURCES} ${XBE_IMGUI_SOURCES} ${XBE_HASH}
+                   ${volk_SOURCE_DIR}/volk.c)
     add_dependencies(${target} recompile_${target})
     target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${XBE_SDK_DIR}/runtime ${GEN})
-    target_include_directories(${target} SYSTEM PRIVATE ${imgui_SOURCE_DIR})
+    target_include_directories(${target} SYSTEM PRIVATE ${imgui_SOURCE_DIR} ${vulkan_headers_SOURCE_DIR}/include ${volk_SOURCE_DIR}
+                               ${vma_SOURCE_DIR}/include)
+    target_compile_definitions(${target} PRIVATE VK_NO_PROTOTYPES VK_USE_PLATFORM_WIN32_KHR)
     target_compile_options(${target} PRIVATE -fno-strict-aliasing)
     target_compile_definitions(${target} PRIVATE UNICODE _UNICODE _CRT_SECURE_NO_WARNINGS)
     target_link_libraries(${target} PRIVATE tomlplusplus::tomlplusplus $<LINK_ONLY:SDL3::SDL3-static> d3d12 dxgi dxguid d3dcompiler xaudio2 ole32 windowscodecs dbghelp winmm dwmapi ws2_32)

@@ -224,6 +224,26 @@ float4 blur(O i) : SV_Target {
     }
     return sum / max(wsum, 1e-4);
 }
+// the occlusion (made at half size) to full size: the four nearest half size texels, bilinear and by how near their
+// depth is to the pixel's (an edge keeps its own side), the nearest in depth alone where none is near
+float4 aoup(O i) : SV_Target {
+    float z0 = ViewZ(depth.SampleLevel(pnt, i.uv, 0));
+    float2 hs = p[2].zw * 2;
+    float2 t = i.uv / hs - 0.5;
+    float2 base = (floor(t) + 0.5) * hs, f = frac(t);
+    float sum = 0, wsum = 0, best = 1e30, nearest = 1;
+    [unroll] for (int k = 0; k < 4; k++) {
+        float2 o = float2(k & 1, k >> 1);
+        float2 uv = base + o * hs;
+        float z = ViewZ(depth.SampleLevel(pnt, uv, 0));
+        float a = occ.SampleLevel(pnt, uv, 0);
+        float dz = abs(z - z0);
+        float w = (o.x > 0 ? f.x : 1 - f.x) * (o.y > 0 ? f.y : 1 - f.y) * saturate(1 - dz / (0.05 * z0 + 1e-3));
+        sum += a * w, wsum += w;
+        if (dz < best) best = dz, nearest = a;
+    }
+    return wsum > 1e-3 ? sum / wsum : nearest;
+}
 )";
 
 // t0 the scene: bright pass at half size (what is over 0.85, weighted), 4 taps of a box
@@ -803,89 +823,134 @@ float3 SkyColour(float3 R) {
     float3 sky = n > 0 ? acc / n : float3(0.35, 0.4, 0.45) * 0.4;
     return sky * saturate(R.y * 1.5 + 0.6);
 }
-float4 ssr(O i) : SV_Target {
-    int3 px = int3(i.pos.xy, 0);
-    float4 s = scene.Load(px);
+// a pixel's surface for the reflections: false where nothing is reflected (o.s the scene as it is)
+struct Px {
+    float4 s;
+    float z, refl, rough, amount;
+    bool metal;
+    float3 N, P, V, R;
+};
+bool Setup(int2 xy, float2 uv, out Px o) {
+    o = (Px)0;
+    int3 px = int3(xy, 0);
+    o.s = scene.Load(px);
     float4 g = gb.Load(px);
     // the depth: the weapon in hand's where it is drawn (the depth now), else the world's
     float dn = depthnow.Load(px);
     float d = dn < 1 ? dn : world.Load(px);
-    float z = ViewZ(d);
-    // 4: the buffer as written: reflectivity code red, its depth green, the depth now blue (both /5000)
-    if (sky[5].w == 4) return float4(abs(g.w) / 64, g.z / 5000, z / 5000, 1);
-    if (g.w == 0) return s;
-    if (abs(z - g.z) > max(3, z * 0.01)) return s;
+    o.z = ViewZ(d);
+    if (g.w == 0) return false;
+    if (abs(o.z - g.z) > max(3, o.z * 0.01)) return false;
     float code = abs(g.w);
-    float refl = floor(code) / 63, rough = saturate(frac(code) / 0.95);
-    bool metal = g.w < 0;
-    if (refl < 0.01) return s;
-    float3 N = OctDecode(g.xy);
-    float3 P = ViewPos(i.uv, d);
-    float3 V = normalize(-P);
-    float3 R = reflect(-V, N);
-    float ndv = saturate(dot(N, V));
+    o.refl = floor(code) / 63, o.rough = saturate(frac(code) / 0.95);
+    o.metal = g.w < 0;
+    if (o.refl < 0.01) return false;
+    o.N = OctDecode(g.xy);
+    o.P = ViewPos(uv, d);
+    o.V = normalize(-o.P);
+    o.R = reflect(-o.V, o.N);
+    float ndv = saturate(dot(o.N, o.V));
     // a broad Fresnel (the game's surfaces are rough, and a sheen at a grazing angle is what reads)
-    float f0 = metal ? 0.7 : 0.15;
+    float f0 = o.metal ? 0.7 : 0.15;
     float F = f0 + (1 - f0) * pow(1 - ndv, 3);
-    float amount = saturate(refl * F * 2);
-    if (amount < 0.015) return s;
-    // fewer steps where the reflection is faint
-    int steps = (int)lerp(14, 40, saturate(amount * 3));
-    // the walk: from just off the surface, a step of 1.5% of the depth growing 18% each, up to 40 m
-    float3 hitc = 0;
-    float found = 0;
-    if (R.z > -0.2) {
-        float3 X = P + N * (2 + z * 0.002);
-        float step = max(z * 0.015, 4);
-        float dither = Hash(i.pos.xy) * 0.5 + 0.5;
-        float3 prev = X;
-        float grow = steps < 40 ? 1.3 : 1.18;
-        // the ray in front of what the screen shows where it was (a surface met is one it goes behind)
-        float pgap = -1;
-        [loop] for (int k = 0; k < steps; k++) {
-            prev = X;
-            X += R * step * (k == 0 ? dither : 1);
-            step *= grow;
-            if (X.z < 1 || length(X - P) > 4000) break;
-            float2 q = ToScreen(X);
-            if (any(q < 0) || any(q > 1)) break;
-            float zs = ViewZ(world.SampleLevel(pnt, q, 0));
-            float gap = X.z - zs;
-            // nothing by the eye itself is reflected (the gun in hand or mounted, the hands): seen from the far
-            // ground it threw a dark, blocky copy of the gun and its flash down the line of fire
-            if (zs < 150) break;
-            bool met = false;
-            float3 b = X;
-            if (gap > 0 && pgap <= 0) {
-                // narrowed onto the surface met
-                float3 a = prev;
-                [unroll] for (int r = 0; r < 5; r++) {
-                    float3 m = (a + b) * 0.5;
-                    float2 mq = ToScreen(m);
-                    if (m.z - ViewZ(world.SampleLevel(pnt, mq, 0)) > 0) b = m; else a = m;
-                }
-                // there, the surface at the ray's own depth: one far in front of it (a doorway's frame, a post near
-                // the eye) is passed behind, not met. The steps grow long far out, and their old tolerance took such
-                // a frame for the surface met by a hair: a step of the eye and a whole roof's reflection turned from
-                // the sky to the frame's dark and back
-                float2 bq = ToScreen(b);
-                met = b.z - ViewZ(world.SampleLevel(pnt, bq, 0)) < max(40, b.z * 0.04);
+    o.amount = saturate(o.refl * F * 2);
+    return o.amount >= 0.015;
+}
+// the walk: from just off the surface, a step of 1.5% of the depth growing 18% each, up to 40 m (fewer steps where the
+// reflection is faint). Out: where it met the world on the screen (xy), how sure (z: faded at the screen's edges and
+// with the way it went), 0 nothing met
+float3 Trace(Px f, float2 pos) {
+    if (f.R.z <= -0.2) return 0;
+    int steps = (int)lerp(14, 40, saturate(f.amount * 3));
+    float3 X = f.P + f.N * (2 + f.z * 0.002);
+    float step = max(f.z * 0.015, 4);
+    float dither = Hash(pos) * 0.5 + 0.5;
+    float3 prev = X;
+    float grow = steps < 40 ? 1.3 : 1.18;
+    // the ray in front of what the screen shows where it was (a surface met is one it goes behind)
+    float pgap = -1;
+    [loop] for (int k = 0; k < steps; k++) {
+        prev = X;
+        X += f.R * step * (k == 0 ? dither : 1);
+        step *= grow;
+        if (X.z < 1 || length(X - f.P) > 4000) break;
+        float2 q = ToScreen(X);
+        if (any(q < 0) || any(q > 1)) break;
+        float zs = ViewZ(world.SampleLevel(pnt, q, 0));
+        float gap = X.z - zs;
+        // nothing by the eye itself is reflected (the gun in hand or mounted, the hands): seen from the far
+        // ground it threw a dark, blocky copy of the gun and its flash down the line of fire
+        if (zs < 150) break;
+        if (gap > 0 && pgap <= 0) {
+            // narrowed onto the surface met
+            float3 a = prev, b = X;
+            [unroll] for (int r = 0; r < 5; r++) {
+                float3 m = (a + b) * 0.5;
+                float2 mq = ToScreen(m);
+                if (m.z - ViewZ(world.SampleLevel(pnt, mq, 0)) > 0) b = m; else a = m;
             }
-            pgap = gap;
-            if (met) {
-                float2 hq = ToScreen(b);
-                // blurrier the rougher and the further
-                float2 o = rough * 0.012 * float2(p[2].y / p[2].x, 1) * (1 + length(b - P) * 0.002);
-                hitc = (scene.SampleLevel(lin, hq, 0).rgb * 2 + scene.SampleLevel(lin, hq + o, 0).rgb +
-                        scene.SampleLevel(lin, hq - o, 0).rgb + scene.SampleLevel(lin, hq + float2(o.x, -o.y), 0).rgb +
-                        scene.SampleLevel(lin, hq - float2(o.x, -o.y), 0).rgb) / 6;
-                // faded at the screen's edges and with the way it went
-                float2 e = min(hq, 1 - hq);
-                found = saturate(min(e.x, e.y) * 12) * saturate(1 - length(b - P) / 4000);
-                break;
+            // there, the surface at the ray's own depth: one far in front of it (a doorway's frame, a post near
+            // the eye) is passed behind, not met. The steps grow long far out, and their old tolerance took such
+            // a frame for the surface met by a hair: a step of the eye and a whole roof's reflection turned from
+            // the sky to the frame's dark and back
+            float2 bq = ToScreen(b);
+            if (b.z - ViewZ(world.SampleLevel(pnt, bq, 0)) < max(40, b.z * 0.04)) {
+                float2 e = min(bq, 1 - bq);
+                return float3(bq, saturate(min(e.x, e.y) * 12) * saturate(1 - length(b - f.P) / 4000));
             }
         }
+        pgap = gap;
     }
+    return 0;
+}
+// the walk at half size (scene_[kSceneRays], before the shafts are made there): a texel's top left pixel's.
+// Out: xy where it met, z how sure, w the pixel's depth (-1: nothing reflected there)
+float4 ssrtrace(O i) : SV_Target {
+    int2 xy = int2(i.pos.xy) * 2;
+    Px f;
+    if (!Setup(xy, (xy + 0.5) * p[2].zw, f)) return float4(0, 0, 0, -1);
+    return float4(Trace(f, xy), f.z);
+}
+Texture2D traced : register(t6);
+float4 ssr(O i) : SV_Target {
+    int3 px = int3(i.pos.xy, 0);
+    // 4: the buffer as written: reflectivity code red, its depth green, the depth now blue (both /5000)
+    if (sky[5].w == 4) {
+        float4 g = gb.Load(px);
+        float dn = depthnow.Load(px);
+        return float4(abs(g.w) / 64, g.z / 5000, ViewZ(dn < 1 ? dn : world.Load(px)) / 5000, 1);
+    }
+    Px f;
+    if (!Setup(int2(i.pos.xy), i.uv, f)) return f.s;
+    float4 s = f.s;
+    float amount = f.amount, rough = f.rough;
+    // the walk's end from the half size one of the four about the pixel nearest in depth (an edge keeps its own
+    // side); none near: nothing met
+    float2 hs = p[2].zw * 2;
+    float2 t = i.uv / hs - 0.5;
+    float2 base = (floor(t) + 0.5) * hs;
+    float best = 1e30;
+    float3 hit = 0;
+    [unroll] for (int k = 0; k < 4; k++) {
+        float4 tr = traced.SampleLevel(pnt, base + float2(k & 1, k >> 1) * hs, 0);
+        if (tr.w < 0) continue;
+        float dz = abs(tr.w - f.z);
+        if (dz < best) best = dz, hit = tr.xyz;
+    }
+    float found = best <= max(3, f.z * 0.02) ? hit.z : 0;
+    float3 hitc = 0;
+    if (found > 0) {
+        float2 hq = hit.xy;
+        float3 B = ViewPos(hq, world.SampleLevel(pnt, hq, 0));
+        // blurrier the rougher and the further
+        float2 o = rough * 0.012 * float2(p[2].y / p[2].x, 1) * (1 + length(B - f.P) * 0.002);
+        hitc = (scene.SampleLevel(lin, hq, 0).rgb * 2 + scene.SampleLevel(lin, hq + o, 0).rgb +
+                scene.SampleLevel(lin, hq - o, 0).rgb + scene.SampleLevel(lin, hq + float2(o.x, -o.y), 0).rgb +
+                scene.SampleLevel(lin, hq - float2(o.x, -o.y), 0).rgb) / 6;
+    }
+    float3 R = f.R;
+    bool metal = f.metal;
+    float refl = f.refl;
     float3 Rw = R.x * sky[0].xyz + R.y * sky[1].xyz + R.z * sky[2].xyz;
     // a surface the game left dark (a room's floor, its walls) sees no sky and little of the bright outside: its
     // reflection fades with its own light (else a dark room shone with the sky and the street, and as the camera
@@ -985,6 +1050,73 @@ float4 down(O i) : SV_Target {
 }
 )";
 
+// Ambient motes (SceneFinal, before the composite: into motes_, added by the composite where Motes was): points in the
+// air about the eye (cells of 1 m, most with a point, drifting), drawn where nothing solid is in front: dust where the
+// light falls (the scene behind it is lit), embers near the fires' lights (rising, warm). Each a small square about
+// its point, one an instance over the 17 x 17 x 17 cells about the eye (the motes reached 7 m along the view), with
+// kSceneCommon's constants (as the composite's) without its full screen vs. Their view space place from the world's
+// (the camera's rows sky[0..2], its place heatz[7].yzw).
+inline constexpr char kSceneMotesHlsl[] = R"(
+Texture2D scene : register(t0);
+Texture2D<float> occ : register(t1);      // the world's depth
+Texture2D<float> shadowm : register(t6);  // the depth now (the weapon in hand's)
+struct M { float4 pos : SV_Position; float4 q : TEXCOORD0; float3 lit : TEXCOORD1; };
+M vs(uint id : SV_VertexID, uint inst : SV_InstanceID) {
+    static const float2 corner[6] = {float2(-1, -1), float2(1, -1), float2(-1, 1), float2(-1, 1), float2(1, -1), float2(1, 1)};
+    M o = (M)0;
+    o.pos = float4(2, 2, 2, 1);  // none: outside the view
+    float t = p[4].y;
+    float3 eye = heatz[7].yzw;
+    float3 cell = floor(eye / 100) + float3(inst % 17, (inst / 17) % 17, inst / 289) - 8;
+    float h = Hash(cell.xz + cell.y * 17.31);
+    if (h > 0.7) return o;
+    float h2 = Hash(cell.zx * 1.7 + 3.1), h3 = Hash(cell.xy * 2.3 + 7.9);
+    // the point in its cell, drifting slowly (embers rise)
+    float3 Pw = (cell + float3(h / 0.7, h2, h3)) * 100 + float3(sin(t * 0.3 + h * 20), cos(t * 0.23 + h2 * 20), sin(t * 0.27 + h3 * 20)) * 20;
+    // back to view space
+    float3 d = Pw - eye;
+    float3 Pv = float3(dot(d, sky[0].xyz), dot(d, sky[1].xyz), dot(d, sky[2].xyz));
+    if (Pv.z < 20 || Pv.z > 760) return o;
+    float2 q = float2(Pv.x / Pv.z / p[0].x * 0.5 + 0.5, 0.5 - Pv.y / Pv.z / p[0].y * 0.5);
+    float px = 2 * p[0].y / p[2].y;  // a pixel's size at depth 1
+    float size = max(1.0, 1.5 / (px * Pv.z));
+    // lit: the fire lights near it (embers), else the scene's light about it (dust in a beam)
+    float3 lit = 0;
+    for (int l = 0; l < (int)lcount.x; l++) {
+        // embers by fires alone (lcol.w 0.5: a flickering light), not by shots' flashes
+        if (abs(lcol[l].w - 0.5) > 0.1 && abs(lcol[l].w - 0.875) > 0.05) continue;  // fires (0.875: one that casts)
+        float3 L = lpos[l].xyz - Pv;
+        float r = lpos[l].w * 0.8;
+        float qq = dot(L, L) / (r * r);
+        if (qq < 1) lit += lcol[l].rgb * (1 - qq) * 1.5;
+    }
+    o.lit = lit;
+    o.pos = float4(float2(q.x * 2 - 1, 1 - q.y * 2) + corner[id] * (size + 1) * 2 * p[2].zw * float2(1, -1), 0, 1);
+    o.q = float4(q, Pv.z, size);
+    return o;
+}
+float4 motes(M i) : SV_Target {
+    float size = i.q.w;
+    float spot = saturate(1 - length((i.q.xy - i.pos.xy * p[2].zw) * p[2].xy) / size);
+    if (spot <= 0) discard;
+    // (the weapon in hand's depth where it is drawn: no motes behind it in front of it)
+    float wn = shadowm.Load(int3(i.pos.xy, 0));
+    float zs = wn < 1 ? ViewZ(wn) : ViewZ(occ.Load(int3(i.pos.xy, 0)));
+    if (i.q.z > zs) discard;
+    // dust shows against what is near (a lit wall, a beam in a room), not against the open sky (the scene behind
+    // the point: read here, the tables are the pixel shader's)
+    float3 behind = scene.SampleLevel(lin, i.q.xy, 0).rgb;
+    float bl = dot(behind, float3(0.2126, 0.7152, 0.0722));
+    float near = 1 - smoothstep(1500, 4000, zs);
+    float3 dust = behind * smoothstep(0.2, 0.55, bl) * 0.5 * near;
+    // (the per pixel walk this replaces added a point once a step that fell in its cell: about twice)
+    float3 inc = (i.lit + dust) * spot * spot * heatz[6].y * 2.2;
+    if (heatz[6].y > 1.5) inc += float3(spot, 0, spot);  // XBE_MOTES_DEBUG: every mote magenta
+    return float4(inc, 0);
+}
+)";
+
+
 // t0 the scene, t1 the occlusion, t2 to t5 the bloom levels: the scene as it is drawn on
 inline constexpr char kSceneComposite[] = R"(
 Texture2D scene : register(t0);
@@ -995,28 +1127,6 @@ Texture2D b2 : register(t4);
 Texture2D b3 : register(t5);
 // shadow_shaders.h's mask: r the multiplier, g the shadow, b the cascade, a the share (the atlas for shadow_atlas)
 Texture2D shadowm : register(t6);
-// the clouds' shadows (grade[3].y on, the world's depth at t2): the way from a point towards the sun meets the clouds'
-// layer; how thick they are that way takes the sun's share of its light (the mask: g lit, a the share), on
-// the sunlit ground alone, never in a room or a shadow
-float CloudShade(O i, float4 m) {
-    if (grade[3].y <= 0 || sky[5].x <= 0) return m.r;
-    float d = b0.Load(int3(i.pos.xy, 0)).r;
-    float3 L = sky[4].xyz;
-    if (d >= 0.99999 || L.y < 0.05 || (m.a <= 0.002 && grade[3].z <= 0)) return m.r;
-    float3 P = ViewPos(i.uv, d);
-    // the point in the world (the camera's rotation, then its place: grade[1].xyz in this pass): the clouds' layer's
-    // pattern at its place, shifted towards the sun as far as the layer's height makes it, drifting with their wind
-    float3 X = P.x * sky[0].xyz + P.y * sky[1].xyz + P.z * sky[2].xyz + grade[1].xyz;
-    float2 at = (X.xz + L.xz / max(L.y, 0.2) * 3000) / 4000;
-    float t = sky[1].w;
-    float2 q = at + t * float2(0.020, 0.007) * 0.5;
-    float2 warp = float2(Fbm(q * 0.6 + t * float2(0.007, -0.0045), 2), Fbm(q * 0.6 + float2(5.2, 1.3) - t * float2(0.0056, 0.008), 2));
-    q += (warp - 0.5) * 1.2;
-    float n = Fbm(q, 3) + 0.25 * Fbm(q * 0.31 + 7.3, 2) - 0.12;
-    float cover = smoothstep(0.0, 0.3, n - (1 - sky[2].w));
-    if (grade[3].z > 0) return 1 - cover;  // XBE_CLOUD_DEBUG: the clouds' cover alone
-    return 1 - m.a * (1 - m.g * (1 - 0.8 * cover));
-}
 // the bounce (grade[0].x the strength, t5): the colour that arrives times the surface's own colour (guessed from how
 // it is drawn), as a share of its own light: lit surfaces take a tint, dark ones (shade, rooms) next to none; never
 // more than a quarter brighter
@@ -1032,8 +1142,7 @@ float3 Bounce(O i, float3 c) {
 float4 occlude(O i) : SV_Target {
     float4 s = scene.Load(int3(i.pos.xy, 0));
     s.rgb = Bounce(i, s.rgb);
-    if (grade[3].z > 0) return float4(CloudShade(i, float4(1, 1, 0, 1)).xxx, 1);  // XBE_CLOUD_DEBUG: the cover alone
-    return float4(s.rgb * occ.SampleLevel(lin, i.uv, 0) * CloudShade(i, shadowm.Load(int3(i.pos.xy, 0))), s.a);
+    return float4(s.rgb * occ.SampleLevel(lin, i.uv, 0) * shadowm.Load(int3(i.pos.xy, 0)).r, s.a);
 }
 // the shadows' debug views (XBE_SHADOW_DEBUG)
 float4 shadow_mask(O i) : SV_Target { return float4(shadowm.Load(int3(i.pos.xy, 0)).rrr, 1); }
@@ -1163,68 +1272,8 @@ float3 Glow(O i, float3 c) {
     float3 albedo = saturate(c / 0.35) * 0.8 + 0.03;
     return c + albedo * sum + air;
 }
-// Ambient motes: points in the air about the eye (cells of 1 m, most with a point, drifting), drawn where nothing solid is
-// in front: dust where the light falls (the scene behind it is lit), embers near the fires' lights (rising, warm). Their
-// view space place from the world's (the camera's rows sky[0..2], its place heatz[7].yzw: SceneFinal).
-float3 Motes(O i, float3 c) {
-    float t = p[4].y;
-    float3 eye = heatz[7].yzw;
-    // (the weapon in hand's depth where it is drawn: no motes behind it in front of it)
-    float wn = shadowm.Load(int3(i.pos.xy, 0)).r;
-    float zs = wn < 1 ? ViewZ(wn) : ViewZ(occ.SampleLevel(pnt, i.uv, 0));
-    float3 ray = normalize(float3((i.uv.x * 2 - 1) * p[0].x, (1 - i.uv.y * 2) * p[0].y, 1));
-    float3 add = 0;
-    float px = 2 * p[0].y / p[2].y;  // a pixel's size at depth 1
-    // (a step in the cell of the step before adds what that one did: the same point, worked out once)
-    float3 lastCell = float3(1e9, 1e9, 1e9), lastAdd = 0;
-    // along the ray, the cells it crosses at a few depths
-    [loop] for (int k = 0; k < 16; k++) {
-        float z = 40 + k * 45;
-        if (z > zs) break;
-        float3 Vv = ray * (z / ray.z);
-        float3 W = eye + Vv.x * sky[0].xyz + Vv.y * sky[1].xyz + Vv.z * sky[2].xyz;
-        float3 cell = floor(W / 100);
-        [branch] if (all(cell == lastCell)) {
-            add += lastAdd;
-            continue;
-        }
-        lastCell = cell, lastAdd = 0;
-        float h = Hash(cell.xz + cell.y * 17.31);
-        if (h > 0.7) continue;
-        float h2 = Hash(cell.zx * 1.7 + 3.1), h3 = Hash(cell.xy * 2.3 + 7.9);
-        // the point in its cell, drifting slowly (embers rise)
-        float3 Pw = (cell + float3(h / 0.7, h2, h3)) * 100 + float3(sin(t * 0.3 + h * 20), cos(t * 0.23 + h2 * 20), sin(t * 0.27 + h3 * 20)) * 20;
-        // back to view space
-        float3 d = Pw - eye;
-        float3 Pv = float3(dot(d, sky[0].xyz), dot(d, sky[1].xyz), dot(d, sky[2].xyz));
-        if (Pv.z < 20 || Pv.z > zs) continue;
-        float2 q = float2(Pv.x / Pv.z / p[0].x * 0.5 + 0.5, 0.5 - Pv.y / Pv.z / p[0].y * 0.5);
-        float dist = length((q - i.uv) * p[2].xy);
-        float size = max(1.0, 1.5 / (px * Pv.z));
-        float spot = saturate(1 - dist / size);
-        if (spot <= 0) continue;
-        // lit: the fire lights near it (embers), else the scene's light about it (dust in a beam)
-        float3 lit = 0;
-        for (int l = 0; l < (int)lcount.x; l++) {
-            // embers by fires alone (lcol.w 0.5: a flickering light), not by shots' flashes
-            if (abs(lcol[l].w - 0.5) > 0.1 && abs(lcol[l].w - 0.875) > 0.05) continue;  // fires (0.875: one that casts)
-            float3 L = lpos[l].xyz - Pv;
-            float r = lpos[l].w * 0.8;
-            float qq = dot(L, L) / (r * r);
-            if (qq < 1) lit += lcol[l].rgb * (1 - qq) * 1.5;
-        }
-        // dust shows against what is near (a lit wall, a beam in a room), not against the open sky
-        float3 behind = scene.SampleLevel(lin, q, 0).rgb;
-        float bl = dot(behind, float3(0.2126, 0.7152, 0.0722));
-        float near = 1 - smoothstep(1500, 4000, zs);
-        float3 dust = behind * smoothstep(0.2, 0.55, bl) * 0.5 * near;
-        float3 inc = (lit + dust) * spot * spot * heatz[6].y;
-        if (heatz[6].y > 1.5) inc += float3(spot, 0, spot);  // XBE_MOTES_DEBUG: every mote magenta
-        lastAdd = inc;
-        add += inc;
-    }
-    return c + add;
-}
+// the motes (kSceneMotesHlsl, drawn before this pass into t7 when heatz[6].y is on)
+Texture2D motesmap : register(t7);
 // d3d12.cpp SceneFinal: t1 the world's depth, t2 the bloom, t3 the sun's shafts (b1), t4 the blurred scene (b2),
 // t6 the depth now; p[4] pain, time, flash, aiming's blur; lcount: lights, heat sources, shafts
 float4 composite(O i) : SV_Target {
@@ -1373,7 +1422,7 @@ float4 composite(O i) : SV_Target {
     // (not over the weapon in hand and the hands: drawn after the world's depth, the shafts went through them)
     if (lcount.z > 0 && shadowm.Load(int3(i.pos.xy, 0)).r >= 1) c += b1.SampleLevel(lin, uv, 0).rgb;
     if (lcount.x > 0) c = Glow(i, c);
-    if (heatz[6].y > 0) c = Motes(i, c);
+    if (heatz[6].y > 0) c += motesmap.Load(int3(i.pos.xy, 0)).rgb;
     // XBE_LIGHTS_DEBUG: the dynamic lights' light alone, on a grey world
     if (sky[5].z >= 2) return float4(lcount.x > 0 ? Glow(i, float3(0.3, 0.3, 0.3)) - 0.3 : float3(0, 0, 0), 1);
     // a close explosion's flash

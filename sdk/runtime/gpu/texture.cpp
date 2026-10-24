@@ -1,4 +1,5 @@
 #include "gpu/texture.h"
+#include "gpu/keymap.h"
 
 #include <algorithm>
 #include <bit>
@@ -255,7 +256,7 @@ float DepthTexel(uint32_t fmt, const uint8_t* p) {
 }
 
 std::mutex g_dirty_lock;
-std::unordered_map<uint32_t, uint64_t> g_dirty;
+KeyMap<uint32_t, uint64_t> g_dirty;
 uint64_t g_epoch = 1;
 
 }  // namespace
@@ -551,12 +552,12 @@ void ApplyPixelConstants(State& s, uint32_t first, uint32_t count) {
     auto mine = [&](uint32_t m) { return m >= first && m < first + count && m < 8; };
     for (uint32_t i = 0; i < 8; i++) {
         uint32_t m0 = (c0map >> (i * 4)) & 0xF, m1 = (c1map >> (i * 4)) & 0xF;
-        if (mine(m0)) s.simple[(kMPsConstant0 >> 2) + i] = PackColor(s.psc[m0]);
-        if (mine(m1)) s.simple[(kMPsConstant1 >> 2) + i] = PackColor(s.psc[m1]);
+        if (mine(m0)) s.simple[(kMPsConstant0 >> 2) + i] = PackColor(s.psc[m0]), MarkSimple((kMPsConstant0 >> 2) + i);
+        if (mine(m1)) s.simple[(kMPsConstant1 >> 2) + i] = PackColor(s.psc[m1]), MarkSimple((kMPsConstant1 >> 2) + i);
     }
     uint32_t f0 = fmap & 0xF, f1 = (fmap >> 4) & 0xF;
-    if (mine(f0)) s.simple[kMPsFinalConstant0 >> 2] = PackColor(s.psc[f0]);
-    if (mine(f1)) s.simple[kMPsFinalConstant1 >> 2] = PackColor(s.psc[f1]);
+    if (mine(f0)) s.simple[kMPsFinalConstant0 >> 2] = PackColor(s.psc[f0]), MarkSimple(kMPsFinalConstant0 >> 2);
+    if (mine(f1)) s.simple[kMPsFinalConstant1 >> 2] = PackColor(s.psc[f1]), MarkSimple(kMPsFinalConstant1 >> 2);
 }
 
 }  // namespace gpu

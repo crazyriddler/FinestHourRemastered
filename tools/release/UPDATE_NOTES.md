@@ -147,6 +147,18 @@ The version installed is in `version.txt` beside the game. Unattended:
   triangles they came out broken, and from that far the original is what the eye sees anyway.
 - Snow Tracks: tanks and half-tracks leave the prints of their tracks in the snow too, cleats and all, as the
   soldiers leave their footprints.
+- Much faster, with every effect on. On the CPU, busy scenes run up to twice as fast (the boat ride of the first
+  mission went from about 75 to about 180 FPS on my PC): the remastered models are found once instead of every
+  frame, only the game's changed states are passed on each draw, the soldiers' weights and bones no longer make
+  the CPU convert their whole models, and much less is copied to the GPU. On the GPU, the same picture takes about
+  a third less time: Ambient Occlusion and contact shadows are worked out at half size, the reflections are traced
+  at half size, the dust and embers in the air are drawn as points instead of searched for at every pixel, Surface
+  Materials' relief takes only as many steps as it moves on the screen, and its texture filtering costs less where
+  nobody can see the difference.
+- New Renderer option (PC Settings, Display): Direct3D 12 (the default) or Vulkan, the same picture through either.
+  Vulkan is new and experimental; the change takes effect the next time the game starts.
+- Free Camera (PC Settings, General) is available to everyone, no longer only with a hidden setting.
+- Cloud Shadows is gone: it made no visible difference on the ground and cost GPU time every frame.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

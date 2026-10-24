@@ -1,5 +1,6 @@
 // See remaster.h.
 #include "gpu/remaster.h"
+#include "gpu/keymap.h"
 
 #include <algorithm>
 #include <condition_variable>
@@ -133,7 +134,7 @@ namespace {
 
 struct Store {
     std::filesystem::path dir;
-    std::unordered_map<uint64_t, Material> materials;
+    KeyMap<uint64_t, Material> materials;
     std::mutex lock;
     std::condition_variable cv;
     std::deque<uint64_t> todo;

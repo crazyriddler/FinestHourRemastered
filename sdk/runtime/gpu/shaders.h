@@ -42,6 +42,8 @@ struct PixelKey {
 };
 
 uint64_t Hash(const void* p, size_t n, uint64_t h = 1469598103934665603ull);
+// faster for bulk bytes (64 a round), other values than Hash's: never for a key kept on disk
+uint64_t HashBulk(const void* p, size_t n, uint64_t h = 1469598103934665603ull);
 
 PixelKey MakePixelKey(const State& s, const TexInfo tex[4]);
 

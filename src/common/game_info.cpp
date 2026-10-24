@@ -90,7 +90,6 @@ bool* Effect(const std::string& name) {
         {"explosion_flash", &app::Settings::explosion_flash},
         {"flash_shadows", &app::Settings::flash_shadows},
         {"auto_exposure", &app::Settings::auto_exposure},
-        {"cloud_shadows", &app::Settings::cloud_shadows},
         {"volumetric_fog", &app::Settings::volumetric_fog},
         {"soft_shadows", &app::Settings::soft_shadows},
         {"bounce_light", &app::Settings::bounce_light},
@@ -477,6 +476,7 @@ void Command(const std::string& line_in) {
             LOGR("actors: %d", found);
         }
         if (line == "perf start") gpu::g_frame_stats = 1;
+        if (line == "drawtimes") gpu::g_draw_times = 1;
         if (line.rfind("perf stop", 0) == 0) {
             std::snprintf(gpu::g_frame_stats_label, sizeof(gpu::g_frame_stats_label), "%s", line.size() > 10 ? line.c_str() + 10 : "");
             gpu::g_frame_stats = 2;
@@ -765,7 +765,7 @@ const app::GameInfo app::kGame = {
     .options =
         {
             {"skip_intros", &cod::Get().skip_intros, nullptr},
-            {"developer", &cod::Get().developer, nullptr},
+            {"developer", &cod::Get().developer, nullptr, true},
             {"tv_frame", &cod::Get().tv_frame, nullptr},
             {"fov", nullptr, &cod::Get().fov},
             {"fps_counter", &cod::Get().fps_counter, nullptr},

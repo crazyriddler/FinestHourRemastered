@@ -21,6 +21,7 @@ struct Settings {
     uint32_t render_percent = 100;   // of the output height
     uint32_t fps_cap = 60;           // 0 unlimited (no setting: the game's speed follows its frame rate)
     bool vsync = true;
+    uint32_t renderer = 0;           // the graphics API: 0 Direct3D 12, 1 Vulkan (from the next start)
     uint32_t aniso = 16;             // 0 as the game asks
     bool smaa = true;                // SMAA on the shown frame
     bool taa = true;                 // Anti-Aliasing: 4x MSAA (cut outs' edges as coverage) and temporal of the 3D
@@ -57,7 +58,6 @@ struct Settings {
     bool bounce_light = true;        // light bounced off nearby lit surfaces (one bounce, never into dark rooms)
     bool soft_shadows = true;        // the sun's shadows sharp where they touch, softer the further from what casts them
     bool volumetric_fog = true;      // a light haze in the air, thicker low, lit by the sun (its beams past shadows) and the flashes
-    bool cloud_shadows = true;       // the clouds' shadows drifting over the sunlit ground
     bool auto_exposure = true;       // the eye adapts a little between dark rooms and bright streets (the game's light kept)
     bool color_grade = true;         // each campaign's own tones: the Russian winter, the African desert, Europe
     bool film_grain = true;          // a faint, fine grain
@@ -133,6 +133,7 @@ struct Option {  // a setting in the settings file, flag or value
     const char* key;
     bool* flag;
     uint32_t* value;
+    bool hidden = false;  // a tester's flag: read, written only when on (not offered to the players in their file)
 };
 struct GameInfo {
     const wchar_t* title;        // window and splash

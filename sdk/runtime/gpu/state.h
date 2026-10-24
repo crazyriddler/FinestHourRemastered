@@ -184,4 +184,12 @@ struct State {
     uint32_t layout2d = 0;       // the game's tag for 2D drawn through the 3D pipeline (g_layout_2d), 0 for none
 };
 
+// the title's state's 64 byte pieces of simple and vsc written since the render thread was last sent them (every
+// writer marks: MarkSimple, MarkVsc; render_thread.cpp compares those alone, the rest of the 12 KB is not read a draw)
+inline std::array<uint64_t, 2> g_simple_dirty{~0ull, ~0ull};
+inline uint64_t g_vsc_dirty = ~0ull;
+inline void MarkSimple(uint32_t index) { g_simple_dirty[(index >> 10) & 1] |= 1ull << ((index >> 4) & 63); }
+inline void MarkVsc(uint32_t reg) { g_vsc_dirty |= 1ull << ((reg >> 2) & 63); }
+inline void MarkAll() { g_simple_dirty = {~0ull, ~0ull}, g_vsc_dirty = ~0ull; }
+
 }  // namespace gpu

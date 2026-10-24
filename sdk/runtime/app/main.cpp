@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <csignal>
 #include <cwchar>
 #include <thread>
@@ -298,7 +299,9 @@ void OpenGameWindow(bool apply) { SendMessageW(g_hwnd, kOpenWindow, apply, 0); }
 void Pace() {
     using clock = std::chrono::steady_clock;
     static clock::time_point next = clock::now();
-    uint32_t cap = Get().fps_cap;
+    // (tests, benchmarks: XBE_FPS_CAP, 0 unlimited)
+    static const char* cap_env = std::getenv("XBE_FPS_CAP");
+    uint32_t cap = cap_env ? uint32_t(std::atoi(cap_env)) : Get().fps_cap;
     auto now = clock::now();
     if (!cap) {
         next = now;

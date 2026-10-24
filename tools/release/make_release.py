@@ -40,7 +40,7 @@ PART = 1900 * 1024 * 1024
 PACK_PARTS = ["materials.txt", "shadows.txt", "snow.txt", "grains.txt", "details", "textures", "ui", "meshes"]
 # the shader cache: the recipes, compiled shaders and pipeline descriptions go anywhere (the game makes the
 # pipelines from them at its first start); the pipeline library (pipelines.bin, .id) is this PC driver's
-CACHE_ANY = ["recipes.bin", "blobs.bin", "passes.bin", "psos2.bin", "shadows2.bin"]
+CACHE_ANY = ["recipes.bin", "blobs.bin", "passes.bin", "psos2.bin", "shadows2.bin", "vulkan/blobs.bin"]  # (Vulkan: its SPIR-V; its pipelines are the driver's own)
 
 # the settings a release starts with: the author's, the display's size chosen by the game (0: the desktop's), English
 DEFAULTS = """anisotropic_filtering = 16
@@ -107,6 +107,11 @@ def stage_list(cache_all):
     if not os.path.exists(sdk):
         sys.exit("the Windows SDK's d3dcompiler_47.dll is needed: " + sdk)
     items.append((sdk, "d3dcompiler_47.dll"))
+    # the Vulkan renderer's shader compiler (DXC's, HLSL to SPIR-V): beside the exe, which loads it when Vulkan is chosen
+    dxc = os.path.join(ROOT, "..", "tools", "dxc", "bin", "x64", "dxcompiler.dll")
+    if not os.path.exists(dxc):
+        sys.exit("DXC's dxcompiler.dll is needed: " + dxc)
+    items.append((dxc, "dxcompiler.dll"))
     items += [(s, os.path.join("remaster", r)) for s, r in files_of(PACK, PACK_PARTS)]
     cache = os.path.join(BUILD, "shadercache")
     names = sorted(os.listdir(cache)) if cache_all else CACHE_ANY
@@ -155,7 +160,7 @@ def portable(game):
 # the update: every file the base payload lacks or has otherwise, and those that changed between the published
 # versions of the base (the exe, the shaders, the readme and licences: an installation of any earlier version is
 # brought up to date by them); the base's other files are checked by size; the first release's exe is deleted
-ALWAYS = ("CODFH.exe", "d3dcompiler_47.dll", "README.md", "LICENSE.txt", "THIRD_PARTY.txt")
+ALWAYS = ("CODFH.exe", "d3dcompiler_47.dll", "dxcompiler.dll", "README.md", "LICENSE.txt", "THIRD_PARTY.txt")
 DELETE = ("FinestHourRemastered.exe",)
 # files once shipped and no longer (the remastered meshes held back for review: tools/meshes/scope.py), taken out of
 # an installation that has them

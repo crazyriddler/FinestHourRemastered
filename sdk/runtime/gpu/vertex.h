@@ -62,5 +62,8 @@ bool Assemble(const State& s, uint32_t prim, uint32_t start, uint32_t count, con
 // the same, always converted to floats on the CPU (a float4 a register, vertices in range order): what a mesh
 // replacement is made from and keyed by
 bool AssembleFloats(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* indices, Assembled& out);
+// what AssembleFloats would make, told apart without making it: the bytes of the vertices the draw reads in each of its
+// streams, their layout, the indices (0 when nothing would be drawn)
+uint64_t ContentHash(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* indices);
 
 }  // namespace gpu

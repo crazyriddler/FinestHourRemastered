@@ -5,8 +5,10 @@
 #include <unordered_set>
 
 #include <dxgiformat.h>
+#include <smmintrin.h>
 
 #include "core/log.h"
+#include "gpu/shaders.h"
 #include "kernel/kernel.h"
 
 namespace gpu {
@@ -248,9 +250,16 @@ bool Pretransformed(const State& s) {
 }
 
 IndexBounds IndexRange(const uint8_t* ip, uint32_t count) {
-    uint16_t lo16 = 0xFFFF;
-    uint16_t hi16 = 0;
-    for (uint32_t i = 0; i < count; i++) {
+    // eight indices a step (SSE4.1), the rest one by one
+    __m128i lo = _mm_set1_epi16(-1), hi = _mm_setzero_si128();
+    uint32_t i = 0;
+    for (; i + 8 <= count; i += 8) {
+        const __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(ip + size_t(i) * 2));
+        lo = _mm_min_epu16(lo, v), hi = _mm_max_epu16(hi, v);
+    }
+    uint16_t lo16 = uint16_t(_mm_cvtsi128_si32(_mm_minpos_epu16(lo)));
+    uint16_t hi16 = uint16_t(~_mm_cvtsi128_si32(_mm_minpos_epu16(_mm_xor_si128(hi, _mm_set1_epi16(-1)))));
+    for (; i < count; i++) {
         uint16_t v;
         std::memcpy(&v, ip + i * 2, 2);
         lo16 = std::min(lo16, v);
@@ -289,13 +298,19 @@ uint32_t StrideOf(const State& s, const VertexShader& layout, const VertexShader
 constexpr uint32_t kStrideAlign = 4;            // the input assembler reads strides in dwords
 constexpr uint32_t kElementOffsetEnd = 0x10000;  // the element offset is stored as uint16_t
 
+// an element the input assembler cannot read where it lies (a stride or an offset off its alignment: the characters'
+// blend weights and indices, 3, 6 or 9 bytes a vertex, their shorts at odd offsets): its stream copied with each
+// element on a dword of its own (RepackStream), that stream alone, the draw's others read in place
+bool Aligned(uint32_t stride, uint32_t offset, const HostElement& he) {
+    return stride % kStrideAlign == 0 && offset % std::min<uint32_t>(he.bytes, 4) == 0;
+}
+
 bool RawReadable(const State& s, const Inputs& inputs) {
     for (int k = 0; k < inputs.nregs; k++) {
         const auto& in = inputs.layout.inputs[size_t(inputs.regs[k])];
         HostElement he = HostFormat(in.type);
         uint32_t stride = StrideOf(s, inputs.layout, in);
-        bool readable = he.format && stride && stride % kStrideAlign == 0 && in.offset < kElementOffsetEnd &&
-                        in.offset % std::min<uint32_t>(he.bytes, 4) == 0;
+        bool readable = he.format && stride && in.offset < kElementOffsetEnd;
         if (!readable) {
             static std::unordered_set<uint64_t> told;
             uint64_t key = uint64_t(in.type) << 48 | uint64_t(in.offset & 0xFFFF) << 32 | uint64_t(stride) << 8 | uint64_t(inputs.regs[k]);
@@ -376,18 +391,60 @@ bool UseIndexList(Assembled& out) {
 constexpr uint64_t kDenseSpanPerVertex = 4;
 constexpr uint64_t kDenseSpanSlack = 1024;
 
+// a stream's vertices copied with each of the draw's elements in it on dwords of its own (Aligned): the new offsets in at
+int RepackStream(const State& s, const Inputs& inputs, int stream, const DrawRange& d, bool dense, Assembled& out,
+                 uint32_t* at) {
+    using namespace kernel;
+    const auto& st = s.streams[size_t(stream)];
+    uint32_t stride = 0, packed = 0;
+    struct Part {
+        uint32_t from, to, bytes;
+    } parts[16];
+    int n = 0;
+    for (int k = 0; k < inputs.nregs; k++) {
+        const auto& in = inputs.layout.inputs[size_t(inputs.regs[k])];
+        if (in.stream != stream) continue;
+        stride = StrideOf(s, inputs.layout, in);
+        const uint32_t host = (HostFormat(in.type).bytes + kStrideAlign - 1) / kStrideAlign * kStrideAlign;
+        at[k] = packed;
+        parts[n++] = {in.offset, packed, std::min(TypeBytes(in.type), host)};
+        packed += host;
+    }
+    const uint8_t* data = static_cast<const uint8_t*>(HostPtr(mem::VirtualFromPhysical(R32(st.vb + kResData))));
+    const uint32_t count = dense ? d.span : d.count;
+    int slot = int(out.buffer_count);
+    auto& g = out.gathered[out.buffer_count];
+    g.resize(size_t(count) * packed);
+    for (uint32_t v = 0; v < count; v++) {
+        const uint8_t* src = data + size_t(dense ? d.first_vertex + v : DrawVertex(s, d, v)) * stride;
+        uint8_t* dst = &g[size_t(v) * packed];
+        for (int p = 0; p < n; p++) std::memcpy(dst + parts[p].to, src + parts[p].from, parts[p].bytes);
+    }
+    out.buffers[out.buffer_count++] = {g.data(), count * packed, packed};
+    return slot;
+}
+
 bool AssembleRaw(const State& s, const Inputs& inputs, const DrawRange& d, Assembled& out) {
     bool dense = uint64_t(d.span) <= uint64_t(d.count) * kDenseSpanPerVertex + kDenseSpanSlack;
     int slot[16];
     std::fill(std::begin(slot), std::end(slot), -1);
+    // the streams with an element the input assembler cannot read in place: repacked
+    uint32_t repack = 0;
+    for (int k = 0; k < inputs.nregs; k++) {
+        const auto& in = inputs.layout.inputs[size_t(inputs.regs[k])];
+        if (!Aligned(StrideOf(s, inputs.layout, in), in.offset, HostFormat(in.type))) repack |= 1u << in.stream;
+    }
+    uint32_t packed_at[16] = {};
     for (int k = 0; k < inputs.nregs; k++) {
         int reg = inputs.regs[k];
         const auto& in = inputs.layout.inputs[size_t(reg)];
         if (slot[in.stream] < 0) {
-            slot[in.stream] = AddRawBuffer(s, inputs.layout, in, d, dense, out);
+            slot[in.stream] = repack >> in.stream & 1 ? RepackStream(s, inputs, in.stream, d, dense, out, packed_at)
+                                                      : AddRawBuffer(s, inputs.layout, in, d, dense, out);
         }
         HostElement he = HostFormat(in.type);
-        out.elements[size_t(reg)] = {he.format, uint8_t(slot[in.stream]), uint16_t(in.offset)};
+        const uint32_t offset = repack >> in.stream & 1 ? packed_at[k] : in.offset;
+        out.elements[size_t(reg)] = {he.format, uint8_t(slot[in.stream]), uint16_t(offset)};
         out.decode |= uint64_t(he.decode) << (reg * 4);
     }
     out.vertex_count = dense ? d.span : d.count;
@@ -507,6 +564,39 @@ bool Assemble(const State& s, uint32_t prim, uint32_t start, uint32_t count, con
 
 bool AssembleFloats(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* ip, Assembled& out) {
     return AssembleAs(s, prim, start, count, ip, false, out);
+}
+
+uint64_t ContentHash(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* ip) {
+    using namespace kernel;
+    if (!count || prim < 1 || prim > 10) return 0;
+    VertexShader fvf_layout;
+    const VertexShader* layout = PickLayout(s, fvf_layout);
+    if (!layout) return 0;
+    IndexBounds bounds = {0, count - 1};
+    if (ip) bounds = IndexRange(ip, count);
+    const uint32_t first = ip ? bounds.first + s.base_vertex : start, span = bounds.last - bounds.first + 1;
+    static thread_local Assembled regs_of;
+    regs_of.regs = 0;
+    int regs[16];
+    int nregs = CollectRegs(s, *layout, regs, regs_of);
+    if (!nregs) return 0;
+    const uint32_t fields[] = {prim, count, span, regs_of.regs, uint32_t(ip != nullptr)};
+    uint64_t h = Hash(fields, sizeof(fields));
+    uint32_t streams = 0;
+    for (int k = 0; k < nregs; k++) {
+        const auto& in = layout->inputs[size_t(regs[k])];
+        const uint32_t stride = StrideOf(s, *layout, in);
+        const uint32_t el[] = {uint32_t(regs[k]), uint32_t(in.stream), in.offset, in.type, stride};
+        h = Hash(el, sizeof(el), h);
+        if (streams >> in.stream & 1) continue;
+        streams |= 1u << in.stream;
+        // the vertices the draw reads, as they lie in the stream (what AssembleFloats converts)
+        const auto& st = s.streams[size_t(in.stream)];
+        const uint8_t* src = static_cast<const uint8_t*>(HostPtr(mem::VirtualFromPhysical(R32(st.vb + kResData))));
+        h = HashBulk(src + size_t(first) * stride, size_t(span) * stride, h);
+    }
+    if (ip) h = HashBulk(ip, size_t(count) * 2, h);
+    return h | 1;
 }
 
 }  // namespace gpu

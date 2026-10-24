@@ -1,4 +1,5 @@
 #include "gpu/mesh_swap.h"
+#include "gpu/keymap.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -33,7 +34,7 @@ struct Header {
 #pragma pack(pop)
 
 std::mutex g_meshes_lock;
-std::unordered_map<uint64_t, Mesh> g_meshes;  // as the loader reads them (a node's address stays: Mesh* kept)
+KeyMap<uint64_t, Mesh> g_meshes;  // as the loader reads them (a node's address stays: Mesh* kept)
 std::unordered_set<uint64_t> g_draws;  // prim << 32 | count of the originals (from the headers, before the loader)
 
 int RegCount(uint16_t regs) {
@@ -129,7 +130,7 @@ uint64_t Fnv(uint64_t h, const void* p, size_t n) {
 }
 
 std::mutex g_keys_lock;
-std::unordered_map<uint64_t, std::pair<uint64_t, uint64_t>> g_keys;  // where -> (check, key)
+KeyMap<uint64_t, std::pair<uint64_t, uint64_t>> g_keys;  // where -> (check, key)
 }  // namespace
 
 DrawId IdOf(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* indices) {
@@ -158,6 +159,15 @@ DrawId IdOf(const State& s, uint32_t prim, uint32_t start, uint32_t count, const
 bool CachedKey(const DrawId& id, uint64_t& key) {
     std::lock_guard<std::mutex> guard(g_keys_lock);
     auto it = g_keys.find(id.where);
+    // tests: XBE_MESH_KEY_LOG, the lookups' outcome counted (new place, same place with other bytes, found)
+    static const bool klog = std::getenv("XBE_MESH_KEY_LOG") != nullptr;
+    if (klog) {
+        static uint64_t fresh = 0, changed = 0, hit = 0;
+        (it == g_keys.end() ? fresh : it->second.first != id.check ? changed : hit)++;
+        if ((fresh + changed + hit) % 20000 == 0)
+            LOGR("meshes: key lookups %llu new places, %llu changed bytes, %llu found (%zu kept)", (unsigned long long)fresh,
+                 (unsigned long long)changed, (unsigned long long)hit, g_keys.size());
+    }
     if (it == g_keys.end() || it->second.first != id.check) return false;
     key = it->second.second;
     return true;
@@ -167,6 +177,24 @@ void StoreKey(const DrawId& id, uint64_t key) {
     std::lock_guard<std::mutex> guard(g_keys_lock);
     if (g_keys.size() > 100000) g_keys.clear();
     g_keys[id.where] = {id.check, key};
+}
+
+namespace {
+KeyMap<uint64_t, uint64_t> g_contents;  // content -> key (under g_keys_lock)
+}  // namespace
+
+bool ContentKey(uint64_t content, uint64_t& key) {
+    std::lock_guard<std::mutex> guard(g_keys_lock);
+    auto it = g_contents.find(content);
+    if (it == g_contents.end()) return false;
+    key = it->second;
+    return true;
+}
+
+void StoreContent(uint64_t content, uint64_t key) {
+    std::lock_guard<std::mutex> guard(g_keys_lock);
+    if (g_contents.size() > 200000) g_contents.clear();
+    g_contents[content] = key;
 }
 
 const Mesh* Find(uint64_t key, uint16_t regs) {
@@ -213,7 +241,7 @@ void Dump(const State& s, uint32_t prim, uint32_t count, uint64_t key, uint64_t 
         uint64_t frame = ~0ull;
         int frames = 0;
     };
-    static std::unordered_map<uint64_t, Seen> seen;
+    static KeyMap<uint64_t, Seen> seen;
     std::lock_guard<std::mutex> guard(lock);
     if (DumpDir().empty() || done.count(key) || done.size() > 50000) return;
     if (seen.size() > 200000) seen.clear();  // (keys of vertices made anew each frame, never seen again)

@@ -1,4 +1,5 @@
 #include "gpu/shaders.h"
+#include "gpu/keymap.h"
 #include "core/log.h"
 #include "gpu/vertex.h"
 
@@ -16,13 +17,24 @@ namespace gpu {
 
 namespace {
 
+// the sampler the material's own maps (normal, material, detail) are read through: s6, anisotropic at 4 (tests:
+// XBE_TEST_MAT_TRI, s5's trilinear; XBE_TEST_MAT_STAGE, the stage's as the colour)
+std::string MatSampler(int i) {
+    static const bool tri = std::getenv("XBE_TEST_MAT_TRI") != nullptr, stage = std::getenv("XBE_TEST_MAT_STAGE") != nullptr;
+    return tri ? std::string("mtri") : stage ? "smp" + std::to_string(i) : std::string("mmatsmp");
+}
+
 std::string F(const char* fmt, ...) {
-    char buf[1024];
-    va_list ap;
+    // (as long as it comes out: a block past a fixed buffer was cut short, a shader that no longer compiled)
+    va_list ap, again;
     va_start(ap, fmt);
-    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_copy(again, ap);
+    int n = vsnprintf(nullptr, 0, fmt, ap);
     va_end(ap);
-    return buf;
+    std::string out(size_t(std::max(n, 0)), '\0');
+    vsnprintf(out.data(), out.size() + 1, fmt, again);
+    va_end(again);
+    return out;
 }
 
 const char* kCommonHead = R"(
@@ -669,6 +681,27 @@ uint64_t Hash(const void* p, size_t n, uint64_t h) {
     return mix(seed ^ k0, uint64_t(n) ^ k1);
 }
 
+uint64_t HashBulk(const void* p, size_t n, uint64_t h) {
+    // four lanes of Hash's step side by side (64 bytes a round, the multiplies independent): for bulk bytes hashed
+    // every frame, whose values are never kept past the run
+    constexpr uint64_t k0 = 0x9E3779B97F4A7C15ull, k1 = 0xE7037ED1A0B428DBull;
+    auto mix = [](uint64_t a, uint64_t b) {
+        unsigned __int128 r = static_cast<unsigned __int128>(a) * b;
+        return uint64_t(r) ^ uint64_t(r >> 64);
+    };
+    if (n < 64) return Hash(p, n, h);
+    const uint8_t* b = static_cast<const uint8_t*>(p);
+    uint64_t s[4] = {h ^ k0, h ^ k1, ~h ^ k0, ~h ^ k1};
+    size_t i = 0;
+    for (; i + 64 <= n; i += 64) {
+        uint64_t w[8];
+        std::memcpy(w, b + i, 64);
+        for (int l = 0; l < 4; l++) s[l] = mix(w[l * 2] ^ k1, w[l * 2 + 1] ^ s[l]);
+    }
+    uint64_t r = mix(s[0] ^ s[2], s[1] ^ s[3] ^ k0);
+    return i < n ? Hash(b + i, n - i, r ^ n) : mix(r ^ k1, uint64_t(n));
+}
+
 PixelKey MakePixelKey(const State& s, const TexInfo tex[4]) {
     PixelKey k;
     std::memset(&k, 0, sizeof(k));
@@ -964,8 +997,8 @@ std::string NormalName(const VsOperand& o) { return o.kind == 2 ? F("i.v%u", o.r
 
 struct LightingCache {
     std::mutex lock;
-    std::unordered_map<uint64_t, uint32_t> ids;      // program hash and inputs: lighting id, 0 none
-    std::unordered_map<uint32_t, std::string> code;  // lighting id: PixelLit
+    KeyMap<uint64_t, uint32_t> ids;      // program hash and inputs: lighting id, 0 none
+    KeyMap<uint32_t, std::string> code;  // lighting id: PixelLit
 };
 LightingCache& Lighting() {
     static LightingCache c;
@@ -1234,9 +1267,11 @@ PnPatch pnconst(InputPatch<VOut, 3> v) {
     // barrel into a cigar)
     o.reach = min(longest * 0.12, area / max(longest, 1e-12) * 0.35);
     // the factors: an edge's length in console pixels over 5, up to 7; flat where it cannot be placed
-    float e0 = ok ? clamp(length(s[1] - s[2]) / 5, 1, 7) : 1;
-    float e1 = ok ? clamp(length(s[2] - s[0]) / 5, 1, 7) : 1;
-    float e2 = ok ? clamp(length(s[0] - s[1]) / 5, 1, 7) : 1;
+    // (a NaN length 1, as Direct3D's clamp makes it: SPIR-V's leaves it NaN, and the tessellator hung on it)
+    float l0 = length(s[1] - s[2]) / 5, l1 = length(s[2] - s[0]) / 5, l2 = length(s[0] - s[1]) / 5;
+    float e0 = ok && l0 > 1 ? min(l0, 7) : 1;
+    float e1 = ok && l1 > 1 ? min(l1, 7) : 1;
+    float e2 = ok && l2 > 1 ? min(l2, 7) : 1;
     o.edge[0] = e0, o.edge[1] = e1, o.edge[2] = e2;
     o.inside = (e0 + e1 + e2) / 3;
     // the control points, each third of an edge pulled onto its corner's tangent plane
@@ -1312,7 +1347,7 @@ ProgramPositionInfo ProgramPosition(const std::vector<uint32_t>& prog, uint16_t 
 
 ProgramLightInfo ProgramLight(const std::vector<uint32_t>& prog, uint16_t regs) {
     static std::mutex lock;
-    static std::unordered_map<uint64_t, ProgramLightInfo> known;
+    static KeyMap<uint64_t, ProgramLightInfo> known;
     uint64_t key = Hash(prog.data(), prog.size() * 4, regs ^ 0x5157);
     std::lock_guard l(lock);
     auto it = known.find(key);
@@ -1707,7 +1742,8 @@ std::string MaterialSetup(int i, const std::string& uv) {
     s += "mT *= mInv; mB *= mInv;\n";
     s += "float3 mV = normalize(-mP);\n";
     // parallax occlusion: the view walks into the height field, nearer surfaces only
-    // (from 14 m on the walk moves nothing: skipped)
+    // (from 14 m on the walk moves nothing: skipped). Its taps (and the soft height below) through s5, trilinear:
+    // anisotropy over tens of taps a pixel costs much and shows nothing in where the walk stops
     s += "float mFade = saturate(1 - mP.z * 0.0007);\n";
     s += F("if (mtl[2].y > 0 && mtl[0].w > 0 && mFade > 0) {\n"
            "    float3 vt = float3(dot(mV, mT), dot(mV, mB), dot(mV, mN0));\n"
@@ -1715,28 +1751,36 @@ std::string MaterialSetup(int i, const std::string& uv) {
            "    float steps = lerp(10, 40, 1 - saturate(vt.z));\n"
            "    float uvw = sqrt((dot(mU1, mU1) + dot(mU2, mU2)) / max(dot(mDx, mDx) + dot(mDy, mDy), 1e-12));\n"
            "    float depth = min(mtl[2].y * mtl[3].z * uvw, mtl[2].y);\n"
-           "    float2 duv = -vt.xy / max(vt.z, 0.45) * depth * fade * lerp(0.35, 1, saturate(vt.z * 1.6)) / steps;\n"
+           "    float2 walk = -vt.xy / max(vt.z, 0.45) * depth * fade * lerp(0.35, 1, saturate(vt.z * 1.6));\n"
+           // (the whole walk's length on the screen in pixels: under half a pixel it moves nothing, and a step a pixel
+           // and a third or so is all a shorter one needs; the steps by the angle stand where it is long)
+           "    float jd = mU1.x * mU2.y - mU2.x * mU1.y;\n"
+           "    float wpx = length(float2(mU2.y * walk.x - mU2.x * walk.y, mU1.x * walk.y - mU1.y * walk.x)) / max(abs(jd), 1e-20);\n"
+           "    steps = wpx < 0.5 ? 0 : min(steps, max(6, ceil(wpx * 0.75)));\n"
+           "    float2 duv = walk / max(steps, 1);\n"
+           "    if (steps > 0) {\n"
            "    float2 hU1 = mU1 * 3, hU2 = mU2 * 3;\n"
            "    float layer = 1 / steps, d = 0, pd = 0;\n"
            "    float2 cur = mUv, prev = mUv;\n"
-           "    float hd = 1 - mmat.SampleGrad(smp%d, cur, hU1, hU2).g, phd = hd;\n"
+           "    float hd = 1 - mmat.SampleGrad(mtri, cur, hU1, hU2).g, phd = hd;\n"
            "    [loop] for (int k = 0; k < 40; k++) {\n"
            "        if (d >= hd || k >= steps) break;\n"
            "        prev = cur; phd = hd; pd = d;\n"
            "        cur += duv; d += layer;\n"
-           "        hd = 1 - mmat.SampleGrad(smp%d, cur, hU1, hU2).g;\n"
+           "        hd = 1 - mmat.SampleGrad(mtri, cur, hU1, hU2).g;\n"
            "    }\n"
            "    float a = hd - d, b = phd - pd;\n"
            "    mUv = lerp(cur, prev, saturate(a / (a - b + 1e-5)));\n"
-           "}\n", i, i);
+           "    }\n"
+           "}\n");
     s += F("float4 t%d = tex%d.SampleGrad(smp%d, mUv, mU1, mU2);\n", i, i, i);
     s += F("float3 mBase = t%d.rgb;\nfloat mAlpha = t%d.a;\n", i, i);
-    s += F("float4 mMat = mmat.SampleGrad(smp%d, mUv, mU1, mU2);\n", i);
+    s += "float4 mMat = mmat.SampleGrad(" + MatSampler(i) + ", mUv, mU1, mU2);\n";
     // the height and the texture's cover the blend follows (Height Blend): two levels softer, their shapes without the
     // fine grain (sharpened by the blend, the grain broke the edge of a blended layer into specks)
-    s += F("float mHs = mmat.SampleGrad(smp%d, mUv, mU1 * 4, mU2 * 4).g;\n", i);
+    s += "float mHs = mmat.SampleGrad(mtri, mUv, mU1 * 4, mU2 * 4).g;\n";
     s += F("float mAs = tex%d.SampleGrad(smp%d, mUv, mU1 * 4, mU2 * 4).a;\n", i, i);
-    s += F("float2 mNt = mnrm.SampleGrad(smp%d, mUv, mU1, mU2).rg * 2 - 1;\n", i);
+    s += "float2 mNt = mnrm.SampleGrad(" + MatSampler(i) + ", mUv, mU1, mU2).rg * 2 - 1;\n";
     return s;
 }
 
@@ -1752,7 +1796,7 @@ std::string MaterialShade(int i) {
         // (a uniform's weave not over the skin painted in it, the hands: their colour skin's, red over blue)
         "    if (mtl[2].w != 6) { float3 sb = mBase.rgb; fd *= 1 - smoothstep(0.08, 0.2, sb.r - sb.b) * smoothstep(0.0, 0.06, sb.g - sb.b) * smoothstep(0.2, 0.35, sb.r) * step(sb.g, sb.r); }\n"
         "    if (fd > 0) {\n"
-        "        float2 dn = mdet.SampleGrad(smp" + std::to_string(i) + ", float3(frac(mUv * dtl.z), mtl[2].w), mU1 * dtl.z, mU2 * dtl.z).rg * 2 - 1;\n"
+        "        float2 dn = mdet.SampleGrad(" + MatSampler(i) + ", float3(frac(mUv * dtl.z), mtl[2].w), mU1 * dtl.z, mU2 * dtl.z).rg * 2 - 1;\n"
         "        float3 sT = normalize(mT - mNs * dot(mT, mNs) + 1e-12), sB = normalize(mB - mNs * dot(mB, mNs) + 1e-12);\n"
         "        float3 dN = normalize(mNs + (sT * dn.x + sB * dn.y) * 0.6);\n"
         "        float3 L = mtl[1].xyz;\n"
@@ -1767,7 +1811,7 @@ std::string MaterialShade(int i) {
         "    float3 nt = float3(mNt * float2(1, mtl[0].z) * mtl[2].x, 0);\n"
         "    if (mtl[2].w >= 0 && mtl[3].y > 0) {\n"
         "        float fd = saturate(1.6 - mP.z / (250 * mtl[3].z)) * mtl[3].y;\n"
-        "        if (fd > 0) nt.xy += (mdet.SampleGrad(smp" + std::to_string(i) + ", float3(frac(mUv * 2), mtl[2].w), mU1 * 2, mU2 * 2).rg * 2 - 1)"
+        "        if (fd > 0) nt.xy += (mdet.SampleGrad(" + MatSampler(i) + ", float3(frac(mUv * 2), mtl[2].w), mU1 * 2, mU2 * 2).rg * 2 - 1)"
         " * float2(1, mtl[0].z) * fd;\n"
         "    }\n"
         "    if (mrefl.z < 0) {\n"
@@ -1834,7 +1878,7 @@ std::string MaterialShade(int i) {
         // pixel's normal map detail made it a scatter of sparkles); the gloss stays low and widens where that
         // normal still turns fast; the original light (v0, at the vertices) gates it through a gentle ramp
         "    float lit = smoothstep(0.02, 0.75, dot(v0.rgb, 0.3333));\n"
-        "    float2 sNt = mnrm.SampleGrad(smp" + std::to_string(i) + ", mUv, mU1 * 4, mU2 * 4).rg * 2 - 1;\n"
+        "    float2 sNt = mnrm.SampleGrad(" + MatSampler(i) + ", mUv, mU1 * 4, mU2 * 4).rg * 2 - 1;\n"
         "    float3 snt = float3(sNt * float2(1, mtl[0].z) * mtl[2].x * 0.5, 0);\n"
         "    snt.xy = snt.xy / max(1, length(snt.xy));\n"
         "    snt.z = sqrt(saturate(1 - dot(snt.xy, snt.xy)));\n"
@@ -1895,8 +1939,8 @@ std::string MaterialShade(int i) {
         "    float rep = max(texsize[" + std::to_string(i) + "].x, texsize[" + std::to_string(i) + "].y) / dtl.w;\n"
         "    float f1 = saturate(1.4 - dm / 14), f2 = saturate(1.5 - dm / 4);\n"
         "    float g = 0;\n"
-        "    if (f1 > 0) g += (mdet.SampleGrad(smp" + std::to_string(i) + ", float3(mUv * rep, dtl.x), mU1 * rep, mU2 * rep).r - 0.5) * 2 * f1;\n"
-        "    if (f2 > 0) g += (mdet.SampleGrad(smp" + std::to_string(i) + ", float3(mUv * rep * 2.5, dtl.x), mU1 * rep * 2.5, mU2 * rep * 2.5).g - 0.5) * 1.2 * f2;\n"
+        "    if (f1 > 0) g += (mdet.SampleGrad(" + MatSampler(i) + ", float3(mUv * rep, dtl.x), mU1 * rep, mU2 * rep).r - 0.5) * 2 * f1;\n"
+        "    if (f2 > 0) g += (mdet.SampleGrad(" + MatSampler(i) + ", float3(mUv * rep * 2.5, dtl.x), mU1 * rep * 2.5, mU2 * rep * 2.5).g - 0.5) * 1.2 * f2;\n"
         "    outc.rgb *= lerp(1, 1 + 0.3 * tanh(g * dtl.y * 1.2), fogin.a * (1 - skin));  // (soft, at most a third either way: a deep trough went black)\n"
         "}\n";
 }
@@ -1916,7 +1960,7 @@ std::string PixelHlsl(const PixelKey& k) {
         s += F("%s tex%d : register(t%d);\n%s smp%d : register(s%d);\n", type, i, i, t.shadow ? "SamplerComparisonState" : "SamplerState", i, i);
     }
     const int mat = MaterialStage(k);
-    if (mat >= 0) s += "Texture2D mnrm : register(t4);\nTexture2D mmat : register(t5);\nTexture2DArray mdet : register(t6);\nTexture2D sunvis : register(t7);\nTexture2D wavef : register(t8);\nTexture2D trailf : register(t9);\nSamplerState wavelin : register(s4);\n";
+    if (mat >= 0) s += "Texture2D mnrm : register(t4);\nTexture2D mmat : register(t5);\nTexture2DArray mdet : register(t6);\nTexture2D sunvis : register(t7);\nTexture2D wavef : register(t8);\nTexture2D trailf : register(t9);\nSamplerState wavelin : register(s4);\nSamplerState mtri : register(s5);\nSamplerState mmatsmp : register(s6);\n";
     else if (k.soft) s += "Texture2D<float> sdepth : register(t6);\n";
     std::string lit = k.lit ? PixelLightingCode(k.lit) : std::string();
     if (!lit.empty()) s += kVsHelpers + lit;

@@ -6,7 +6,7 @@ By **crazyriddler**.
 ![Finest Hour Remastered](docs/media/banner.jpg)
 
 The game's code is statically recompiled from x86 to C++ and runs natively on Windows: no emulator. Direct3D 8,
-DirectSound and the Xbox kernel are reimplemented on Direct3D 12, XAudio2 and Win32, and the renderer adds per-pixel
+DirectSound and the Xbox kernel are reimplemented on Direct3D 12 (or Vulkan), XAudio2 and Win32, and the renderer adds per-pixel
 lighting, real-time shadows, dynamic lights, physically based materials on AI-remastered textures, reflections,
 volumetric fog and much more, while keeping the game's own art direction and lighting.
 
@@ -67,8 +67,8 @@ weapons rounded) or Original.
 
 ## Requirements
 - Windows 10 or 11, 64-bit. On Linux and Steam Deck, through Proton (see [Linux and Steam Deck](#linux-and-steam-deck)).
-- A Direct3D 12 GPU with 4 GB of video memory or more. With every effect on at 1440p a recent mid-range GPU holds
-  its 60 FPS.
+- A Direct3D 12 GPU with 4 GB of video memory or more (or a Vulkan 1.3 one, PC Settings > Display > Renderer). With
+  every effect on at 1440p a recent mid-range GPU holds its 60 FPS.
 - About 10 GB of disk: the game's files, the remastered textures and models.
 - **The game**: Call of Duty: Finest Hour for the original Xbox, **PAL (Europe) release**, title ID `4156002A`,
   version 3 (`default.xbe` SHA-1 `938a7b1e17928de49cb3c5834d61abcd3d9081c8`). Its four languages (English, French,
@@ -103,7 +103,9 @@ Choose **PC Settings** in the main menu (or press **F10** at any time) for every
 
 ## Linux and Steam Deck
 Linux is supported through **Proton** (or Wine with vkd3d-proton): the Windows build runs there as is, its Direct3D 12
-translated to Vulkan. The installer and the updater work under Proton and Wine too.
+translated to Vulkan. The installer and the updater work under Proton and Wine too. You can also switch the game to
+its own **Vulkan** renderer (PC Settings > Display > Renderer, from the next start): it talks to Vulkan directly,
+with no translation in between.
 
 1. Install the game with `FinestHourRemasteredSetup.exe` under Proton or Wine (in Steam: *Add a Non-Steam Game*,
    pick the installer, and in its *Properties > Compatibility* force a recent Proton), as on Windows.
@@ -114,8 +116,7 @@ translated to Vulkan. The installer and the updater work under Proton and Wine t
 
 If something does not work under Proton, please [open an issue](https://github.com/crazyriddler/FinestHourRemastered/issues)
 with your distribution or device, the Proton version and the log (`logs\codfh.log` beside the game), and I'll fix it.
-A native Linux build may come later: the renderer is a heavily customised Direct3D 12 one, with its own shaders, and
-porting it is a large piece of work.
+A native Linux build may come later: the renderer now runs on Vulkan too, which was the largest piece of that work.
 
 ## Features
 
@@ -151,8 +152,7 @@ game's own look and textures. The render scale is never part of a preset: it sta
 - **HDR rendering** with **Bloom**, **Eye Adaptation** (gentle, around the game's own exposure) and filmic tone mapping.
 
 ### Atmosphere
-- **Sun and Moon** where the level's light comes from, **Clouds** drifting over every sky, lit as the level is, and
-  their **Cloud Shadows** over the ground.
+- **Sun and Moon** where the level's light comes from, **Clouds** drifting over every sky, lit as the level is.
 - **Sun Shafts** through ruins and columns, a **Lens Flare** and lens dirt catching bright light.
 - **Volumetric Fog** lit by the sun and the dynamic lights.
 - **Ambient Particles**: dust in the light, embers over fires. **Heat Haze** over fires and explosions.

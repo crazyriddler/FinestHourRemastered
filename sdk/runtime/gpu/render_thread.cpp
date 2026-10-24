@@ -12,6 +12,7 @@
 #include <smmintrin.h>
 
 #include <algorithm>
+#include <bit>
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
@@ -23,6 +24,7 @@
 #include <vector>
 
 #include "core/diag.h"
+#include "gpu/keymap.h"
 #include "core/log.h"
 #include "gpu/backend.h"
 #include "kernel/kernel.h"
@@ -66,6 +68,8 @@ struct Range {
     size_t off, len;
 };
 size_t At(const State& s, const void* p) { return size_t(static_cast<const uint8_t*>(p) - reinterpret_cast<const uint8_t*>(&s)); }
+// (SendState's dirty pieces: simple's 128 at the start of the first range, vsc's 48 at the start of the third)
+static_assert(offsetof(State, simple) == 0 && sizeof(State::simple) == 128 * 64 && sizeof(State::vsc) == 48 * 64);
 std::vector<Range> StateRanges() {
     static const State s;
     return {
@@ -97,6 +101,11 @@ uint64_t Ns(Clock::time_point t) { return uint64_t(std::chrono::duration_cast<st
 class Threaded final : public Backend {
 public:
     explicit Threaded(std::unique_ptr<Backend> inner) : inner_(std::move(inner)), ranges_(StateRanges()) {
+        // the 64 byte pieces compared on every send: all but simple's and vsc's (those by their dirty bits)
+        for (size_t ri = 0; ri < ranges_.size(); ri++)
+            for (size_t off = ranges_[ri].off, end = off + ranges_[ri].len, k = 0; off < end; off += 64, k++)
+                if (!(ri == 0 && k < 128) && !(ri == 2 && k < 48)) always_.push_back({off, std::min<size_t>(64, end - off)});
+        vsc_off_ = ranges_[2].off;
         ring_ = mem::AllocSystem(kHeaderRing, 64);
         cur_ = NewBatch();
         std::thread([this] { Run(); }).detach();
@@ -308,9 +317,22 @@ private:
         const uint8_t* now = reinterpret_cast<const uint8_t*>(&s);
         Cmd c{Op::State};
         size_t first = cur_->bytes.size();
-        for (const Range& r : ranges_)
-            for (size_t off = r.off, end = r.off + r.len; off < end; off += 64)
-                Delta(reinterpret_cast<const uint8_t*>(&sent_) + off, now + off, std::min<size_t>(64, end - off));
+        // (the simple states and the vertex program's constants: the pieces written since, MarkSimple and MarkVsc;
+        // ranges_[0] starts with simple's 128 pieces, ranges_[2] with vsc's 48)
+        const std::array<uint64_t, 2> simple = g_simple_dirty;
+        const uint64_t vsc = g_vsc_dirty;
+        g_simple_dirty = {0, 0}, g_vsc_dirty = 0;
+        uint8_t* sent = reinterpret_cast<uint8_t*>(&sent_);
+        for (int w = 0; w < 2; w++)
+            for (uint64_t m = simple[size_t(w)]; m; m &= m - 1) {
+                const size_t off = (size_t(w) * 64 + size_t(std::countr_zero(m))) * 64;
+                Delta(sent + off, now + off, 64);
+            }
+        for (uint64_t m = vsc; m; m &= m - 1) {
+            const size_t off = vsc_off_ + size_t(std::countr_zero(m)) * 64;
+            if (std::countr_zero(m) < 48) Delta(sent + off, now + off, 64);
+        }
+        for (const Range& r : always_) Delta(sent + r.off, now + r.off, r.len);
         std::array<uint32_t, 4> textures;
         for (size_t i = 0; i < 4; i++) textures[i] = Header(s.textures[i]);
         Delta(&sent_.textures, &textures, sizeof(textures));
@@ -447,6 +469,8 @@ private:
 
     std::unique_ptr<Backend> inner_;
     std::vector<Range> ranges_;
+    std::vector<Range> always_;  // SendState's pieces compared every time
+    size_t vsc_off_ = 0;
 
     // the title's thread
     struct HeaderCopy {
@@ -454,7 +478,7 @@ private:
         uint64_t made = 0;  // ring_pos_ after it was written
         uint8_t bytes[kHeaderBytes];
     };
-    std::unordered_map<uint32_t, HeaderCopy> headers_;
+    KeyMap<uint32_t, HeaderCopy> headers_;
     // the last few lookups, in front of the maps (their elements stay put)
     template <typename T>
     struct Recent {
@@ -467,7 +491,7 @@ private:
     uint64_t ring_pos_ = 0;
     Batch* cur_ = nullptr;
     State sent_;  // the state as the render thread will have it
-    std::unordered_map<uint32_t, uint64_t> last_use_;
+    KeyMap<uint32_t, uint64_t> last_use_;
     std::unordered_set<uint32_t> written_;  // surfaces drawn since their last read-back, by data address
     std::unordered_set<uint64_t> logged_;   // perf diagnostic: read-backs named once, by address and kind
     uint64_t next_id_ = 0, last_present_ = 0;

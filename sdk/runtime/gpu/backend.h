@@ -84,6 +84,7 @@ inline std::atomic<bool> g_texview{false};
 // tests: every frame's time from "perf start" to "perf stop <label>" (control lines), the report in the log: average,
 // lowest and highest frame rates, the 1% and 0.1% lows, the worst frames and what they did
 inline std::atomic<int> g_frame_stats{0};  // 1 recording, 2 the report due
+inline std::atomic<int> g_draw_times{0};  // tests: "drawtimes": the next frame's draws timed one by one (Renderer::DrawTimesBegin)
 inline char g_frame_stats_label[64];  // tests: each draw in its texture's own colour (logged), to tell what is where
 inline std::atomic<uint64_t> g_hidden_tex[256]{};
 // the game's: textures whose draws its settings hide (the HUD's pieces), by their content ids, 0 ends the list

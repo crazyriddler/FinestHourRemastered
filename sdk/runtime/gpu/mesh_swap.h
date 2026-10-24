@@ -47,6 +47,10 @@ struct DrawId {
 DrawId IdOf(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* indices);
 bool CachedKey(const DrawId& id, uint64_t& key);
 void StoreKey(const DrawId& id, uint64_t key);
+// the key by the draw's content (ContentHash), wherever it lies: a buffer the game writes anew each frame (a new place
+// each time) keyed once
+bool ContentKey(uint64_t content, uint64_t& key);
+void StoreContent(uint64_t content, uint64_t key);
 
 // the mesh drawn for the draw keyed so with these registers, null if none
 const Mesh* Find(uint64_t key, uint16_t regs);

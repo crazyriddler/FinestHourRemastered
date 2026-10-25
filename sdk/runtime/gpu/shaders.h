@@ -68,6 +68,9 @@ struct ProgramLightInfo {
     uint16_t pos[4] = {};  // the clip position's x y z w: dot products of the model's position with these
 };
 ProgramLightInfo ProgramLight(const std::vector<uint32_t>& program, uint16_t regs);
+// the input register a program's colour (oD0) alpha is a copy of (its last write of oD0.w a move of that input's w),
+// -1 for any other colour (lit, computed, from the constants)
+int ProgramColorInput(const std::vector<uint32_t>& program, uint16_t regs);
 // a program's position: the constants whose dp4s with an input make the clip position's x y z w (any program, lit
 // or not: the glowing particles' for their lights)
 struct ProgramPositionInfo {

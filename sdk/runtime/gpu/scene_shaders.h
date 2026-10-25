@@ -536,7 +536,7 @@ float4 skyavg(O i) : SV_Target {
 
 // Level 1's sky tiles (d3d12.cpp SkyPass): a texel for each 16 x 16 pixels, r where any of them is the oil smoke's
 // shells (Veiled), g where any is the far water; then the same spread over the reach of the passes that read them
-// (SkyFeather's disc, HorizonSoft's band and disc): elsewhere skyfx leaves those out, they would change nothing there.
+// (the oil smoke's cover fading out, HorizonSoft's band and disc): elsewhere skyfx leaves those out, they would change nothing there.
 // q0: the screen's width and height, the tiles' width and height; q1: the reaches in tiles (smoke, water)
 inline constexpr char kSkyTilesHlsl[] = R"(
 cbuffer P : register(b1) { float4 q0; float4 q1; };
@@ -567,14 +567,35 @@ float2 skytiles(O i) : SV_Target {
     }
     return float2(veil, water);
 }
-// the quarter size copy of the sky's taps (SkyFeather's disc): each texel a 4 x 4 block's pixel (2, 2), its colour and
-// its sky layer (SkyLayer, a whole number, kept exactly), -1 the world (t0 the scene's copy, t1 the depth)
+// Level 1's oil smoke at a quarter size (for its cover, skyfx): each texel a 4 x 4 block's, the share of its pixels
+// on the smoke's shells (Veiled's layers) in a, their colours' sum over 16 in rgb; all sixteen (one alone, the one on
+// either side of an outline as the view moved, flickered). blurq blurs it along x (q1.y 0) or y (1), q1.x the radius
 Texture2D sqscene : register(t0);
 Texture2D<float> sqdepth : register(t1);
 float4 skyquarter(O i) : SV_Target {
-    int2 at = min(int2(i.pos.xy) * 4 + 2, int2(q0.xy) - 1);
-    float d = sqdepth.Load(int3(at, 0));
-    return float4(sqscene.Load(int3(at, 0)).rgb, d >= 0.9999 ? Layer(d) : -1);
+    int2 at0 = int2(i.pos.xy) * 4;
+    float4 acc = 0;
+    [unroll] for (int y = 0; y < 4; y++)
+        [unroll] for (int x = 0; x < 4; x++) {
+            int2 at = min(at0 + int2(x, y), int2(q0.xy) - 1);
+            float d = sqdepth.Load(int3(at, 0));
+            float l = Layer(d);
+            if (d >= 0.9999 && l >= 15.5 && l < 19.5) acc += float4(sqscene.Load(int3(at, 0)).rgb, 1);
+        }
+    return acc / 16;
+}
+Texture2D bsrc : register(t0);
+float4 blurq(O i) : SV_Target {
+    int2 at = int2(i.pos.xy), dir = q1.y > 0.5 ? int2(0, 1) : int2(1, 0);
+    int r = (int)q1.x;
+    float4 acc = 0;
+    float ws = 0;
+    [loop] for (int k = -r; k <= r; k++) {
+        float g = exp(-2.0 * k * k / (q1.x * q1.x));
+        ws += g;
+        acc += g * bsrc.Load(int3(clamp(at + dir * k, 0, int2(q0.zw) - 1), 0));
+    }
+    return acc / ws;
 }
 float2 skydilate(O i) : SV_Target {
     int2 at = int2(i.pos.xy);
@@ -601,92 +622,31 @@ Texture2D scene : register(t0);
 Texture2D<float> depth : register(t1);
 Texture2D<float2> skytiles : register(t2);  // level 1: kSkyTilesHlsl's, where the smoke (r) and the far water (g) are near
 Texture2D skyavg : register(t3);             // kSkyAverageHlsl's: the sky's colour, steady (a 1 once known)
-Texture2D skyq : register(t4);               // level 1: skyquarter's (the disc's taps: colour, sky layer or -1 the world)
+Texture2D skyq : register(t4);               // (unused here)
+Texture2D smokemask : register(t5);          // level 1: skyquarter's blurred (the shells' colour times their share about, a)
+Texture2D smoketex : register(t6);           // level 1: the oil smoke's own texture, the pack's (aOilCloud_base_high)
+SamplerState wrapt : register(s5);           // trilinear, repeating
 // Level 1 (sky[0].w 2): the sky's pieces each at a depth of its own by the far plane (d3d12.cpp sky_phase_, a step
-// of 2^-21 apart), the oil smoke's shells veiled. About a pixel (a wide disc), the smoke's and the open sky's colours
-// apart. Where the shells meet each other their colours mix. Over the smoke's outline against the open sky a thick
-// billowing smoke of the shells' own colour, rising and churning (a 3D noise in the world's directions, so it stays
-// where it is as the view turns), out over the sky and in over the shell's edge: the polygons are under it. Inside,
-// the shell churns a little too. veil: how much smoke is at the pixel (the clouds and the sun behind it)
-float Hash3(float3 q) {
-    q = frac(q * 0.1031);
-    q += dot(q, q.zyx + 31.32);
-    return frac((q.x + q.y) * q.z);
-}
-float Noise3(float3 x) {
-    float3 i = floor(x), f = frac(x);
-    f = f * f * (3 - 2 * f);
-    float a = lerp(lerp(Hash3(i), Hash3(i + float3(1, 0, 0)), f.x), lerp(Hash3(i + float3(0, 1, 0)), Hash3(i + float3(1, 1, 0)), f.x), f.y);
-    float b = lerp(lerp(Hash3(i + float3(0, 0, 1)), Hash3(i + float3(1, 0, 1)), f.x), lerp(Hash3(i + float3(0, 1, 1)), Hash3(i + 1), f.x), f.y);
-    return lerp(a, b, f.z);
-}
-float Fbm3(float3 q, int octaves) {
-    float s = 0, a = 0.5;
-    for (int k = 0; k < octaves; k++) {
-        s += a * Noise3(q);
-        q = q * 2.02 + float3(1.7, 9.2, 4.1);
-        a *= 0.5;
-    }
-    return s;
-}
-// the smoke's density at a direction: billows (warped, rising, churning), 0 to 1
-float Billow(float3 w, float t) {
-    float3 q = w * 9 + float3(0, -t * 0.045, 0);
-    float3 warp = float3(Fbm3(q * 0.7 + float3(0, 0, t * 0.03), 3), Fbm3(q * 0.7 + float3(5.2, 1.3, -t * 0.025), 3),
-                         Fbm3(q * 0.7 + float3(2.9, 7.1, t * 0.02), 3));
-    float n = Fbm3(q + (warp - 0.5) * 2.2, 5);
-    return saturate((n - 0.28) * 2.2);
-}
-float3 SkyFeather(O i, float3 c, float d0, out float veil) {
-    bool v0 = Veiled(d0);
-    float l0 = SkyLayer(d0);
-    veil = v0 ? 1 : 0;
-    float R = 0.17 * p[2].y;
-    // (the disc's turn each pixel's, and each frame's: the anti-aliasing averages the samples' grain out)
-    float frame = floor(sky[1].w * 60);
-    float noise = frac(52.9829189 * frac(dot(i.pos.xy, float2(0.06711056, 0.00583715))) + frame * 0.618034);
-    float3 accs = 0;
-    float ns = 0, nk = 0, shells = 0, ws = 0;
-    // (each tap from the quarter size copy, skyquarter: a texel a 4 x 4 block, its colour and its sky layer, one
-    // read of a small texture where two of the whole screen's missed the cache)
-    [loop] for (int k = 0; k < 64; k++) {
-        float a = (k + noise) * 2.399963;
-        float2 q = i.pos.xy + float2(cos(a), sin(a)) * sqrt((k + 0.5) / 64) * R;
-        if (any(q < 0) || any(q >= p[2].xy)) continue;
-        float4 t = skyq.Load(int3(int2(q) >> 2, 0));
-        if (t.a < 0) continue;  // the world before the sky
-        [branch] if (t.a >= 15.5 && t.a < 19.5) {  // (Veiled: the oil smoke's layers)
-            accs += t.rgb, ns += 1;
-            // the smoke to a pixel's left counts more: its billows reach further out on the column's right side
-            ws += 1 + 2 * saturate((i.pos.x - q.x) / R);
-            shells += v0 && t.a != l0 ? 1 : 0;
-        } else {
-            nk += 1;
-        }
-    }
-    if (ns + nk < 4) return c;
-    // the shells' own outlines over each other
-    if (v0 && ns > 0) c = lerp(c, accs / ns, smoothstep(0, 0.45, shells / ns));
-    float3 w = SkyRay(i.uv);
-    float t = sky[1].w;
-    float share = ws / (ws + nk);
-    [branch] if (ns > 0) {
-        float b = Billow(w, t);
-        // the billows over the outline: dense from the edge in, thinning out over the sky in puffs
-        float edge = saturate(4 * share * (1 - share));
-        // (the puffs fade out with the smoke about: none at the disc's reach, no line along it)
-        float reach = saturate(share * 8);
-        float dens = smoothstep(0.05, 0.42, share + (b - 0.5) * 0.55 * reach);
-        dens = saturate(dens * (0.75 + 0.6 * b) + edge * 0.35) * reach;
-        if (v0) dens = max(dens, edge);  // the shell's own edge under them
-        // their colour: the shells' about, darker in their cores, their thin ends a little lighter
-        float3 smoke = accs / ns * lerp(1.18, 0.72, b);
-        c = lerp(c, smoke, dens);
-        veil = v0 ? 1 : dens;
-    }
-    // inside, the shell churning a little
-    [branch] if (v0) c *= 0.88 + 0.24 * Billow(w * 1.6 + 3.1, t * 1.3);
-    return c;
+// of 2^-21 apart), the oil smoke's shells veiled. The shells covered by the smoke's own texture at a large scale (by
+// the view's direction: still as the view turns; two scales mixed, its tiling unseen), as bright as the shells about
+// (their colour over the texture's own mean), by how much of them is about (smokemask): all of it over the smoke,
+// fading out over its outline into the open sky and the city's glow. Their cut outs, hard edges and seams are under
+// it. veil: the cover (the clouds and the sun behind it)
+float3 SmokeCover(float3 w, float4 f) {
+    float2 q = float2(atan2(w.z, w.x) / 6.2831853, asin(clamp(w.y, -1, 1)) / 3.1415927);
+    // (the derivatives across the turn's seam, where q.x jumps by 1: taken the short way round)
+    float2 d1x = ddx(q), d1y = ddy(q);
+    d1x.x -= round(d1x.x), d1y.x -= round(d1y.x);
+    const float2 s1 = float2(10, 5), s2 = float2(4, 2);
+    // moving, slowly: the near scale rising and drifting with the wind, the far one slower the other way, a slow
+    // swirl of the far one's place bending the near one (a few sums a pixel, no taps more)
+    float tm = sky[1].w;
+    float2 u2 = q * s2 + float2(0.37, 0.61) + float2(-tm * 0.005, -tm * 0.009);
+    float2 u1 = q * s1 + float2(tm * 0.012, -tm * 0.020) + 0.035 * sin(u2.yx * 6.2831853 + tm * float2(0.21, 0.17));
+    float3 t1 = smoketex.SampleGrad(wrapt, u1, d1x * s1, d1y * s1).rgb;
+    float3 t2 = smoketex.SampleGrad(wrapt, u2, d1x * s2, d1y * s2).rgb;
+    float3 t = lerp(t1, t2, 0.4);
+    return t / float3(0.194, 0.201, 0.238) * (f.rgb / f.a);
 }
 // Level 1's far water where it meets the sky (its square's straight edge): a band about that line out of focus, the
 // most at the line, fading out either side; only the far water and the sky are mixed (not the boats or what is
@@ -765,7 +725,13 @@ float4 skyfx(O i) : SV_Target {
     float3 c = s.rgb, w = SkyRay(i.uv), sun = sky[4].xyz;
     // level 1: the pieces' outlines melted; the oil smoke's share about (veil) keeps the clouds and the sun behind it
     float veil = 0;
-    [branch] if (sky[0].w > 1.5 && d0 >= 0.9999 && near.x > 0) c = SkyFeather(i, c, d0, veil);
+    [branch] if (sky[0].w > 1.5 && d0 >= 0.9999 && near.x > 0) {
+        float4 f = smokemask.SampleLevel(lin, i.uv, 0);
+        if (f.a > 0.002) {
+            veil = smoothstep(0, 0.6, f.a);
+            c = lerp(c, SmokeCover(w, f), veil);
+        }
+    }
     float lum = dot(c, float3(0.2126, 0.7152, 0.0722));
     // day or night by the sky's brightness, the frame's (an even grid of taps over the screen, those on the sky), the
     // same for every pixel; by night never day (the level's light, sky[5].z: its brighter pieces stay night). By the
@@ -788,7 +754,8 @@ float4 skyfx(O i) : SV_Target {
     float day =smoothstep(0.07, 0.25, sn > 0 ? sl / sn : lum) * (sky[5].z >= 2 ? sky[5].z - 2 : sky[5].z);
     float strength = sky[4].w;
     float cloud = 0;
-    if (sky[5].x > 0) {
+    // (none in level 1: its sky is the oil smoke and the city's glow; between the shells white clouds of ours showed)
+    if (sky[5].x > 0 && sky[0].w < 1.5) {
         cloud = Clouds(w, 5);
         if (cloud > 0) {
             // thicker towards the sun: that side in its own shade; the light through the edges facing the sun

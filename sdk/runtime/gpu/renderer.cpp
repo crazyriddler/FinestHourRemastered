@@ -458,6 +458,7 @@ struct Tex {
     uint64_t id = 0;    // remaster content id of the top level, 0 for none
     uint64_t epoch = 0;   // its lock epoch (DirtyEpoch) as last checked
     uint32_t steady = 0;  // checks in a row its bytes were the same
+    bool opaque = false;  // every texel of its top level has alpha 1 (OpaqueTexels)
 };
 
 // a remastered texture on the GPU: colour, and for a material its normal and material maps
@@ -536,6 +537,7 @@ struct DrawTextures {
     int mat_stage = -1;
     bool hd[4] = {};  // the stage's texture is a replacement at a higher resolution (the pack's, an override)
     uint64_t id[4] = {};  // the stage's texture's content id
+    bool opaque[4] = {};  // the stage's texture has alpha 1 all over (Tex::opaque)
     bool flat = false;  // a 2D draw
     bool weapon = false;  // the weapon in hand (after the world's depth was cleared): its remastered textures softer
 };
@@ -1176,6 +1178,11 @@ private:
     void RecordCaster(const State& s, const Assembled& a, const DrawShaders& sh, const PixelKey& pk, const PsoKey& k,
                       const DrawTextures& stages);
     void GatherLights(const State& s, const Assembled& a, const DrawShaders& sh, const PixelKey& pk);
+    // the frame's draws that would change no pixel drawn again (DrawnAlready): their signatures, the frame's
+    std::unordered_set<uint64_t, KeyHash> drawn_;
+    uint64_t drawn_frame_ = ~0ull;
+    bool DrawnAlready(const State& s, const Assembled& a, const DrawShaders& sh, const PsoKey& k, const DrawConstants& c,
+                      const DrawTextures& stages, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* indices);
     void ResolveLight();
     bool DrawShadowMap();
     // The casters' draws again (DrawShadowMap's, DrawGuard's: which pipeline, the instances, the guard's viewport by
@@ -1201,9 +1208,9 @@ private:
     bool atlas_valid_ = false;
     double atlas_time_ = 0;
     float atlas_eye_[3] = {}, atlas_ahead_[3] = {}, atlas_light_[3] = {};
-    // the far cascades (2 and 3): drawn every other time when only the time asked for it (DrawShadowMap)
+    // the far cascades (2 and 3): drawn every third time when only the time asked for it (DrawShadowMap)
     float atlas_far_eye_[3] = {}, atlas_far_ahead_[3] = {};
-    bool atlas_far_due_ = true;
+    uint32_t atlas_far_waited_ = 2;  // redraws of the near ones alone since the far ones were drawn
     int atlas_level_ = -2;
     uint32_t atlas_quality_ = ~0u;
     // the camera the frame's 3D was drawn with (the fixed function transforms, which the game's own matrices
@@ -1285,7 +1292,7 @@ private:
     bool sky_done_ = false;  // the frame's sky drawn (before the weapon in hand)
     // Level 1's sky (the Volga: a dome and a shell of smoke before it, drawn first, the depth test off): its pieces
     // put at the far plane, each a layer of its own a few steps nearer (kSkyLayerStep), so the sky passes take them
-    // all as sky and soften where one ends over another (kSceneSkyHlsl's SkyFeather)
+    // all as sky and cover the oil smoke's shells with its own texture (kSceneSkyHlsl's SmokeCover)
     bool sky_phase_ = true;
     uint32_t sky_layer_ = 0;
     bool SkyConstants();
@@ -1347,11 +1354,16 @@ private:
     Ref<rhi::Resource> sky_tiles_[2];
     D3D12_RESOURCE_STATES sky_tiles_state_[2] = {};
     uint32_t sky_tiles_w_ = 0, sky_tiles_h_ = 0;
-    // level 1's sky: SkyFeather's disc's taps at a quarter size (skyquarter)
+    // level 1's oil smoke at a quarter size (skyquarter: its share and colour, for SmokeCover)
     Ref<rhi::Resource> sky_quarter_;
     D3D12_RESOURCE_STATES sky_quarter_state_ = D3D12_RESOURCE_STATE_RENDER_TARGET;
     uint32_t sky_quarter_w_ = 0, sky_quarter_h_ = 0;
     rhi::View SkyQuarterRtv() { return Cpu(rhi::Heap::Rtv, kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 3); }
+    // and blurred along x then y (blurq): the oil smoke's share about and its colour, skyfx's cover by them
+    Ref<rhi::Resource> sky_smoke_[2];
+    D3D12_RESOURCE_STATES sky_smoke_state_[2] = {D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_RENDER_TARGET};
+    uint32_t sky_smoke_w_ = 0, sky_smoke_h_ = 0;
+    rhi::View SkySmokeRtv(uint32_t i) { return Cpu(rhi::Heap::Rtv, kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 19 + i); }
     rhi::View MeterRtv() { return Cpu(rhi::Heap::Rtv, kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 1); }
     bool BindGbuf(bool on);
     void ReflectionPass(Target& rt, const float p[16]);
@@ -1742,7 +1754,7 @@ void Renderer::CreateHeaps() {
     rhi::HeapSizes hs;
     hs.srv = kSrvCount + kUiDescriptors + 8 + 2 * kSrvPersistHalf + 8;  // (a table at the last of them reads 7 places)
     hs.sampler = kSamplerCount + 4;  // the overlay's at the end
-    hs.rtv = kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 19;
+    hs.rtv = kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 21;
     hs.dsv = kDsvCount;
     dev_->CreateHeaps(hs);
     for (uint32_t i = kRtvCount; i-- > 0;) free_rtv_.push_back(i);
@@ -3426,6 +3438,53 @@ void Renderer::UploadTextureLevel(Tex& tx, uint32_t f, uint32_t l, const std::ve
     cl_->CopyTexture(dl, 0, 0, 0, sl, nullptr);
 }
 
+// every texel of a decoded level has alpha 1: the formats without alpha; BC1 without its transparent texel, BC2 with
+// all its alpha 15, BC3 with both its alphas 255; 32 bit colours' alpha bytes; 16 bit ones' alpha bits
+bool OpaqueTexels(DXGI_FORMAT fmt, const std::vector<uint8_t>& px) {
+    const uint8_t* b = px.data();
+    const size_t n = px.size();
+    switch (fmt) {
+        case DXGI_FORMAT_B8G8R8X8_UNORM:
+        case DXGI_FORMAT_B5G6R5_UNORM:
+        case DXGI_FORMAT_R8_UNORM:
+        case DXGI_FORMAT_R8G8_UNORM:
+            return true;
+        case DXGI_FORMAT_B8G8R8A8_UNORM:
+        case DXGI_FORMAT_R8G8B8A8_UNORM:
+            for (size_t i = 3; i < n; i += 4)
+                if (b[i] != 0xFF) return false;
+            return n >= 4;
+        case DXGI_FORMAT_B5G5R5A1_UNORM:
+            for (size_t i = 1; i < n; i += 2)
+                if (!(b[i] & 0x80)) return false;
+            return n >= 2;
+        case DXGI_FORMAT_B4G4R4A4_UNORM:
+            for (size_t i = 1; i < n; i += 2)
+                if ((b[i] & 0xF0) != 0xF0) return false;
+            return n >= 2;
+        case DXGI_FORMAT_BC1_UNORM:
+            for (size_t i = 0; i + 8 <= n; i += 8) {
+                const uint16_t c0 = uint16_t(b[i] | b[i + 1] << 8), c1 = uint16_t(b[i + 2] | b[i + 3] << 8);
+                if (c0 > c1) continue;  // (four colours: no transparent texel)
+                for (size_t t = 0; t < 4; t++)
+                    for (int k = 0; k < 4; k++)
+                        if (((b[i + 4 + t] >> (k * 2)) & 3) == 3) return false;
+            }
+            return n >= 8;
+        case DXGI_FORMAT_BC2_UNORM:
+            for (size_t i = 0; i + 16 <= n; i += 16)
+                for (size_t k = 0; k < 8; k++)
+                    if (b[i + k] != 0xFF) return false;
+            return n >= 16;
+        case DXGI_FORMAT_BC3_UNORM:
+            for (size_t i = 0; i + 16 <= n; i += 16)
+                if (b[i] != 0xFF || b[i + 1] != 0xFF) return false;
+            return n >= 16;
+        default:
+            return false;
+    }
+}
+
 void Renderer::UploadTexture(Tex& tx, const TextureDesc& d, const FormatInfo& fi, const uint8_t* p,
                                  const uint32_t* colours, bool same) {
     D3D12_RESOURCE_STATES st = same ? D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE : D3D12_RESOURCE_STATE_COPY_DEST;
@@ -3437,6 +3496,7 @@ void Renderer::UploadTexture(Tex& tx, const TextureDesc& d, const FormatInfo& fi
             uint32_t pitch;
             DecodeLevel(d, l, f, p, colours, px, pitch);
             if (f == 0 && l == 0) {
+                tx.opaque = OpaqueTexels(tx.fmt, px);
                 tx.id = remaster::Identify(d, p, colours);
                 remaster::Dump(tx.id, d, fi.host, px, pitch, p, colours);
                 // the remastered maps read as soon as the game loads the texture (its level's loading screen), not
@@ -3542,6 +3602,7 @@ rhi::Resource* Renderer::BindGuestTexture(const State& s, int stage, const Textu
     if (ext_) ext_->Sampled(d, nullptr, tx.flags, info);
     if (tx.id && tx.id == g_watch_texture.load(std::memory_order_relaxed)) g_watch_hits++;
     stages.id[stage] = tx.id;
+    stages.opaque[stage] = tx.opaque;
     if (tx.id && !overrides_.empty()) {
         auto it = overrides_.find(tx.id);
         if (it != overrides_.end()) {
@@ -5443,6 +5504,11 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
     SetViewportScissor(s, size.w);
     SetBlendFactorStencilRef(s);
 
+    // A draw the frame drew already as it is: the same vertices in the same place, textures, shaders, constants and
+    // state (RenderWare draws a ground two of its sections share twice: a fifth of the scene's time in Depot
+    // Saboteurs); where the second changes no pixel (the same depth again, LESSEQUAL; an alpha of 1, blended or not:
+    // an opaque texture times the vertices' colours, their alpha 1) it is left out (XBE_DRAW_TWICE: as before)
+    if (DrawnAlready(s, a, sh, k, c, stages, prim, start, count, indices)) return;
     // geometry (falling water's later: DrawLate)
     if (!KeepLate(a, k, flat)) {
         const bool timed = dt_state_ == 1 && dt_info_.size() * 2 + 2 < kDrawTimes;
@@ -6614,6 +6680,66 @@ void Renderer::RecordCaster(const State& s, const Assembled& a, const DrawShader
              sh.prog, c.count, v.min_z, v.max_z, k.zfunc, alpha, k.blend, (unsigned long long)stages.id[0]);
 }
 
+bool Renderer::DrawnAlready(const State& s, const Assembled& a, const DrawShaders& sh, const PsoKey& k, const DrawConstants& c,
+                            const DrawTextures& stages, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* indices) {
+    static const bool off = std::getenv("XBE_DRAW_TWICE") != nullptr;  // tests: drawn again as before
+    if (off || stages.flat || occlusion_done_ || !bound_rt_ || bound_rt_ != scene_rt_ || !bound_ds_ || bound_ds_ != scene_ds_ || a.resident ||
+        tess_draw_ || !(sh.prog || sh.fixed_transform))
+        return false;
+    constexpr uint32_t kLessEqual = 0x203, kSrcAlpha = 0x302, kInvSrcAlpha = 0x303, kAdd = 0x8006;
+    if (!k.zen || k.zfunc != kLessEqual || k.sten || (k.blend && (k.src != kSrcAlpha || k.dst != kInvSrcAlpha || k.op != kAdd))) return false;
+    // left out where its alpha is 1 all over. Stage 0 alone, the texture times the colour (or the
+    // texture alone), the texture opaque, the colour's alpha 1 at every vertex: the vertices' own (an unlit
+    // program's copy of an input, the fixed function's without lights)
+    constexpr uint32_t kDisable = 1, kSelectArg1 = 2, kModulate = 4, kDiffuse = 0, kTexture = 2;
+    const auto& t0 = s.tss[0];
+    const uint32_t aop = t0[kTssAlphaOp], a1 = t0[kTssAlphaArg1] & 0xF, a2 = t0[kTssAlphaArg2] & 0xF;
+    const bool tex_alpha = (aop == kSelectArg1 && a1 == kTexture) ||
+                           (aop == kModulate && ((a1 == kTexture && a2 == kDiffuse) || (a1 == kDiffuse && a2 == kTexture)));
+    if (!tex_alpha || s.tss[1][kTssColorOp] != kDisable || !stages.opaque[0] || stages.res[1] || stages.res[2] || stages.res[3]) return false;
+    // (a large one alone: the small ones' GPU time is little, its signature's hashing the constants is not)
+    if (count < 512) return false;
+    if (drawn_frame_ != frame_) drawn_frame_ = frame_, drawn_.clear();
+    // (its vertices by their buffer, range and first bytes, its indices by theirs: not where the indices were copied)
+    const uint32_t vb0 = s.streams[0].vb;
+    const uint32_t fields[] = {vb0 ? kernel::R32(vb0 + 4) : 0u, s.streams[0].stride, prim, start, count, s.base_vertex, s.vs_handle};
+    uint64_t h = Hash(fields, sizeof(fields), meshes::IdOf(s, prim, start, count, indices).check);
+    if (indices) h = HashBulk(indices, size_t(count) * 2, h);
+    h = Hash(&k, sizeof(k), h);
+    h = HashBulk(&c, sizeof(c), h);
+    h = HashBulk(s.vsc.data(), sizeof(s.vsc), h);
+    h = Hash(stages.id, sizeof(stages.id), h);
+    const void* res0 = stages.res[0];
+    h = Hash(&res0, sizeof(res0), h);
+    if (drawn_.insert(h).second) return false;
+    // drawn already: its colours' alpha
+    if (aop == kModulate) {
+        int input = -1;
+        if (sh.prog) input = ProgramColorInput(s.vs->program, a.regs);
+        else if (!(sh.fk.light & 1)) input = 3;  // (the fixed function's diffuse, v3)
+        if (input < 0 || input >= 16 || !((a.regs >> input) & 1)) return false;
+        const VertexElement& el = a.elements[size_t(input)];
+        if (el.buffer >= a.buffer_count) return false;
+        const VertexBuffer& vb = a.buffers[el.buffer];
+        if (!vb.src || !vb.stride) return false;
+        if (el.format == DXGI_FORMAT_B8G8R8A8_UNORM || el.format == DXGI_FORMAT_R8G8B8A8_UNORM) {
+            for (size_t o = el.offset + 3; o < vb.bytes; o += vb.stride)
+                if (vb.src[o] != 0xFF) return false;
+        } else if (el.format == DXGI_FORMAT_R32G32B32A32_FLOAT) {
+            for (size_t o = el.offset + 12; o + 4 <= vb.bytes; o += vb.stride) {
+                float w;
+                std::memcpy(&w, vb.src + o, 4);
+                if (!(w >= 1.0f)) return false;
+            }
+        } else {
+            return false;
+        }
+    }
+    static const bool log = std::getenv("XBE_DRAW_TWICE_LOG") != nullptr;  // tests: what is left out
+    if (log && presents_ % 300 == 0) LOGR("twice: tex %016llx count %u left out", (unsigned long long)draw_tex0_, count);
+    return true;
+}
+
 // the cascades fitted to the frame's camera and light, the casters drawn into their tiles
 bool Renderer::DrawShadowMap() {
     if (casters_.empty() || casters_gen_ != ring_gen_) return false;
@@ -6652,7 +6778,7 @@ bool Renderer::DrawShadowMap() {
     // worst), at once when the view turned or moved, the light turned or the level or quality changed. Between,
     // the atlas stays with the cascades it was drawn for, which the mask reads from the camera of the moment.
     // When only the time asked for it, the far cascades (2 and 3: the most casters, the least seen of a model's
-    // movement) are drawn every other time, kept as they were drawn between.
+    // movement) are drawn every third time, kept as they were drawn between.
     bool near_only = false;
     {
         static const auto t0 = std::chrono::steady_clock::now();
@@ -6675,10 +6801,10 @@ bool Renderer::DrawShadowMap() {
         }
         float far_moved[3] = {m[12] - atlas_far_eye_[0], m[13] - atlas_far_eye_[1], m[14] - atlas_far_eye_[2]};
         static const bool far_always = std::getenv("XBE_SHADOW_FAR_ALWAYS") != nullptr;  // (tests: every cascade each time)
-        near_only = atlas_valid_ && !atlas_far_due_ && !far_always && q.cascades >= 3 && dot3(light_.dir, atlas_light_) >= 0.99996f &&
+        near_only = atlas_valid_ && atlas_far_waited_ < 2 && !far_always && q.cascades >= 3 && dot3(light_.dir, atlas_light_) >= 0.99996f &&
                     atlas_level_ == g_level.load() && atlas_quality_ == app::Get().shadow_quality && dot3(m + 8, atlas_far_ahead_) >= 0.9945f &&
                     dot3(far_moved, far_moved) <= (0.5f * mf.units) * (0.5f * mf.units);
-        atlas_far_due_ = near_only;  // (after the near ones alone, the far ones next time)
+        atlas_far_waited_ = near_only ? atlas_far_waited_ + 1 : 0;  // (the far ones every third time)
         if (!near_only) std::memcpy(atlas_far_eye_, m + 12, 12), std::memcpy(atlas_far_ahead_, m + 8, 12);
         atlas_valid_ = true, atlas_time_ = now, atlas_level_ = g_level.load(), atlas_quality_ = app::Get().shadow_quality;
         std::memcpy(atlas_eye_, m + 12, 12), std::memcpy(atlas_ahead_, m + 8, 12), std::memcpy(atlas_light_, light_.dir, 12);
@@ -9457,9 +9583,9 @@ void Renderer::SkyPass(Target& rt, const float p[16]) {
             else for (auto& r : sky_tiles_) r.Reset();
         }
         if (sky_tiles_[1]) {
-            // the reaches: SkyFeather's disc (0.17 of the height), HorizonSoft's band and disc (0.03 and 0.014 of it,
-            // the sum), in tiles, a tile more for where in its tile a pixel is
-            float reach_veil = std::ceil(0.17f * float(rt.h) / 16) + 1, reach_water = std::ceil((0.03f + 0.014f) * float(rt.h) / 16) + 1;
+            // the reaches: the smoke's cover fading out (its blur, 0.04 of the height), HorizonSoft's band and disc (0.03
+            // and 0.014 of it, the sum), in tiles, a tile more for where in its tile a pixel is
+            float reach_veil = std::ceil(0.04f * float(rt.h) / 16) + 1, reach_water = std::ceil((0.03f + 0.014f) * float(rt.h) / 16) + 1;
             float q[8] = {float(rt.w), float(rt.h), float(tw), float(th), reach_veil, reach_water, 0, 0};
             Transition(sky_tiles_[0].Get(), sky_tiles_state_[0], D3D12_RESOURCE_STATE_RENDER_TARGET);
             rhi::Resource* s0[3] = {depth, nullptr, nullptr};
@@ -9501,27 +9627,75 @@ void Renderer::SkyPass(Target& rt, const float p[16]) {
     }
     SkyAverage(depth, p);
     uint32_t slot = AllocSrvSlots(7);
-    std::pair<rhi::Resource*, DXGI_FORMAT> src[5] = {{scene_[0].Get(), rt.fmt},
-                                                      {depth, DXGI_FORMAT_R24_UNORM_X8_TYPELESS},
-                                                      {tiles, DXGI_FORMAT_R8G8_UNORM},
-                                                      {SkyAvg(), DXGI_FORMAT_R16G16B16A16_FLOAT},
-                                                      {quarter, DXGI_FORMAT_R16G16B16A16_FLOAT}};
-    for (uint32_t i = 0; i < 7; i++) {
-        D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
-        sv.Format = i < 5 && src[i].first ? src[i].second : kBgra;
-        sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-        sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        sv.Texture2D.MipLevels = 1;
-        dev_->CreateSrv(i < 5 ? src[i].first : nullptr, &sv, Cpu(rhi::Heap::Srv, slot + i));
-    }
-    Transition(rt.res.Get(), rt.state, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    rhi::View rh = Cpu(rhi::Heap::Rtv, rt.view);
-    cl_->SetTargets(1, &rh, nullptr);
-    SetFullViewport(rt.w, rt.h);
     Alloc cb = Upload(1536, 256);
     std::memset(cb.cpu, 0, 1536);
     std::memcpy(cb.cpu, p, 16 * sizeof(float));
     std::memcpy(cb.cpu + kSkyConstantsAt * sizeof(float), sky_cb_, sizeof(sky_cb_));
+    auto table = [&](uint32_t at, rhi::Resource* half, const RemasterTex* cover) {
+        std::pair<rhi::Resource*, DXGI_FORMAT> src[7] = {{scene_[0].Get(), rt.fmt},
+                                                          {depth, DXGI_FORMAT_R24_UNORM_X8_TYPELESS},
+                                                          {tiles, DXGI_FORMAT_R8G8_UNORM},
+                                                          {SkyAvg(), DXGI_FORMAT_R16G16B16A16_FLOAT},
+                                                          {quarter, DXGI_FORMAT_R16G16B16A16_FLOAT},
+                                                          {half, DXGI_FORMAT_R16G16B16A16_FLOAT},
+                                                          {cover ? cover->color.Get() : nullptr, cover ? cover->color_fmt : kBgra}};
+        for (uint32_t i = 0; i < 7; i++) {
+            D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
+            sv.Format = src[i].first ? src[i].second : kBgra;
+            sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+            sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            sv.Texture2D.MipLevels = i == 6 && cover ? cover->color_mips : 1;
+            dev_->CreateSrv(src[i].first, &sv, Cpu(rhi::Heap::Srv, at + i));
+        }
+    };
+    // level 1: the oil smoke's share about and its colour, blurred (blurq along x then y, a quarter size), and its
+    // texture (the pack's), for skyfx's cover
+    rhi::Resource* half = nullptr;
+    const RemasterTex* cover = nullptr;
+    if (tiles && quarter) {
+        constexpr uint64_t kOilCloudHigh = 0xca3f4e0fb7c8bad2ull;  // aOilCloud_base_high
+        auto it = remaster_.find(kOilCloudHigh);
+        if (it != remaster_.end() && it->second.color) cover = &it->second;
+        else if (remaster::Active() && remaster::Find(kOilCloudHigh)) remaster::Request(kOilCloudHigh);
+        const uint32_t qw = sky_quarter_w_, qh = sky_quarter_h_;
+        if (cover && (!sky_smoke_[1] || sky_smoke_w_ != qw || sky_smoke_h_ != qh)) {
+            for (auto& r : sky_smoke_)
+                if (r) Release(std::move(r));
+            sky_smoke_w_ = sky_smoke_h_ = 0;
+            bool ok = true;
+            for (uint32_t i = 0; i < 2 && ok; i++) {
+                D3D12_RESOURCE_DESC td = Texture2DDesc(DXGI_FORMAT_R16G16B16A16_FLOAT, qw, qh);
+                td.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+                D3D12_CLEAR_VALUE cv{};
+                cv.Format = td.Format;
+                sky_smoke_state_[i] = D3D12_RESOURCE_STATE_RENDER_TARGET;
+                ok = CreateResource(rhi::HeapType::Default, td, sky_smoke_state_[i], &cv, sky_smoke_[i]);
+                if (ok) dev_->CreateRtv(sky_smoke_[i].Get(), nullptr, SkySmokeRtv(i));
+            }
+            if (ok) sky_smoke_w_ = qw, sky_smoke_h_ = qh;
+            else for (auto& r : sky_smoke_) r.Reset();
+        }
+        if (cover && sky_smoke_[1]) {
+            // (the radius: 3% of the height, in quarter size texels)
+            const float radius = std::max(1.0f, std::round(0.03f * float(rt.h) / 4));
+            for (uint32_t pass = 0; pass < 2; pass++) {
+                float q[8] = {float(rt.w), float(rt.h), float(qw), float(qh), radius, float(pass), 0, 0};
+                Transition(sky_smoke_[pass].Get(), sky_smoke_state_[pass], D3D12_RESOURCE_STATE_RENDER_TARGET);
+                rhi::Resource* src[3] = {pass == 0 ? quarter : sky_smoke_[0].Get(), nullptr, nullptr};
+                DXGI_FORMAT fmt[3] = {DXGI_FORMAT_R16G16B16A16_FLOAT, kBgra, kBgra};
+                Pass(kSkyTilesHlsl, "blurq", DXGI_FORMAT_R16G16B16A16_FLOAT, SkySmokeRtv(pass), qw, qh, src, fmt, q, -1);
+                Transition(sky_smoke_[pass].Get(), sky_smoke_state_[pass], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            }
+            half = sky_smoke_[1].Get();
+        } else {
+            cover = nullptr;
+        }
+    }
+    table(slot, half, cover);
+    Transition(rt.res.Get(), rt.state, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    rhi::View rh = Cpu(rhi::Heap::Rtv, rt.view);
+    cl_->SetTargets(1, &rh, nullptr);
+    SetFullViewport(rt.w, rt.h);
     DrawFullScreen(pso, cb.gpu, slot);
     Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
     bound_rt_ = bound_ds_ = nullptr;

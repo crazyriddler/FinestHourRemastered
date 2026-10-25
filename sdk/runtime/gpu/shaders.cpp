@@ -1494,6 +1494,24 @@ ProgramPositionInfo ProgramPosition(const std::vector<uint32_t>& prog, uint16_t 
     return info;
 }
 
+int ProgramColorInput(const std::vector<uint32_t>& prog, uint16_t regs) {
+    static std::mutex lock;
+    static KeyMap<uint64_t, int> known;
+    const uint64_t key = Hash(prog.data(), prog.size() * 4, regs ^ 0xC0105);
+    std::lock_guard l(lock);
+    auto it = known.find(key);
+    if (it != known.end()) return it->second;
+    int input = -1;
+    for (const VsInst& v : DecodeProgram(prog, regs)) {
+        // (oD0 is output 3; its mask wzyx from bit 0: w the lowest)
+        if (v.out != 3 || !(v.out_mask & 1)) continue;
+        const VsOperand& o = v.op[0];
+        input = !v.out_ilu && v.mac == 1 && o.kind == 2 && o.sw[3] == 3 && !o.neg ? int(o.reg) : -1;
+    }
+    known[key] = input;
+    return input;
+}
+
 ProgramLightInfo ProgramLight(const std::vector<uint32_t>& prog, uint16_t regs) {
     static std::mutex lock;
     static KeyMap<uint64_t, ProgramLightInfo> known;

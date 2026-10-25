@@ -204,6 +204,9 @@ The version installed is in `version.txt` beside the game. Unattended:
   texture.
 - Ambient Occlusion and Contact Shadows no longer draw shaded lines across the ground seen at a low angle (Raiding
   the Fortress's courtyards most of all).
+- Not One Step Back: the oil smoke over the city is now the smoke's own texture in high resolution, slowly rising
+  and drifting, in place of the generated smoke: sharper, much cheaper, and without the hard edges and flicker of
+  the smoke pieces under it. The white clouds no longer show between the smoke there.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

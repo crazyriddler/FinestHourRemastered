@@ -215,6 +215,8 @@ The version installed is in `version.txt` beside the game. Unattended:
   stay in English). A first translation: corrections are welcome in issue #34.
 - New option, Cinematic Depth of Field (PC Settings, Effects, off by default): in the game's own cutscenes the
   background goes out of focus, the characters in front sharp. Holding aim in a cutscene no longer blurs the view.
+- Operation Little Saturn: the Katyusha rockets' flame no longer has a dark halo around it against the night sky, and
+  it lights its surroundings as it flies.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

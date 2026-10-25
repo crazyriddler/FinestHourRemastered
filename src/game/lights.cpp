@@ -56,6 +56,8 @@ constexpr Entry kTable[] = {
     {0x34d4d655e55e0eae, kTracer},    // tracerroundwhitetrans
     {0x093ae31e2da4082d, kTracer},    // tracerstreakwhitetrans
     {0x1564ef8b30c88ab1, kShell},     // tankwhoosh: a shell's trail
+    {0xb115a80b815b934c, kShell},     // VT_StalinsOrgans_rocketFL: a Katyusha rocket's flame (its dark see-through: a
+                                      // dark halo about it against the night sky)
     {0x716232ce5371ec2f, kSpark},     // spark
     {0x914441d0a35fa26d, kSpark},     // spark4
     {0x8e36ce1937723fe2, kBlueSpark}, // bluespark

@@ -632,20 +632,83 @@ SamplerState wrapt : register(s5);           // trilinear, repeating
 // (their colour over the texture's own mean), by how much of them is about (smokemask): all of it over the smoke,
 // fading out over its outline into the open sky and the city's glow. Their cut outs, hard edges and seams are under
 // it. veil: the cover (the clouds and the sun behind it)
-float3 SmokeCover(float3 w, float4 f) {
-    float2 q = float2(atan2(w.z, w.x) / 6.2831853, asin(clamp(w.y, -1, 1)) / 3.1415927);
-    // (the derivatives across the turn's seam, where q.x jumps by 1: taken the short way round)
-    float2 d1x = ddx(q), d1y = ddy(q);
-    d1x.x -= round(d1x.x), d1y.x -= round(d1y.x);
-    const float2 s1 = float2(10, 5), s2 = float2(4, 2);
-    // moving, slowly: the near scale rising and drifting with the wind, the far one slower the other way, a slow
-    // swirl of the far one's place bending the near one (a few sums a pixel, no taps more)
+// (the cover's texture at q, a place of the sky in one of its projections, dx and dy its derivatives: moving,
+// slowly, rising, the same everywhere (a drift that changed from place to place stretched the texture into doubled
+// outlines), the far scale slower, a slow swirl of the far one's place bending the near one. Over the outline a layer
+// more of it, finer, drawn out along the outline (along, its way on the screen; into the texture's by the
+// derivatives, s3 the same scale each way; either way round) and sliding up it, by band; its slide in two phases, each restarting as
+// the other is at its most: along an outline that bends, the texture never drawn far)
+float3 SmokeTex(float2 q, float2 dx, float2 dy, float2 along, float band) {
+    const float2 s1 = float2(10, 5), s2 = float2(4, 2), s3 = float2(18, 9);
     float tm = sky[1].w;
-    float2 u2 = q * s2 + float2(0.37, 0.61) + float2(-tm * 0.005, -tm * 0.009);
-    float2 u1 = q * s1 + float2(tm * 0.012, -tm * 0.020) + 0.035 * sin(u2.yx * 6.2831853 + tm * float2(0.21, 0.17));
-    float3 t1 = smoketex.SampleGrad(wrapt, u1, d1x * s1, d1y * s1).rgb;
-    float3 t2 = smoketex.SampleGrad(wrapt, u2, d1x * s2, d1y * s2).rgb;
-    float3 t = lerp(t1, t2, 0.4);
+    float2 u2 = q * s2 + float2(0.37, 0.61) + float2(0, -tm * 0.006);
+    float2 u1 = q * s1 + float2(0, -tm * 0.014) + 0.035 * sin(u2.yx * 6.2831853 + tm * float2(0.21, 0.17));
+    float3 t = lerp(smoketex.SampleGrad(wrapt, u1, dx * s1, dy * s1).rgb, smoketex.SampleGrad(wrapt, u2, dx * s2, dy * s2).rgb, 0.4);
+    [branch] if (band > 0.01) {
+        float2 du = (along.x * dx + along.y * dy) * s3;
+        du /= max(length(du), 1e-9);
+        // (its slide "up" along the outline: as fast as the outline is upright, none where it lies flat; turned the
+        // way the outline runs, the two sides of an arch met at its top sliding against each other, a hard line)
+        float2 slide = du * -along.y;
+        const float T = 5;
+        float pa = frac(tm / T), pb = frac(tm / T + 0.5), wa = 1 - abs(2 * pa - 1);
+        float2 u3 = q * s3 + float2(0.71, 0.13) + float2(0, -tm * 0.014 * s3.y / s1.y);
+        // (drawn out along it: three taps along it, averaged)
+        float3 ea = 0, eb = 0;
+        [unroll] for (int k = -1; k <= 1; k++) {
+            float2 sa = u3 + du * (k * 0.06) - slide * (0.035 * T * pa), sb = u3 + du * (k * 0.06) - slide * (0.035 * T * pb) + float2(0.29, 0.41);
+            ea += smoketex.SampleGrad(wrapt, sa, dx * s3, dy * s3).rgb;
+            eb += smoketex.SampleGrad(wrapt, sb, dx * s3, dy * s3).rgb;
+        }
+        t = lerp(t, lerp(eb, ea, wa) / 3, band * 0.85);
+    }
+    return t;
+}
+float3 SmokeCover(float3 w, float4 f, float2 uv) {
+    // the sky's place by the view's direction, two ways: by its heading and height (still as the view turns, but
+    // drawn together into a star straight up), and on a plane overhead (none of that there; drawn out towards the
+    // horizon): the first up to about 35 degrees, the second from about 50, the two mixed between. Each the same
+    // scale each way, a tile about 36 degrees across
+    float2 q = float2(atan2(w.z, w.x) / 6.2831853, asin(clamp(w.y, -1, 1)) / 3.1415927);
+    float2 qp = w.xz / max(w.y, 0.3) * float2(1 / 6.2831853, 1 / 3.1415927);
+    // (the derivatives across the turn's seam, where q.x jumps by 1: taken the short way round)
+    float2 d1x = ddx(q), d1y = ddy(q), dpx = ddx(qp), dpy = ddy(qp);
+    d1x.x -= round(d1x.x), d1y.x -= round(d1y.x);
+    float up = smoothstep(0.57, 0.77, w.y);
+    // its outline: from where the cover fades out (smokemask's share from about 0.02) inwards over 9% of the height,
+    // fading out there. How near the outline, and its way: two rings of eight taps of smokemask about, at 4.5% and 9%
+    // of the height, their least share (none of it about: the outline) and their slope (towards the smoke). Only on
+    // the outline against the open sky (out down the slope, six taps to 12% of the height, two on it enough): a plane
+    // or a building over the smoke leaves a hole in the mask, an outline about it
+    float band = smoothstep(0.02, 0.3, f.a);
+    float2 along = float2(0, -1);
+    [branch] if (band > 0.01) {
+        const float R = 0.09;
+        float2 g = 0;
+        float m1 = 1, m2 = 1;
+        [unroll] for (int k = 0; k < 8; k++) {
+            float2 dir = float2(cos(k * 0.7853982), sin(k * 0.7853982));
+            float2 off = dir * p[2].y / p[2].xy;
+            float a1 = smokemask.SampleLevel(lin, uv + off * (R * 0.5), 0).a, a2 = smokemask.SampleLevel(lin, uv + off * R, 0).a;
+            g += dir * (a1 + a2);
+            m1 = min(m1, a1), m2 = min(m2, a2);
+        }
+        band *= 1 - smoothstep(0.45, 0.95, 0.5 * (m1 + m2));
+        float open = 0;
+        float2 down = -g / max(length(g), 1e-5) * p[2].y / p[2].xy;
+        [unroll] for (int k = 1; k <= 6; k++) {
+            int2 at = int2(clamp((uv + down * (R * 1.3 * k / 6)) * p[2].xy, 0, p[2].xy - 1));
+            float d = depth.Load(int3(at, 0));
+            open += d >= 0.9999 && !Veiled(d) && !FarWater(d) ? 0.5 : 0;
+        }
+        band *= saturate(open) * saturate(length(g) / 1.5);
+        along = float2(-g.y, g.x) / max(length(g), 1e-5);
+    } else {
+        band = 0;
+    }
+    float3 t = 0;
+    [branch] if (up < 1) t += SmokeTex(q, d1x, d1y, along, band) * (1 - up);
+    [branch] if (up > 0) t += SmokeTex(qp, dpx, dpy, along, band) * up;
     return t / float3(0.194, 0.201, 0.238) * (f.rgb / f.a);
 }
 // Level 1's far water where it meets the sky (its square's straight edge): a band about that line out of focus, the
@@ -728,8 +791,8 @@ float4 skyfx(O i) : SV_Target {
     [branch] if (sky[0].w > 1.5 && d0 >= 0.9999 && near.x > 0) {
         float4 f = smokemask.SampleLevel(lin, i.uv, 0);
         if (f.a > 0.002) {
-            veil = smoothstep(0, 0.6, f.a);
-            c = lerp(c, SmokeCover(w, f), veil);
+            veil = smoothstep(0, 0.75, f.a);
+            c = lerp(c, SmokeCover(w, f, i.uv), veil);
         }
     }
     float lum = dot(c, float3(0.2126, 0.7152, 0.0722));

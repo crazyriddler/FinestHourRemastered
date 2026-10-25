@@ -9676,8 +9676,8 @@ void Renderer::SkyPass(Target& rt, const float p[16]) {
             else for (auto& r : sky_smoke_) r.Reset();
         }
         if (cover && sky_smoke_[1]) {
-            // (the radius: 3% of the height, in quarter size texels)
-            const float radius = std::max(1.0f, std::round(0.03f * float(rt.h) / 4));
+            // (the radius: 5% of the height, in quarter size texels)
+            const float radius = std::max(1.0f, std::round(0.05f * float(rt.h) / 4));
             for (uint32_t pass = 0; pass < 2; pass++) {
                 float q[8] = {float(rt.w), float(rt.h), float(qw), float(qh), radius, float(pass), 0, 0};
                 Transition(sky_smoke_[pass].Get(), sky_smoke_state_[pass], D3D12_RESOURCE_STATE_RENDER_TARGET);

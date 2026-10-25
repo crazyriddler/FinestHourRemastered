@@ -87,6 +87,7 @@ bool* Effect(const std::string& name) {
         {"heat_haze", &app::Settings::heat_haze},
         {"sun_shafts", &app::Settings::sun_shafts},
         {"aim_dof", &app::Settings::aim_dof},
+        {"cinematic_dof", &app::Settings::cinematic_dof},
         {"explosion_flash", &app::Settings::explosion_flash},
         {"flash_shadows", &app::Settings::flash_shadows},
         {"auto_exposure", &app::Settings::auto_exposure},
@@ -709,8 +710,35 @@ void HudPieces() {
     gpu::g_game_hidden_tex[n].store(0, std::memory_order_relaxed);
 }
 
+// A cutscene of the game's own (gpu::g_cutscene: no aiming's blur in it, Cinematic Depth of Field's): in a level, no
+// menu nor movie, and none of the HUD drawn by the game for half a second (its compass, stance, health, crosshair, a
+// tank's: the game draws them in play and in its vehicles and guns, whatever the settings hide)
+void Cutscene() {
+    static constexpr uint64_t kHud[] = {
+        0xdec48f377e5b4684, 0x3b85684838815a71,                      // the compass: dial, glass
+        0xe67bb8cbd91d5674, 0x78aa5a7bf1a08670, 0xa4db31f92c1ea1a4,  // the stance
+        0x7c691e4b5741194e, 0x0b41acaa2b79af57, 0xf62d1fded3b3cc9a,  // health's bar, the medkits, the ammunition's box
+        0x3ee2fae9df22de54, 0xb4b1dc60d65eed4d,                      // a tank's ring, its health and reload bars
+        0xa56bd892e4cb0adf, 0x4b85d789cdfe022d, 0x8bf20f88516e996b,  // the crosshair
+        0x2d613c78def6368e,
+    };
+    static const bool set = [] {
+        for (size_t i = 0; i < std::size(kHud); i++) gpu::g_hud_tex[i].store(kHud[i], std::memory_order_relaxed);
+        return true;
+    }();
+    (void)set;
+    const int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now().time_since_epoch()).count();
+    static int64_t play_since = now;  // in a level, no menu, since
+    const bool play = !cod::wide::FrontEnd() && !cod::InMenu() && !cod::InMovie() && !cod::OverlayOpen();
+    if (!play) play_since = now;
+    const bool cut = play && now - play_since > 1000 && now - gpu::g_hud_seen_ms.load(std::memory_order_relaxed) > 500;
+    if (cut != gpu::g_cutscene.exchange(cut)) LOGR("cutscene: %s", cut ? "on" : "off");
+}
+
 void Ui(double fps) {
     g_fps = fps;
+    Cutscene();
     cod::ragdoll::NewFrame();
     cod::wide::Update();
     cod::wide::UpdateMaterialFrame();

@@ -83,6 +83,7 @@ void Load() {
     s.heat_haze = t["heat_haze"].value_or(s.heat_haze);
     s.sun_shafts = t["sun_shafts"].value_or(s.sun_shafts);
     s.aim_dof = t["aim_depth_of_field"].value_or(s.aim_dof);
+    s.cinematic_dof = t["cinematic_depth_of_field"].value_or(s.cinematic_dof);
     s.explosion_flash = t["explosion_flash"].value_or(s.explosion_flash);
     s.damage_shake = t["damage_shake"].value_or(s.damage_shake);
     s.flash_shadows = t["flash_shadows"].value_or(s.flash_shadows);
@@ -174,6 +175,7 @@ toml::table Table() {
                   {"heat_haze", s.heat_haze},
                   {"sun_shafts", s.sun_shafts},
                   {"aim_depth_of_field", s.aim_dof},
+                  {"cinematic_depth_of_field", s.cinematic_dof},
                   {"explosion_flash", s.explosion_flash},
                   {"damage_shake", s.damage_shake},
                   {"flash_shadows", s.flash_shadows},

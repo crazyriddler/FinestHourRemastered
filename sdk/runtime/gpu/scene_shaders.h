@@ -1488,18 +1488,22 @@ float4 composite(O i) : SV_Target {
     }
     // aiming: what lies well behind the point aimed at blurs (the weapon in hand and the near stay sharp)
     // the weapon in hand while aiming: out of focus (the eye on the distance), its sights in the middle less so
-    if (p[4].w > 0 && shadowm.Load(int3(i.pos.xy, 0)).r < 1) {
+    // (p[4].w 2 on: a cutscene's, Cinematic Depth of Field: only what lies well behind the middle, softer, no edges)
+    const bool cine = p[4].w >= 1.5;
+    const float dofa = cine ? p[4].w - 2 : p[4].w;
+    if (dofa > 0 && !cine && shadowm.Load(int3(i.pos.xy, 0)).r < 1) {
         float2 e = (i.uv - float2(0.5, 0.5)) * float2(p[2].x / p[2].y, 1);
-        float coc = smoothstep(0.04, 0.22, length(e)) * 0.85 * p[4].w;
+        float coc = smoothstep(0.04, 0.22, length(e)) * 0.85 * dofa;
         c = lerp(c, b2.SampleLevel(lin, uv, 0).rgb, coc);
     }
-    if (p[4].w > 0 && shadowm.Load(int3(i.pos.xy, 0)).r >= 1) {
+    if (dofa > 0 && shadowm.Load(int3(i.pos.xy, 0)).r >= 1) {
         float zc = min(min(ViewZ(occ.SampleLevel(pnt, float2(0.5, 0.5), 0)), ViewZ(occ.SampleLevel(pnt, float2(0.5, 0.47), 0))),
                        ViewZ(occ.SampleLevel(pnt, float2(0.5, 0.53), 0)));
         float z = ViewZ(occ.SampleLevel(pnt, uv, 0));
         // and the edges of the view, gently: the eye on the sights
         float2 e = (i.uv - 0.5) * float2(p[2].x / p[2].y, 1);
-        float coc = max(saturate((z - zc * 1.3) / (zc * 1.5 + 300)), smoothstep(0.35, 0.85, length(e)) * 0.7) * p[4].w;
+        float coc = cine ? saturate((z - zc * 1.3) / (zc * 1.5 + 300)) * 0.8 * dofa
+                         : max(saturate((z - zc * 1.3) / (zc * 1.5 + 300)), smoothstep(0.35, 0.85, length(e)) * 0.7) * dofa;
         c = lerp(c, b2.SampleLevel(lin, uv, 0).rgb, coc);
     }
     // the levels upsampled into the first (d3d12.cpp ScenePost), the sun's shafts

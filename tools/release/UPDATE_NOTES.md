@@ -213,6 +213,8 @@ The version installed is in `version.txt` beside the game. Unattended:
 - New language: Russian (PC Settings, General, Language). All the game's text, subtitles, objectives and menus, the
   PC Settings too, with Cyrillic letters in the game's own fonts, with or without the remastered textures (the voices
   stay in English). A first translation: corrections are welcome in issue #34.
+- New option, Cinematic Depth of Field (PC Settings, Effects, off by default): in the game's own cutscenes the
+  background goes out of focus, the characters in front sharp. Holding aim in a cutscene no longer blurs the view.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

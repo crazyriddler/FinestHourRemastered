@@ -410,6 +410,8 @@ std::vector<Page> BuildPages() {
                                    "A light haze in the air, lit by the sun through the gaps and by the flashes."));
     effects.items.push_back(Toggle("Sun Shafts", &s.sun_shafts, "Beams of sunlight past columns and ruins."));
     effects.items.push_back(Toggle("Aim Depth of Field", &s.aim_dof, "Aiming down the sights blurs the edges and the background."));
+    effects.items.push_back(Toggle("Cinematic Depth of Field", &s.cinematic_dof,
+                                   "In the game's own cutscenes the background goes softly out of focus."));
     effects.items.push_back(Toggle("Eye Adaptation", &s.auto_exposure,
                                    "The view adapts a little between dark rooms and bright streets."));
     effects.items.push_back(Toggle("Color Grading", &s.color_grade, "Each campaign's own tones: winter, desert, Europe."));

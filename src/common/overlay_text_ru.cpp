@@ -162,6 +162,8 @@ const PtRow kRuRows[] = {
     {"Beams of sunlight past columns and ruins.", "Лучи солнца между колоннами и руинами."},
     {"Aim Depth of Field", "ГРИП при прицеливании"},
     {"Aiming down the sights blurs the edges and the background.", "Прицеливание размывает края и фон."},
+    {"Cinematic Depth of Field", "Кинематографичная ГРИП"},
+    {"In the game's own cutscenes the background goes softly out of focus.", "В сюжетных сценах игры фон мягко размывается."},
     {"Eye Adaptation", "Адаптация глаз"},
     {"The view adapts a little between dark rooms and bright streets.", "Обзор немного подстраивается при переходе между тёмными комнатами и светлыми улицами."},
     {"Color Grading", "Цветокоррекция"},

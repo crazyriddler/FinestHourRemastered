@@ -1277,6 +1277,7 @@ private:
     void FogPass(Target& rt, Target& ds);
     SceneFx fx_;
     float dof_ = 0;                // aiming's depth of field, 0 to 1
+    bool dof_cine_ = false;        // it is a cutscene's (Cinematic Depth of Field): p[4].w 2 on
     void SceneFinal(Target& rt, const float p[16], bool bloom, bool rays, bool dof);
     // the sky's constants (kSceneCommon's sky[6]), for every scene pass of the frame
     float sky_cb_[24] = {};
@@ -4941,6 +4942,17 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
         for (const auto& hidden : g_hidden_tex)
             for (int st = 0; st < 4; st++)
                 if (stages.id[st] && hidden.load() == stages.id[st]) return;
+    // the HUD drawn by the game (before the settings hide it): play, not a cutscene
+    for (const auto& hud : g_hud_tex) {
+        uint64_t id = hud.load(std::memory_order_relaxed);
+        if (!id) break;
+        if (id == stages.id[0]) {
+            g_hud_seen_ms.store(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    std::chrono::steady_clock::now().time_since_epoch()).count(),
+                                std::memory_order_relaxed);
+            break;
+        }
+    }
     for (const auto& hidden : g_game_hidden_tex) {
         uint64_t id = hidden.load(std::memory_order_relaxed);
         if (!id) break;
@@ -9453,9 +9465,12 @@ void Renderer::ScenePost() {
         if (log && n++ % 120 == 0) LOGR("rays: sun in view %.2f %.2f %.2f, on screen %.2f %.2f, strength %.2f", v[0], v[1], v[2], pr[4], pr[5], pr[6]);
     }
     // aiming down the sights (the game's aim held), with every weapon: a scope's overlay hides the weapon, nothing of
-    // it to blur
+    // it to blur; in play alone (the aim held in a cutscene blurred it). In a cutscene of the game's own (Cinematic
+    // Depth of Field): what lies behind the middle, softly (dof_cine_, the way the last one faded in)
     {
-        float target = g_aiming.load() && set.aim_dof ? 1.0f : 0.0f;
+        const bool cut = g_cutscene.load(), cine = cut && set.cinematic_dof;
+        float target = (g_aiming.load() && set.aim_dof && !cut) || cine ? 1.0f : 0.0f;
+        if (target > 0) dof_cine_ = cine;
         static auto last = std::chrono::steady_clock::now();
         auto now = std::chrono::steady_clock::now();
         float dt = std::clamp(std::chrono::duration<float>(now - last).count(), 0.0f, 0.1f);
@@ -9881,7 +9896,7 @@ void Renderer::SceneFinal(Target& rt, const float p[16], bool bloom, bool rays, 
     float now = std::chrono::duration<float>(std::chrono::steady_clock::now() - t0).count();
     shown = std::max(set.damage_shake ? std::clamp(g_hurt.load(), 0.0f, 1.0f) : 0.0f, shown - std::clamp(now - last, 0.0f, 0.1f) / 0.5f);
     last = now;
-    float p4[4] = {std::max(shown, 0.0f), std::fmod(now, 1000.0f), fx_.flash, dof ? dof_ : 0.0f};
+    float p4[4] = {std::max(shown, 0.0f), std::fmod(now, 1000.0f), fx_.flash, dof ? dof_ + (dof_cine_ ? 2.0f : 0.0f) : 0.0f};
     float p5[4] = {float(nlights), float(fx_.heats), rays ? 1.0f : 0.0f, set.light_halos ? 1.0f : 0.0f};
     std::memcpy(cb.cpu + 16 * sizeof(float), p4, sizeof(p4));
     std::memcpy(cb.cpu + 20 * sizeof(float), p5, sizeof(p5));

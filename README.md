@@ -181,7 +181,8 @@ game's own look and textures. The render scale is never part of a preset: it sta
 - **Soft Particles**, **Animated Fire**, **Shockwaves** (an explosion's shock ripples through the air),
   **Explosion Flash**, **Barrel Heat** (the barrel shimmers and smokes after a burst).
 - **Hit Reactions**: soldiers flinch where bullets hit them. **Damage Shake**.
-- **Anti-Aliasing**: FXAA on the 3D scene (the HUD and text stay sharp), **Aim Depth of Field**.
+- **Anti-Aliasing**: FXAA on the 3D scene (the HUD and text stay sharp), **Aim Depth of Field**, **Cinematic Depth of
+  Field** (off by default: the background out of focus in the game's own cutscenes).
 
 ### Controls
 - **Keyboard and mouse** with raw input, sensitivity, invert and every action rebindable; mouse support in the menus.

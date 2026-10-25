@@ -83,6 +83,11 @@ inline std::atomic<int> g_shadow_debug{-1};
 // the reflections' debug view (XBE_SSR_DEBUG at the start, "ssrdebug N" on the control channel): 0 none
 inline std::atomic<int> g_ssr_debug{-1};
 inline std::atomic<bool> g_aiming{false};  // the player aims down the sights (the game's aim held in play)
+// the HUD the game draws: its pieces' content ids (0 ends), and when one was last drawn (steady ms; drawn whether the
+// settings hide it or not). None for a while in play: a cutscene of the game's own (g_cutscene; the game's layer)
+inline std::atomic<uint64_t> g_hud_tex[24]{};
+inline std::atomic<int64_t> g_hud_seen_ms{0};
+inline std::atomic<bool> g_cutscene{false};
 inline std::atomic<bool> g_texview{false};
 // tests: every frame's time from "perf start" to "perf stop <label>" (control lines), the report in the log: average,
 // lowest and highest frame rates, the 1% and 0.1% lows, the worst frames and what they did

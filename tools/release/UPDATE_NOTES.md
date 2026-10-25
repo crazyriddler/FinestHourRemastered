@@ -202,6 +202,8 @@ The version installed is in `version.txt` beside the game. Unattended:
   of them opened those cracks.
 - Pausing in a snow level could garble the snow tracks or the TV screen of the menu: both were drawn into the same
   texture.
+- Ambient Occlusion and Contact Shadows no longer draw shaded lines across the ground seen at a low angle (Raiding
+  the Fortress's courtyards most of all).
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

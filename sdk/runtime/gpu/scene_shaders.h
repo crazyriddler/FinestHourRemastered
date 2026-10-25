@@ -93,26 +93,40 @@ float D(float2 uv) { return depth.SampleLevel(pnt, uv, 0); }
 // most between them
 float DH(float2 uv) { return hdepth.SampleLevel(pnt, uv, 0); }
 float4 depthhalf(O i) : SV_Target { return depth.Load(int3(min(int2(i.pos.xy) * 2 + 1, int2(p[2].xy) - 1), 0)); }
-// the depth at a screen uv, on the screen or past it in the guard band: false where neither has it
-bool DG(float2 uv, out float d) {
+// the depth at a screen uv, on the screen or past it in the guard band: false where neither has it. The uv comes back
+// as the very place of the pixel whose depth it is (the half size depth's, a pixel and a half off at most; the
+// band's): placed where the sample asked for, a slope's depth (the ground far off, seen flat) put each sample a pixel
+// above or below its surface, rows of it in front of the ground or behind it, lines across it in the occlusion and the
+// contact shadows
+bool DG(inout float2 uv, out float d) {
     d = 1;
     if (all(uv >= 0) && all(uv <= 1)) {
-        d = DH(uv);
+        int2 hs = max(int2(p[2].xy) / 2, 1);
+        int2 h = min(int2(uv * hs), hs - 1);
+        d = hdepth.Load(int3(h, 0));
+        uv = (float2(min(h * 2 + 1, int2(p[2].xy) - 1)) + 0.5) * p[2].zw;
         return true;
     }
     float2 g = (uv - 0.5) * GUARD + 0.5;
     if (any(g < 0) || any(g > 1)) return false;
-    d = guard.SampleLevel(pnt, g, 0);
+    uint gw, gh;
+    guard.GetDimensions(gw, gh);
+    int2 gt = min(int2(g * float2(gw, gh)), int2(gw, gh) - 1);
+    d = guard.Load(int3(gt, 0));
+    uv = ((float2(gt) + 0.5) / float2(gw, gh) - 0.5) / GUARD + 0.5;
     return d > 0;
 }
 float4 ao(O i) : SV_Target {
-    float d = D(i.uv);
+    // (the pixel this half size one reads, at its own place: its centre, half a pixel off before)
+    int2 at = min(int2(i.pos.xy) * 2 + 1, int2(p[2].xy) - 1);
+    float2 uv0 = (float2(at) + 0.5) * p[2].zw;
+    float d = depth.Load(int3(at, 0));
     if (d >= 0.99999) return 1;  // the sky
-    float3 P = ViewPos(i.uv, d);
+    float3 P = ViewPos(uv0, d);
     float2 px = p[2].zw;
     // the normal from the nearer of each pair of neighbours, so edges keep their own side
-    float3 l = ViewPos(i.uv - float2(px.x, 0), D(i.uv - float2(px.x, 0))), r = ViewPos(i.uv + float2(px.x, 0), D(i.uv + float2(px.x, 0)));
-    float3 u = ViewPos(i.uv - float2(0, px.y), D(i.uv - float2(0, px.y))), dn = ViewPos(i.uv + float2(0, px.y), D(i.uv + float2(0, px.y)));
+    float3 l = ViewPos(uv0 - float2(px.x, 0), D(uv0 - float2(px.x, 0))), r = ViewPos(uv0 + float2(px.x, 0), D(uv0 + float2(px.x, 0)));
+    float3 u = ViewPos(uv0 - float2(0, px.y), D(uv0 - float2(0, px.y))), dn = ViewPos(uv0 + float2(0, px.y), D(uv0 + float2(0, px.y)));
     float3 dx = abs(r.z - P.z) < abs(P.z - l.z) ? r - P : P - l;
     float3 dy = abs(dn.z - P.z) < abs(P.z - u.z) ? dn - P : P - u;
     float3 N = normalize(cross(dy, dx));
@@ -128,7 +142,7 @@ float4 ao(O i) : SV_Target {
     [unroll] for (int k = 0; k < n; k++) {
         float a = (k + noise) * 2.399963;
         float rr = sqrt((k + 0.5) / n);
-        float2 uv = i.uv + float2(cos(a), sin(a)) * rr * rs;
+        float2 uv = uv0 + float2(cos(a), sin(a)) * rr * rs;
         float ds;
         if (!DG(uv, ds)) continue;
         taken += 1;
@@ -147,6 +161,9 @@ float4 ao(O i) : SV_Target {
     if (p[3].z > 0 && dot(N, L) > 0.02) {
         float len = p[1].w;
         float3 Q = P + N * 0.01 * P.z;
+        // (something in front by more than the surface's own depth changes over the pixel and a half a sample's depth
+        // may lie off: the ground seen flat is not in front of itself)
+        float slope = 1.5 * (abs(dx.z) + abs(dy.z));
         const int m = 12;
         [loop] for (int k = 1; k <= m; k++) {
             float3 S = Q + L * len * (k + noise) / m;
@@ -155,7 +172,7 @@ float4 ao(O i) : SV_Target {
             if (!DG(uv, ds)) break;
             float z = ViewZ(ds);
             float t = S.z - z;
-            if (t > 0.02 * len && t < 0.6 * len) { sh = 1 - float(k) / (m + 1); break; }
+            if (t > max(0.02 * len, slope) && t < 0.6 * len) { sh = 1 - float(k) / (m + 1); break; }
         }
     }
     vis *= 1 - sh * p[3].z * saturate(dot(N, L) * 4);

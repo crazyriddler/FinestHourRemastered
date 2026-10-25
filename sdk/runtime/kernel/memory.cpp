@@ -1,6 +1,7 @@
 #include "kernel/memory.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstring>
 #include <map>
@@ -32,6 +33,82 @@ static bool InPhysical(uint32_t va) {
     return (va >= kContiguousBase && va < kContiguousBase + kPhysicalSize) ||
            (va >= kWriteCombineBase && va < kWriteCombineBase + kPhysicalSize);
 }
+
+// The physical pages' writes watched (WatchWrites): a watched page read only in both views; the first write to it
+// faults (WatchFault), counts its generation up and makes it writable again. What the GPU keeps a copy of (vertices
+// and indices that stay as they are) is checked by the generations alone, not read again
+static std::atomic<uint32_t> g_page_gen[kPhysicalSize / kPage];
+static std::atomic<uint8_t> g_watched[kPhysicalSize / kPage];
+// (a page's watch and its protection changed together: a write's fault making it writable while it is watched again
+// left it watched and writable, its writes unseen)
+static std::mutex g_watch_lock;
+
+static bool PhysicalPage(uint32_t va, uint32_t& page) {
+    if (va >= kContiguousBase && va < kContiguousBase + kPhysicalSize) return page = (va - kContiguousBase) / kPage, true;
+    if (va >= kWriteCombineBase && va < kWriteCombineBase + kPhysicalSize) return page = (va - kWriteCombineBase) / kPage, true;
+    return false;
+}
+
+static void ProtectPage(uint32_t page, bool read_only) {
+#ifdef _WIN32
+    DWORD old = 0;
+    VirtualProtect(g_base + kContiguousBase + size_t(page) * kPage, kPage, read_only ? PAGE_READONLY : PAGE_READWRITE, &old);
+    VirtualProtect(g_base + kWriteCombineBase + size_t(page) * kPage, kPage, read_only ? PAGE_READONLY : PAGE_READWRITE, &old);
+#else
+    const int prot = read_only ? PROT_READ : PROT_READ | PROT_WRITE;
+    mprotect(g_base + kContiguousBase + size_t(page) * kPage, kPage, prot);
+    mprotect(g_base + kWriteCombineBase + size_t(page) * kPage, kPage, prot);
+#endif
+}
+
+bool WatchWrites(uint32_t va, uint32_t size) {
+    uint32_t first = 0, last = 0;
+    if (!size || !PhysicalPage(va, first) || !PhysicalPage(va + size - 1, last) || last < first) return false;
+    std::lock_guard<std::mutex> lock(g_watch_lock);
+    for (uint32_t p = first; p <= last; p++)
+        if (!g_watched[p].load(std::memory_order_relaxed)) ProtectPage(p, true), g_watched[p].store(1);
+    return true;
+}
+
+void Unwatch(uint32_t va, uint32_t size) {
+    uint32_t first = 0, last = 0;
+    if (!size || !PhysicalPage(va, first) || !PhysicalPage(va + size - 1, last) || last < first) return;
+    std::lock_guard<std::mutex> lock(g_watch_lock);
+    for (uint32_t p = first; p <= last; p++)
+        if (g_watched[p].load(std::memory_order_relaxed)) {
+            g_page_gen[p].fetch_add(1, std::memory_order_acq_rel);
+            ProtectPage(p, false);
+            g_watched[p].store(0);
+        }
+}
+
+uint64_t WriteGeneration(uint32_t va, uint32_t size) {
+    uint32_t first = 0, last = 0;
+    if (!size || !PhysicalPage(va, first) || !PhysicalPage(va + size - 1, last) || last < first) return ~0ull;
+    uint64_t sum = 0;
+    for (uint32_t p = first; p <= last; p++) sum += g_page_gen[p].load(std::memory_order_acquire);
+    return sum;
+}
+
+#ifdef _WIN32
+// a write to a watched page: writable again, its generation counted up (any thread, the game's or the host's)
+static LONG CALLBACK WatchFault(EXCEPTION_POINTERS* e) {
+    auto* r = e->ExceptionRecord;
+    if (r->ExceptionCode != EXCEPTION_ACCESS_VIOLATION || r->NumberParameters < 2 || !g_base || r->ExceptionInformation[0] != 1)
+        return EXCEPTION_CONTINUE_SEARCH;
+    const uint64_t off = uint64_t(r->ExceptionInformation[1]) - uint64_t(reinterpret_cast<uintptr_t>(g_base));
+    uint32_t page = 0;
+    if (off >= (1ull << 32) || !PhysicalPage(uint32_t(off), page)) return EXCEPTION_CONTINUE_SEARCH;
+    // (another thread may have made it writable already: the write is tried again either way)
+    std::lock_guard<std::mutex> lock(g_watch_lock);
+    if (g_watched[page].load(std::memory_order_relaxed)) {
+        g_page_gen[page].fetch_add(1, std::memory_order_acq_rel);
+        ProtectPage(page, false);
+        g_watched[page].store(0);
+    }
+    return EXCEPTION_CONTINUE_EXECUTION;
+}
+#endif
 
 bool Init() {
     const uint64_t size = 1ull << 32;
@@ -75,6 +152,7 @@ bool Init() {
     LOGI("memory: guest space at %p", static_cast<void*>(g_base));
 #ifdef _WIN32
     AddVectoredExceptionHandler(1, UserPageFault);
+    AddVectoredExceptionHandler(1, WatchFault);
 #endif
     return true;
 }

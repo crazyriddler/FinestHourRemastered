@@ -81,17 +81,23 @@ float3 ViewPos(float2 uv, float d) {
 )";
 
 // t0 depth: occlusion in r, the contact shadow folded in; t2 the guard band (d3d12.cpp DrawGuard): the depth past the
-// screen's edges, the view widened by 1 / GUARD (0 where there is none)
+// screen's edges, the view widened by 1 / GUARD (0 where there is none); t3 the depth at half size (depthhalf)
 inline constexpr char kSceneAo[] = R"(
 Texture2D<float> depth : register(t0);
 Texture2D<float> guard : register(t2);
+Texture2D<float> hdepth : register(t3);
 static const float GUARD = 0.6666667;
 float D(float2 uv) { return depth.SampleLevel(pnt, uv, 0); }
+// at half size: what a half size pass's pixel centre reads of the depth (the odd pixels', the lower right of each
+// two by two: a sample at the centre lands on that edge and takes it), exactly that at the centres, a pixel off at
+// most between them
+float DH(float2 uv) { return hdepth.SampleLevel(pnt, uv, 0); }
+float4 depthhalf(O i) : SV_Target { return depth.Load(int3(min(int2(i.pos.xy) * 2 + 1, int2(p[2].xy) - 1), 0)); }
 // the depth at a screen uv, on the screen or past it in the guard band: false where neither has it
 bool DG(float2 uv, out float d) {
     d = 1;
     if (all(uv >= 0) && all(uv <= 1)) {
-        d = D(uv);
+        d = DH(uv);
         return true;
     }
     float2 g = (uv - 0.5) * GUARD + 0.5;
@@ -168,12 +174,12 @@ float4 ao_guard(O i) : SV_Target {
 // arriving, a 1.
 Texture2D gscene : register(t1);
 float4 gi(O i) : SV_Target {
-    float d = D(i.uv);
+    float d = DH(i.uv);
     if (d >= 0.99999) return 0;
     float3 P = ViewPos(i.uv, d);
     float2 px = p[2].zw * 2;
-    float3 l = ViewPos(i.uv - float2(px.x, 0), D(i.uv - float2(px.x, 0))), r = ViewPos(i.uv + float2(px.x, 0), D(i.uv + float2(px.x, 0)));
-    float3 u = ViewPos(i.uv - float2(0, px.y), D(i.uv - float2(0, px.y))), dn = ViewPos(i.uv + float2(0, px.y), D(i.uv + float2(0, px.y)));
+    float3 l = ViewPos(i.uv - float2(px.x, 0), DH(i.uv - float2(px.x, 0))), r = ViewPos(i.uv + float2(px.x, 0), DH(i.uv + float2(px.x, 0)));
+    float3 u = ViewPos(i.uv - float2(0, px.y), DH(i.uv - float2(0, px.y))), dn = ViewPos(i.uv + float2(0, px.y), DH(i.uv + float2(0, px.y)));
     float3 dx = abs(r.z - P.z) < abs(P.z - l.z) ? r - P : P - l;
     float3 dy = abs(dn.z - P.z) < abs(P.z - u.z) ? dn - P : P - u;
     float3 N = normalize(cross(dy, dx));
@@ -189,7 +195,7 @@ float4 gi(O i) : SV_Target {
         float rr = sqrt((k + 0.5) / n);
         float2 uv = i.uv + float2(cos(a), sin(a)) * rr * rs;
         if (any(uv < 0) || any(uv > 1)) continue;
-        float ds = D(uv);
+        float ds = DH(uv);
         if (ds >= 0.99999) continue;  // the sky: the game's ambient has it
         float3 S = ViewPos(uv, ds);
         float3 v = S - P;
@@ -544,6 +550,15 @@ float2 skytiles(O i) : SV_Target {
     }
     return float2(veil, water);
 }
+// the quarter size copy of the sky's taps (SkyFeather's disc): each texel a 4 x 4 block's pixel (2, 2), its colour and
+// its sky layer (SkyLayer, a whole number, kept exactly), -1 the world (t0 the scene's copy, t1 the depth)
+Texture2D sqscene : register(t0);
+Texture2D<float> sqdepth : register(t1);
+float4 skyquarter(O i) : SV_Target {
+    int2 at = min(int2(i.pos.xy) * 4 + 2, int2(q0.xy) - 1);
+    float d = sqdepth.Load(int3(at, 0));
+    return float4(sqscene.Load(int3(at, 0)).rgb, d >= 0.9999 ? Layer(d) : -1);
+}
 float2 skydilate(O i) : SV_Target {
     int2 at = int2(i.pos.xy);
     int rv = (int)q1.x, rw = (int)q1.y, r = max(rv, rw);
@@ -569,6 +584,7 @@ Texture2D scene : register(t0);
 Texture2D<float> depth : register(t1);
 Texture2D<float2> skytiles : register(t2);  // level 1: kSkyTilesHlsl's, where the smoke (r) and the far water (g) are near
 Texture2D skyavg : register(t3);             // kSkyAverageHlsl's: the sky's colour, steady (a 1 once known)
+Texture2D skyq : register(t4);               // level 1: skyquarter's (the disc's taps: colour, sky layer or -1 the world)
 // Level 1 (sky[0].w 2): the sky's pieces each at a depth of its own by the far plane (d3d12.cpp sky_phase_, a step
 // of 2^-21 apart), the oil smoke's shells veiled. About a pixel (a wide disc), the smoke's and the open sky's colours
 // apart. Where the shells meet each other their colours mix. Over the smoke's outline against the open sky a thick
@@ -614,17 +630,19 @@ float3 SkyFeather(O i, float3 c, float d0, out float veil) {
     float noise = frac(52.9829189 * frac(dot(i.pos.xy, float2(0.06711056, 0.00583715))) + frame * 0.618034);
     float3 accs = 0;
     float ns = 0, nk = 0, shells = 0, ws = 0;
+    // (each tap from the quarter size copy, skyquarter: a texel a 4 x 4 block, its colour and its sky layer, one
+    // read of a small texture where two of the whole screen's missed the cache)
     [loop] for (int k = 0; k < 64; k++) {
         float a = (k + noise) * 2.399963;
         float2 q = i.pos.xy + float2(cos(a), sin(a)) * sqrt((k + 0.5) / 64) * R;
         if (any(q < 0) || any(q >= p[2].xy)) continue;
-        float d = depth.Load(int3(q, 0));
-        if (d < 0.9999) continue;  // the world before the sky
-        [branch] if (Veiled(d)) {
-            accs += scene.Load(int3(q, 0)).rgb, ns += 1;
+        float4 t = skyq.Load(int3(int2(q) >> 2, 0));
+        if (t.a < 0) continue;  // the world before the sky
+        [branch] if (t.a >= 15.5 && t.a < 19.5) {  // (Veiled: the oil smoke's layers)
+            accs += t.rgb, ns += 1;
             // the smoke to a pixel's left counts more: its billows reach further out on the column's right side
             ws += 1 + 2 * saturate((i.pos.x - q.x) / R);
-            shells += v0 && SkyLayer(d) != l0 ? 1 : 0;
+            shells += v0 && t.a != l0 ? 1 : 0;
         } else {
             nk += 1;
         }
@@ -1251,6 +1269,11 @@ float LightShadow(float3 P, float3 C, float2 uv0, float src) {
 // The glowing sprites' lights (d3d12.cpp DynLightConstants: view space position and radius, colour): on the world
 // where its depth was kept (t1, from before the weapon in hand cleared it), on the weapon where it is drawn (t6, the
 // depth now). The surface's facing from its depth; what it reflects guessed from how the game lit it.
+// the lights each of 32 x 18 tiles of the screen may see (d3d12.cpp SceneFinal: a bit a light, those whose sphere's
+// box on the screen covers the tile): outside its sphere's outline a light lights nothing and its halo is not
+// crossed, the rest are left out unread
+cbuffer LightTiles : register(b2) { uint4 ltile[144]; };
+void GlowLight(int k, O i, float3 P, float3 N, float3 dir, float len, float now, bool sky, inout float3 sum, inout float3 air);
 float3 Glow(O i, float3 c) {
     float now = shadowm.Load(int3(i.pos.xy, 0)).r;
     float d = now < 1 ? now : occ.Load(int3(i.pos.xy, 0));
@@ -1261,7 +1284,27 @@ float3 Glow(O i, float3 c) {
     float len = length(P);
     float3 dir = P / max(len, 1e-3);
     float3 sum = 0, air = 0;
-    for (int k = 0; k < (int)lcount.x; k++) {
+    const uint2 tc = min(uint2(i.pos.xy * float2(32, 18) / p[2].xy), uint2(31, 17));
+    const uint tn = tc.y * 32 + tc.x;
+    for (uint mask = ltile[tn >> 2][tn & 3]; mask != 0; mask &= mask - 1) GlowLight((int)firstbitlow(mask), i, P, N, dir, len, now, sky, sum, air);
+#ifdef TILE_CHECK
+    // (tests, XBE_LIGHTS_TILE_CHECK: every light's light and halo as well; magenta where the tiles' left out any)
+    float3 sum_all = 0, air_all = 0;
+    for (int k = 0; k < (int)lcount.x; k++) GlowLight(k, i, P, N, dir, len, now, sky, sum_all, air_all);
+    if (any(abs(sum_all - sum) > 1e-5) || any(abs(air_all - air) > 1e-5)) return float3(4, 0, 4);
+#endif
+    // the weapon in hand, by the muzzle itself, takes less
+    if (now < 1) sum *= 0.35, air *= 0.5;
+    // many lights at once (an explosion's dozens of sprites) light less than their sum: a soft knee
+    sum /= 1 + 0.45 * max(max(sum.r, sum.g), sum.b);
+    air /= 1 + 1.5 * max(max(air.r, air.g), air.b);
+    air *= lcount.w;  // the halos switched off
+    float3 albedo = saturate(c / 0.35) * 0.8 + 0.03;
+    return c + albedo * sum + air;
+}
+// one light's light on the surface (sum) and halo in the air before it (air)
+void GlowLight(int k, O i, float3 P, float3 N, float3 dir, float len, float now, bool sky, inout float3 sum, inout float3 air) {
+    {
         float3 C = lpos[k].xyz;
         float r = lpos[k].w;
         // the air lit around it, between the eye and the surface: the light's inverse square along the ray, in
@@ -1275,7 +1318,7 @@ float3 Glow(O i, float3 c) {
                                           saturate((length(C) - 100) / 300));
         float3 L = C - P;
         float d2 = dot(L, L);
-        if (sky || d2 >= r * r) continue;
+        if (sky || d2 >= r * r) return;
         // a soft fall: the window to 0 at the radius, times an inverse square of a quarter of it
         float f = 1 - d2 / (r * r), q = d2 / (r * r);
         float ndl = saturate(dot(N, L * rsqrt(max(d2, 1e-4)))) * 0.8 + 0.2;
@@ -1288,17 +1331,16 @@ float3 Glow(O i, float3 c) {
         float fall = casts ? f * f / (1 + 2 * q) * 1.6 : f * f / (1 + 6 * q);
         sum += lcol[k].rgb * (fall * ndl * lit);
     }
-    // the weapon in hand, by the muzzle itself, takes less
-    if (now < 1) sum *= 0.35, air *= 0.5;
-    // many lights at once (an explosion's dozens of sprites) light less than their sum: a soft knee
-    sum /= 1 + 0.45 * max(max(sum.r, sum.g), sum.b);
-    air /= 1 + 1.5 * max(max(air.r, air.g), air.b);
-    air *= lcount.w;  // the halos switched off
-    float3 albedo = saturate(c / 0.35) * 0.8 + 0.03;
-    return c + albedo * sum + air;
 }
 // the motes (kSceneMotesHlsl, drawn before this pass into t7 when heatz[6].y is on)
 Texture2D motesmap : register(t7);
+// the lens's dirt, its pattern for the screen's size (lensdirt, made once: d3d12.cpp LensDirt)
+Texture2D<float> lensdirtmap : register(t9);
+float4 lensdirt(O i) : SV_Target {
+    float aspect = p[2].x / p[2].y;
+    float2 q = i.uv * float2(aspect, 1) * 3;
+    return smoothstep(0.45, 0.8, Fbm(q, 3)) * 0.7 + smoothstep(0.75, 0.9, Noise(q * 7)) * 0.5;
+}
 // d3d12.cpp SceneFinal: t1 the world's depth, t2 the bloom, t3 the sun's shafts (b1), t4 the blurred scene (b2),
 // t6 the depth now; p[4] pain, time, flash, aiming's blur; lcount: lights, heat sources, shafts
 float4 composite(O i) : SV_Target {
@@ -1421,8 +1463,7 @@ float4 composite(O i) : SV_Target {
     if (heatz[0].y > 0) {
         float aspect = p[2].x / p[2].y;
         float3 glow = b0.SampleLevel(lin, uv, 5).rgb;
-        float2 q = i.uv * float2(aspect, 1) * 3;
-        float dirt = smoothstep(0.45, 0.8, Fbm(q, 3)) * 0.7 + smoothstep(0.75, 0.9, Noise(q * 7)) * 0.5;
+        float dirt = lensdirtmap.Load(int3(i.pos.xy, 0));  // (LensDirt's, made once for the screen's size)
         c += glow * dirt * 0.25 * p[3].w;
         float strength = heatz[1].w;
         float2 sun = heatz[1].yz;

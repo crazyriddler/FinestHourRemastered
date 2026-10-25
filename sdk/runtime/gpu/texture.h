@@ -51,6 +51,8 @@ bool CopySurfaceMemory(const Surface& src, const Surface& dst, uint32_t count, u
 // the title locked a resource, the next bind re-uploads it
 void MarkDirty(uint32_t resource);
 uint64_t DirtyEpoch(uint32_t data_va);
+// the locks so far (MarkDirty's calls): unchanged, no epoch has moved
+uint64_t DirtyCount();
 
 // vertex declarations and pixel shader constant routing, both follow the XDK's definitions
 void ParseDeclaration(VertexShader& vs);

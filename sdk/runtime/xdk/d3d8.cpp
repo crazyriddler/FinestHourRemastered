@@ -167,9 +167,12 @@ void SyncDeferred() {
     // commands the title pushed itself since (vertex shader constants, immediate primitives) come before the draw
     Walk(Dev(kDevPush));
     // deferred states live in the title's memory, the inline SetRenderState and SetTextureStageState write them
-    for (uint32_t i = gpu::kRsDeferredFirst; i < gpu::kRsComplexFirst; i++) g_state.rs[i] = R32(kRenderState + i * 4);
-    for (int s = 0; s < 4; s++)
-        for (uint32_t i = 0; i < gpu::kTssBumpEnvMat00; i++) g_state.tss[s][i] = R32(kTextureState + (s * kStageStates + i) * 4);
+    // (each one that changed marked for the render thread: the rest no longer compared a draw)
+    for (uint32_t i = gpu::kRsDeferredFirst; i < gpu::kRsComplexFirst; i++)
+        if (uint32_t v = R32(kRenderState + i * 4); g_state.rs[i] != v) g_state.rs[i] = v, gpu::MarkRs(i);
+    for (uint32_t s = 0; s < 4; s++)
+        for (uint32_t i = 0; i < gpu::kTssBumpEnvMat00; i++)
+            if (uint32_t v = R32(kTextureState + (s * kStageStates + i) * 4); g_state.tss[s][i] != v) g_state.tss[s][i] = v, gpu::MarkTss(s, i);
 }
 
 float ZScale(const gpu::Surface& zs) {
@@ -203,6 +206,7 @@ void UpdateViewportConstants() {
 
 void SetComplex(uint32_t rs, uint32_t v) {
     g_state.rs[rs] = v;
+    gpu::MarkRs(rs);
     W32(kRenderState + rs * 4, v);
 }
 
@@ -644,25 +648,29 @@ COMPLEX_STATE(DoNotCullUncompressed, gpu::kRsDoNotCullUncompressed)
 
 HLE_STDCALL(D3DDevice_SetTextureState_TexCoordIndex, 2) {
     g_state.tss[a[0] & 3][gpu::kTssTexCoordIndex] = a[1];
+    gpu::MarkTss(a[0] & 3, gpu::kTssTexCoordIndex);
     W32(kTextureState + ((a[0] & 3) * kStageStates + gpu::kTssTexCoordIndex) * 4, a[1]);
     return 0;
 }
 HLE_STDCALL(D3DDevice_SetTextureState_BumpEnv, 3) {
-    if (a[1] >= gpu::kTssBumpEnvMat00 && a[1] <= gpu::kTssBumpEnvLOffset) g_state.tss[a[0] & 3][a[1]] = a[2];
+    if (a[1] >= gpu::kTssBumpEnvMat00 && a[1] <= gpu::kTssBumpEnvLOffset) g_state.tss[a[0] & 3][a[1]] = a[2], gpu::MarkTss(a[0] & 3, a[1]);
     return 0;
 }
 HLE_STDCALL(D3DDevice_SetTextureState_BorderColor, 2) {
     g_state.tss[a[0] & 3][gpu::kTssBorderColor] = a[1];
+    gpu::MarkTss(a[0] & 3, gpu::kTssBorderColor);
     return 0;
 }
 HLE_STDCALL(D3DDevice_SetTextureState_ColorKeyColor, 2) {
     g_state.tss[a[0] & 3][gpu::kTssColorKeyColor] = a[1];
+    gpu::MarkTss(a[0] & 3, gpu::kTssColorKeyColor);
     return 0;
 }
 HLE_STDCALL(D3DDevice_SetTextureStageStateNotInline, 3) {
     uint32_t stage = a[0] & 3, type = a[1], v = a[2];
     if (type < gpu::kTssCount) {
         g_state.tss[stage][type] = v;
+        gpu::MarkTss(stage, type);
         W32(kTextureState + (stage * kStageStates + type) * 4, v);
     }
     return 0;

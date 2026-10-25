@@ -181,6 +181,15 @@ public:
     HANDLE event = nullptr;
     ComPtr<ID3D12CommandAllocator> alloc[4];
     DxList list{*this};
+    // Fork / Join: the forked lists' allocators by frame slot; lists closed and queued to run before the main list,
+    // and closed lists that ran (free to record again)
+    static constexpr uint32_t kForks = 3;
+    ComPtr<ID3D12CommandAllocator> fork_alloc[4][kForks];
+    DxList forks[kForks] = {DxList(*this), DxList(*this), DxList(*this)};
+    List* fork_ptrs[kForks] = {};
+    uint32_t forked = 0;
+    std::vector<ComPtr<ID3D12GraphicsCommandList>> queued, spare;
+    uint32_t slot = 0;
     DxHeap heaps[4];  // by Heap
     ComPtr<ID3D12RootSignature> root[2];  // by Layout
 
@@ -189,7 +198,9 @@ public:
     }
     const char* Name() const override { return "D3D12"; }
 
+    bool debug_ = false;
     bool Init(bool debug) {
+        debug_ = debug;
         if (debug) {
             ComPtr<ID3D12Debug> dbg;
             if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&dbg)))) dbg->EnableDebugLayer();
@@ -215,6 +226,8 @@ public:
         if (SUCCEEDED(factory.As(&f5))) f5->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &tear, sizeof(tear));
         tearing = tear;
         for (auto& a : alloc) dev->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&a));
+        for (auto& fs : fork_alloc)
+            for (auto& a : fs) dev->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&a));
         dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
         event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
         dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, alloc[0].Get(), nullptr, IID_PPV_ARGS(&list.cl));
@@ -479,14 +492,73 @@ public:
     List* MainList() override { return &list; }
     void Submit(uint64_t value) override {
         list.cl->Close();
-        ID3D12CommandList* lists[] = {list.cl.Get()};
-        queue->ExecuteCommandLists(1, lists);
+        std::vector<ID3D12CommandList*> lists;
+        for (auto& q : queued) lists.push_back(q.Get());
+        lists.push_back(list.cl.Get());
+        queue->ExecuteCommandLists(UINT(lists.size()), lists.data());
         queue->Signal(fence.Get(), value);
+        if (debug_) Messages();
+        // (a list that was run may record again at once: its commands are its allocator's, reset with the slot)
+        for (auto& q : queued) spare.push_back(std::move(q));
+        queued.clear();
     }
-    void Reset(uint32_t slot) override {
+    void Reset(uint32_t s) override {
+        slot = s;
         alloc[slot]->Reset();
+        for (auto& a : fork_alloc[slot]) a->Reset();
         list.cl->Reset(alloc[slot].Get(), nullptr);
         list.Open();
+    }
+    // with the debug layer (XBE_D3D12_DEBUG): its errors and warnings so far into the log (the first 200)
+    void Messages() {
+        ComPtr<ID3D12InfoQueue> q;
+        if (FAILED(dev.As(&q))) return;
+        static int told = 0;
+        for (UINT64 i = 0, n = q->GetNumStoredMessages(); i < n && told < 200; i++) {
+            SIZE_T len = 0;
+            q->GetMessage(i, nullptr, &len);
+            std::vector<uint8_t> m(len);
+            auto* msg = reinterpret_cast<D3D12_MESSAGE*>(m.data());
+            if (SUCCEEDED(q->GetMessage(i, msg, &len)) && msg->Severity <= D3D12_MESSAGE_SEVERITY_WARNING &&
+                msg->ID != D3D12_MESSAGE_ID_CREATERESOURCE_STATE_IGNORED && msg->ID != D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE &&
+                msg->ID != D3D12_MESSAGE_ID_CLEARDEPTHSTENCILVIEW_MISMATCHINGCLEARVALUE)
+                LOGE("d3d12 debug: %s", msg->pDescription), told++;
+        }
+        q->ClearStoredMessages();
+    }
+    // a closed list to record on a, opened
+    ComPtr<ID3D12GraphicsCommandList> NewList(ID3D12CommandAllocator* a) {
+        ComPtr<ID3D12GraphicsCommandList> l;
+        if (!spare.empty()) {
+            l = std::move(spare.back());
+            spare.pop_back();
+            l->Reset(a, nullptr);
+        } else {
+            dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, a, nullptr, IID_PPV_ARGS(&l));
+        }
+        return l;
+    }
+    uint32_t MaxForks() const override { return kForks; }
+    List* const* Fork(uint32_t n) override {
+        n = std::min(n, kForks);
+        list.cl->Close();
+        queued.push_back(std::move(list.cl));
+        list.cl = NewList(alloc[slot].Get());
+        list.Open();
+        for (uint32_t i = 0; i < n; i++) {
+            forks[i].cl = NewList(fork_alloc[slot][i].Get());
+            forks[i].Open();
+            fork_ptrs[i] = &forks[i];
+        }
+        forked = n;
+        return fork_ptrs;
+    }
+    void Join() override {
+        for (uint32_t i = 0; i < forked; i++) {
+            forks[i].cl->Close();
+            queued.push_back(std::move(forks[i].cl));
+        }
+        forked = 0;
     }
     uint64_t Completed() override { return fence->GetCompletedValue(); }
     void Wait(uint64_t value) override {

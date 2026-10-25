@@ -1,7 +1,9 @@
 #include "gpu/vertex.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
+#include <unordered_map>
 #include <unordered_set>
 
 #include <dxgiformat.h>
@@ -10,6 +12,7 @@
 #include "core/log.h"
 #include "gpu/shaders.h"
 #include "kernel/kernel.h"
+#include "kernel/memory.h"
 
 namespace gpu {
 
@@ -327,8 +330,20 @@ bool RawReadable(const State& s, const Inputs& inputs) {
 void GatherVertices(const State& s, const DrawRange& d, const uint8_t* data, uint32_t stride,
                     std::vector<uint8_t>& g) {
     g.resize(size_t(d.count) * stride);
-    for (uint32_t i = 0; i < d.count; i++) {
-        std::memcpy(&g[size_t(i) * stride], data + size_t(DrawVertex(s, d, i)) * stride, stride);
+    // (the common strides a copy of a size known here)
+    auto gather = [&](auto size) {
+        for (uint32_t i = 0; i < d.count; i++) std::memcpy(&g[size_t(i) * stride], data + size_t(DrawVertex(s, d, i)) * stride, size);
+    };
+    switch (stride) {
+        case 12: gather(std::integral_constant<size_t, 12>{}); break;
+        case 16: gather(std::integral_constant<size_t, 16>{}); break;
+        case 20: gather(std::integral_constant<size_t, 20>{}); break;
+        case 24: gather(std::integral_constant<size_t, 24>{}); break;
+        case 28: gather(std::integral_constant<size_t, 28>{}); break;
+        case 32: gather(std::integral_constant<size_t, 32>{}); break;
+        case 36: gather(std::integral_constant<size_t, 36>{}); break;
+        case 40: gather(std::integral_constant<size_t, 40>{}); break;
+        default: gather(size_t(stride)); break;
     }
 }
 
@@ -410,17 +425,76 @@ int RepackStream(const State& s, const Inputs& inputs, int stream, const DrawRan
         parts[n++] = {in.offset, packed, std::min(TypeBytes(in.type), host)};
         packed += host;
     }
-    const uint8_t* data = static_cast<const uint8_t*>(HostPtr(mem::VirtualFromPhysical(R32(st.vb + kResData))));
+    const uint32_t data_va = mem::VirtualFromPhysical(R32(st.vb + kResData));
+    const uint8_t* data = static_cast<const uint8_t*>(HostPtr(data_va));
     const uint32_t count = dense ? d.span : d.count;
     int slot = int(out.buffer_count);
-    auto& g = out.gathered[out.buffer_count];
+    // A dense range of vertices the game keeps as they are: its repacked copy kept by its place and parts while its
+    // pages are unwritten (mem::WatchWrites), not made again each draw (nor uploaded again: VertexBuffer::keep).
+    // Written soon after three times in a row (within a second), made each draw as before
+    struct Kept {
+        uint64_t gen = 0;
+        std::vector<uint8_t> bytes;
+        std::chrono::steady_clock::time_point made{};
+        uint32_t changes = 0;
+        bool dynamic = false;
+    };
+    static thread_local std::unordered_map<uint64_t, Kept> kept;
+    static thread_local size_t kept_bytes = 0;
+    static const bool no_keep = std::getenv("XBE_NO_STATIC_COPIES") != nullptr;  // tests: as before
+    Kept* keep = nullptr;
+    uint64_t keep_key = 0;
+    if (dense && !no_keep && stride && count) {
+        const uint32_t src = data_va + d.first_vertex * stride, src_bytes = count * stride;
+        const uint64_t gen = mem::WriteGeneration(src, src_bytes);
+        if (gen != ~0ull) {
+            const uint32_t sig[] = {src, src_bytes, stride, packed, uint32_t(n)};
+            keep_key = Hash(parts, sizeof(Part) * size_t(n), Hash(sig, sizeof(sig))) | 1;
+            Kept& k = kept[keep_key];
+            if (!k.dynamic && !k.bytes.empty() && k.gen == gen) {
+                out.buffers[out.buffer_count++] = {k.bytes.data(), count * packed, packed, keep_key, gen};
+                return slot;
+            }
+            if (!k.dynamic) {
+                const auto now = std::chrono::steady_clock::now();
+                if (!k.bytes.empty()) k.changes = now - k.made < std::chrono::seconds(1) ? k.changes + 1 : 1;
+                if (k.changes >= 3) {
+                    kept_bytes -= k.bytes.size();
+                    k.dynamic = true, k.bytes = {};
+                } else {
+                    if (kept_bytes > (256u << 20)) kept.clear(), kept_bytes = 0;
+                    Kept& fresh = kept[keep_key];
+                    mem::WatchWrites(src, src_bytes);
+                    fresh.gen = mem::WriteGeneration(src, src_bytes);
+                    fresh.made = now;
+                    kept_bytes -= fresh.bytes.size();
+                    fresh.bytes.resize(size_t(count) * packed);
+                    kept_bytes += fresh.bytes.size();
+                    keep = &fresh;
+                }
+            }
+        }
+    }
+    auto& g = keep ? keep->bytes : out.gathered[out.buffer_count];
     g.resize(size_t(count) * packed);
+    // (the parts' sizes the elements have, each a copy of a size known here: a call to memcpy a part a vertex was most
+    // of a repacked draw's time)
     for (uint32_t v = 0; v < count; v++) {
         const uint8_t* src = data + size_t(dense ? d.first_vertex + v : DrawVertex(s, d, v)) * stride;
         uint8_t* dst = &g[size_t(v) * packed];
-        for (int p = 0; p < n; p++) std::memcpy(dst + parts[p].to, src + parts[p].from, parts[p].bytes);
+        for (int p = 0; p < n; p++) {
+            uint8_t* to = dst + parts[p].to;
+            const uint8_t* from = src + parts[p].from;
+            switch (parts[p].bytes) {
+                case 4: std::memcpy(to, from, 4); break;
+                case 8: std::memcpy(to, from, 8); break;
+                case 12: std::memcpy(to, from, 12); break;
+                case 16: std::memcpy(to, from, 16); break;
+                default: std::memcpy(to, from, parts[p].bytes); break;
+            }
+        }
     }
-    out.buffers[out.buffer_count++] = {g.data(), count * packed, packed};
+    out.buffers[out.buffer_count++] = {g.data(), count * packed, packed, keep ? keep_key : 0, keep ? keep->gen : 0};
     return slot;
 }
 

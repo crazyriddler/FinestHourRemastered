@@ -121,7 +121,6 @@ bool* Effect(const std::string& name) {
         {"height_blend", &app::Settings::height_blend},
         {"smaa", &app::Settings::smaa},
         {"fxaa", &app::Settings::fxaa},
-        {"motion_blur", &app::Settings::motion_blur},
     };
     for (const auto& [n, member] : kEffects)
         if (name == n) return &(s.*member);

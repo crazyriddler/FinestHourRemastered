@@ -70,6 +70,10 @@ struct Range {
 size_t At(const State& s, const void* p) { return size_t(static_cast<const uint8_t*>(p) - reinterpret_cast<const uint8_t*>(&s)); }
 // (SendState's dirty pieces: simple's 128 at the start of the first range, vsc's 48 at the start of the third)
 static_assert(offsetof(State, simple) == 0 && sizeof(State::simple) == 128 * 64 && sizeof(State::vsc) == 48 * 64);
+// rs and tss right after simple, to the first range's end (g_rs_dirty's pieces)
+constexpr uint32_t kRsPieces = uint32_t((sizeof(State::rs) + sizeof(State::tss) + 63) / 64);
+static_assert(offsetof(State, rs) == 128 * 64 && offsetof(State, tss) == offsetof(State, rs) + sizeof(State::rs) &&
+              offsetof(State, textures) == offsetof(State, tss) + sizeof(State::tss) && kRsPieces <= 32);
 std::vector<Range> StateRanges() {
     static const State s;
     return {
@@ -104,8 +108,16 @@ public:
         // the 64 byte pieces compared on every send: all but simple's and vsc's (those by their dirty bits)
         for (size_t ri = 0; ri < ranges_.size(); ri++)
             for (size_t off = ranges_[ri].off, end = off + ranges_[ri].len, k = 0; off < end; off += 64, k++)
-                if (!(ri == 0 && k < 128) && !(ri == 2 && k < 48)) always_.push_back({off, std::min<size_t>(64, end - off)});
+                if (!(ri == 0 && k < 128 + kRsPieces) && !(ri == 2 && k < 48)) always_.push_back({off, std::min<size_t>(64, end - off)});
+        // and those pieces' runs (back to back): a run compared whole first, its pieces only when it differs
+        for (size_t i = 0; i < always_.size();) {
+            size_t j = i + 1;
+            while (j < always_.size() && always_[j].off == always_[j - 1].off + always_[j - 1].len) j++;
+            runs_.push_back({always_[i].off, always_[j - 1].off + always_[j - 1].len - always_[i].off, i, j});
+            i = j;
+        }
         vsc_off_ = ranges_[2].off;
+        g_vsc_changes = 1;  // (counted from here: the render thread starts below)
         ring_ = mem::AllocSystem(kHeaderRing, 64);
         cur_ = NewBatch();
         std::thread([this] { Run(); }).detach();
@@ -322,18 +334,38 @@ private:
         static const bool all = std::getenv("XBE_TEST_ALL_DIRTY") != nullptr;  // tests: every piece compared
         const std::array<uint64_t, 2> simple = all ? std::array<uint64_t, 2>{~0ull, ~0ull} : g_simple_dirty;
         const uint64_t vsc = all ? ~0ull : g_vsc_dirty;
-        g_simple_dirty = {0, 0}, g_vsc_dirty = 0;
+        const uint32_t rsd = all ? ~0u : g_rs_dirty;
+        g_simple_dirty = {0, 0}, g_vsc_dirty = 0, g_rs_dirty = 0;
         uint8_t* sent = reinterpret_cast<uint8_t*>(&sent_);
         for (int w = 0; w < 2; w++)
             for (uint64_t m = simple[size_t(w)]; m; m &= m - 1) {
                 const size_t off = (size_t(w) * 64 + size_t(std::countr_zero(m))) * 64;
                 Delta(sent + off, now + off, 64);
             }
+        // (rs and tss: the pieces after simple's, up to the range's end, their last one short)
+        for (uint32_t m = rsd & ((1u << kRsPieces) - 1); m; m &= m - 1) {
+            const size_t off = (128 + size_t(std::countr_zero(m))) * 64;
+            Delta(sent + off, now + off, std::min<size_t>(64, ranges_[0].len - off));
+        }
+        // tests (XBE_STATE_CHECK): an rs or tss piece that differs though not marked
+        static const bool check = std::getenv("XBE_STATE_CHECK") != nullptr;
+        if (check)
+            for (uint32_t k = 0; k < kRsPieces; k++) {
+                const size_t off = (128 + size_t(k)) * 64;
+                if (!((rsd >> k) & 1) && !Same(sent + off, now + off, std::min<size_t>(64, ranges_[0].len - off))) {
+                    static std::atomic<int> told{0};
+                    if (told++ < 16) LOGR("render thread: state piece %u changed unmarked", k);
+                    Delta(sent + off, now + off, std::min<size_t>(64, ranges_[0].len - off));
+                }
+            }
         for (uint64_t m = vsc; m; m &= m - 1) {
             const size_t off = vsc_off_ + size_t(std::countr_zero(m)) * 64;
             if (std::countr_zero(m) < 48) Delta(sent + off, now + off, 64);
         }
-        for (const Range& r : always_) Delta(sent + r.off, now + r.off, r.len);
+        for (const PieceRun& run : runs_) {
+            if (Same(sent + run.off, now + run.off, run.len)) continue;
+            for (size_t i = run.first; i < run.last; i++) Delta(sent + always_[i].off, now + always_[i].off, always_[i].len);
+        }
         std::array<uint32_t, 4> textures;
         for (size_t i = 0; i < 4; i++) textures[i] = Header(s.textures[i]);
         Delta(&sent_.textures, &textures, sizeof(textures));
@@ -447,12 +479,15 @@ private:
         switch (c.op) {
             case Op::State: {
                 uint8_t* s = reinterpret_cast<uint8_t*>(&state_);
+                bool vsc = false;
                 for (const uint8_t* p = data; p < data + c.size;) {
                     uint32_t head[2];
                     std::memcpy(head, p, 8);
                     std::memcpy(s + head[0], p + 8, head[1]);
+                    vsc |= head[0] < vsc_off_ + sizeof(State::vsc) && head[0] + head[1] > vsc_off_;
                     p += 8 + head[1];
                 }
+                if (vsc) g_vsc_changes++;
                 if (c.vs >= 0) state_.vs = b.vs[size_t(c.vs)];
                 if (c.ps >= 0) state_.ps = b.ps[size_t(c.ps)];
                 break;
@@ -471,6 +506,10 @@ private:
     std::unique_ptr<Backend> inner_;
     std::vector<Range> ranges_;
     std::vector<Range> always_;  // SendState's pieces compared every time
+    struct PieceRun {
+        size_t off, len, first, last;  // always_[first, last) back to back
+    };
+    std::vector<PieceRun> runs_;
     size_t vsc_off_ = 0;
 
     // the title's thread

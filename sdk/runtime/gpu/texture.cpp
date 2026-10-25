@@ -2,6 +2,7 @@
 #include "gpu/keymap.h"
 
 #include <algorithm>
+#include <atomic>
 #include <bit>
 #include <cstring>
 #include <mutex>
@@ -258,6 +259,7 @@ float DepthTexel(uint32_t fmt, const uint8_t* p) {
 std::mutex g_dirty_lock;
 KeyMap<uint32_t, uint64_t> g_dirty;
 uint64_t g_epoch = 1;
+std::atomic<uint64_t> g_dirty_count{1};  // MarkDirty's calls (DirtyCount)
 
 }  // namespace
 
@@ -431,7 +433,10 @@ void MarkDirty(uint32_t res) {
     uint32_t data = mem::VirtualFromPhysical(kernel::R32(res + 4));
     std::lock_guard<std::mutex> lock(g_dirty_lock);
     g_dirty[data] = ++g_epoch;
+    g_dirty_count.fetch_add(1, std::memory_order_release);
 }
+
+uint64_t DirtyCount() { return g_dirty_count.load(std::memory_order_acquire); }
 
 uint64_t DirtyEpoch(uint32_t data) {
     std::lock_guard<std::mutex> lock(g_dirty_lock);

@@ -497,6 +497,11 @@ class VkList final : public List {
 public:
     VkDev& d;
     bool main;  // the main queue's (else the uploader's)
+    // a forked list's (VkDev::Fork, recorded on another thread): it draws alone, its targets' and textures' states
+    // left as the main list keeps them (no transitions: the resources' uses are the main list's), a barrier at its
+    // start for the targets' writes before it
+    bool worker = false;
+    bool worker_synced_ = false;
     VkCommandBuffer cb = VK_NULL_HANDLE;
     explicit VkList(VkDev& dev, bool is_main) : d(dev), main(is_main) {}
     void Begin(VkCommandBuffer c);
@@ -701,6 +706,49 @@ public:
     std::vector<std::pair<VkQueryPool, uint32_t>> queries_used[kSlots];
     uint32_t slot = 0;
     VkList list{*this, true};
+    // Fork / Join: the forked lists (each its own pools by slot, command buffers kept for the slot's next frames),
+    // the main list's command buffers past the slot's first, and the command buffers to run before the main list's
+    static constexpr uint32_t kForks = 3;
+    VkCommandPool fork_pools[kSlots][kForks] = {};
+    std::vector<VkCommandBuffer> fork_cbs[kSlots][kForks], main_cbs[kSlots];
+    uint32_t fork_used[kForks] = {}, main_used = 0;
+    std::unique_ptr<VkList> forks[kForks];
+    List* fork_ptrs[kForks] = {};
+    uint32_t forked = 0;
+    std::vector<VkCommandBuffer> queued;
+    VkCommandBuffer TakeCb(VkCommandPool pool, std::vector<VkCommandBuffer>& kept, uint32_t& used) {
+        if (used < kept.size()) return kept[used++];
+        VkCommandBufferAllocateInfo ai{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+        ai.commandPool = pool;
+        ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        ai.commandBufferCount = 1;
+        VkCommandBuffer c = VK_NULL_HANDLE;
+        vkAllocateCommandBuffers(dev, &ai, &c);
+        kept.push_back(c);
+        used++;
+        return c;
+    }
+    uint32_t MaxForks() const override { return kForks; }
+    List* const* Fork(uint32_t n) override {
+        n = std::min(n, kForks);
+        list.End();
+        queued.push_back(list.cb);
+        list.Begin(TakeCb(pools[slot], main_cbs[slot], main_used));
+        for (uint32_t i = 0; i < n; i++) {
+            forks[i]->Begin(TakeCb(fork_pools[slot][i], fork_cbs[slot][i], fork_used[i]));
+            fork_ptrs[i] = forks[i].get();
+        }
+        forked = n;
+        return fork_ptrs;
+    }
+    void Join() override {
+        for (uint32_t i = 0; i < forked; i++) {
+            forks[i]->End();
+            queued.push_back(forks[i]->cb);
+        }
+        forked = 0;
+    }
+    std::mutex mixed_lock;
     VkUploader* uploader_wait = nullptr;
     uint64_t uploader_value = 0;
     // layouts
@@ -1028,7 +1076,7 @@ void VkList::Split(uint32_t count) {
 }
 
 void VkList::Checkpoint(const char* what) {
-    if (!d.checkpoints) return;
+    if (!d.checkpoints || worker) return;
     uint32_t i = d.mark_next++ & 0xFFFF;
     if (!main) what = "uploader copy";
     d.marks[i] = {what, pipe_, Ref<Pipeline>(pipe_)};
@@ -1046,6 +1094,7 @@ void VkList::Begin(VkCommandBuffer c) {
     vb_dirty_ = 0xFFFF;
     ib_dirty_ = true;
     rendering_ = false;
+    worker_synced_ = false;
     image_barriers_.clear();
     mem_barrier_ = {VK_STRUCTURE_TYPE_MEMORY_BARRIER_2};
 }
@@ -1269,7 +1318,7 @@ bool VkList::Attachments(VkRenderingAttachmentInfo* colors, uint32_t& nc, VkRend
         a.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         a.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
         a.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        if (s.res->pending && s.res->pending_view == s.view) a.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, a.clearValue = s.res->pending_value;
+        if (!worker && s.res->pending && s.res->pending_view == s.view) a.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, a.clearValue = s.res->pending_value;
         area.width = std::min(area.width, s.extent.width), area.height = std::min(area.height, s.extent.height);
     }
     has_depth = false;
@@ -1282,7 +1331,7 @@ bool VkList::Attachments(VkRenderingAttachmentInfo* colors, uint32_t& nc, VkRend
             depth.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
             depth.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
             stencil_ = depth;
-            if (s.res->pending && s.res->pending_view == s.view) {
+            if (!worker && s.res->pending && s.res->pending_view == s.view) {
                 depth.clearValue = stencil_.clearValue = s.res->pending_value;
                 if (s.res->pending_aspect & VK_IMAGE_ASPECT_DEPTH_BIT) depth.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
                 if (s.res->pending_aspect & VK_IMAGE_ASPECT_STENCIL_BIT) stencil_.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -1296,15 +1345,29 @@ bool VkList::Attachments(VkRenderingAttachmentInfo* colors, uint32_t& nc, VkRend
 
 void VkList::BeginRendering() {
     // the targets' layouts first (a target made in the render target state, its writes from an earlier instance)
-    for (uint32_t i = 0; i < rtv_n_; i++) {
-        const Slot& s = d.heaps[int(Heap::Rtv)][rtv_[i].index];
-        if (d.Alive(s)) Transition(s.res, kRender, s.res->pending && s.res->pending_view == s.view);
+    if (!worker) {
+        for (uint32_t i = 0; i < rtv_n_; i++) {
+            const Slot& s = d.heaps[int(Heap::Rtv)][rtv_[i].index];
+            if (d.Alive(s)) Transition(s.res, kRender, s.res->pending && s.res->pending_view == s.view);
+        }
+        if (has_dsv_) {
+            const Slot& s = d.heaps[int(Heap::Dsv)][dsv_.index];
+            if (d.Alive(s)) Transition(s.res, kDepthWrite, s.res->pending && s.res->pending_view == s.view);
+        }
+        FlushBarriers();
+    } else if (!worker_synced_) {
+        // a forked list's: the targets as the main list left them (in their layouts), their writes before done
+        VkMemoryBarrier2 mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER_2};
+        mb.srcStageMask = mb.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT |
+                                            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+        mb.srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+        mb.dstAccessMask = mb.srcAccessMask | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
+        VkDependencyInfo di{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+        di.memoryBarrierCount = 1;
+        di.pMemoryBarriers = &mb;
+        vkCmdPipelineBarrier2(cb, &di);
+        worker_synced_ = true;
     }
-    if (has_dsv_) {
-        const Slot& s = d.heaps[int(Heap::Dsv)][dsv_.index];
-        if (d.Alive(s)) Transition(s.res, kDepthWrite, s.res->pending && s.res->pending_view == s.view);
-    }
-    FlushBarriers();
     VkRenderingAttachmentInfo colors[8], depth{};
     uint32_t nc = 0;
     bool has_depth = false;
@@ -1328,6 +1391,7 @@ void VkList::BeginRendering() {
     if (dump) LOGR("vulkan: frame: pass begins, %u colour (%d %ux%u x%u), depth %d", nc, nc ? int(colors[0].imageView != VK_NULL_HANDLE) : 0,
                    area.width, area.height, nc ? d.heaps[int(Heap::Rtv)][rtv_[0].index].res->samples : 0, int(has_depth));
     pass_draws_ = 0;
+    if (worker) return;
     // (the deferred clears the load did)
     auto done = [&](VkRes* r, VkImageView v) {
         if (!r || !r->pending || r->pending_view != v) return;
@@ -1440,7 +1504,10 @@ bool VkList::Prepare() {
                 const Slot& a = i < rtv_n_ ? d.heaps[int(Heap::Rtv)][rtv_[i].index] : d.heaps[int(Heap::Dsv)][dsv_.index];
                 if (a.res == r) LOG_FIRST(8, "vulkan: a draw reads t%u from its own target (format %d)", t, int(r->format));
             }
-        if (!Readable(r->use.layout)) Transition(r, kSampled);
+        if (!Readable(r->use.layout)) {
+            if (worker) LOG_FIRST(4, "vulkan: a forked list's draw reads a texture not readable (layout %d)", int(r->use.layout));
+            else Transition(r, kSampled);
+        }
         if (pushed_layout_[t] != r->use.layout) push = true;
     }
     if (!rendering_) {
@@ -1968,7 +2035,9 @@ bool VkDev::Init(bool dbg) {
         ci.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         ci.commandBufferCount = 1;
         vkAllocateCommandBuffers(dev, &ci, &cbs[i]);
+        for (auto& fp : fork_pools[i]) vkCreateCommandPool(dev, &pi, nullptr, &fp);
     }
+    for (auto& f : forks) f = std::make_unique<VkList>(*this, false), f->worker = true;
     if (!CreateLayouts()) return false;
     list.Begin(cbs[0]);
     return CreateNulls();
@@ -2782,6 +2851,7 @@ bool VkDev::SupportsSamples(DXGI_FORMAT f, uint32_t n) {
 }
 
 VkDescriptorSet VkDev::MixedSet(VkRes* const bufs[kCbvs]) {
+    std::lock_guard l(mixed_lock);  // (forked lists' threads too)
     uint64_t key = 1469598103934665603ull;
     for (uint32_t i = 0; i < kCbvs; i++) key = (key ^ bufs[i]->serial) * 1099511628211ull;
     VkDescriptorSet& set = mixed[slot][key];
@@ -2823,13 +2893,16 @@ VkDescriptorSet VkDev::MixedSet(VkRes* const bufs[kCbvs]) {
 }
 
 VkDescriptorSet VkDev::UboSet(VkRes* r) {
-    if (r->ubo) return r->ubo;
+    // (forked lists' threads too: the set stored once written)
+    if (VkDescriptorSet have = std::atomic_ref(r->ubo).load(std::memory_order_acquire)) return have;
     std::lock_guard l(ubo_lock);
+    if (r->ubo) return r->ubo;
     VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
     ai.descriptorPool = ubo_pool;
     ai.descriptorSetCount = 1;
     ai.pSetLayouts = &set_layouts[1];
-    if (vkAllocateDescriptorSets(dev, &ai, &r->ubo) != VK_SUCCESS) {
+    VkDescriptorSet set = VK_NULL_HANDLE;
+    if (vkAllocateDescriptorSets(dev, &ai, &set) != VK_SUCCESS) {
         LOGE("vulkan: no constant buffer set");
         return VK_NULL_HANDLE;
     }
@@ -2837,14 +2910,15 @@ VkDescriptorSet VkDev::UboSet(VkRes* r) {
     VkWriteDescriptorSet ws[kCbvs];
     for (uint32_t i = 0; i < kCbvs; i++) {
         ws[i] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-        ws[i].dstSet = r->ubo;
+        ws[i].dstSet = set;
         ws[i].dstBinding = i;
         ws[i].descriptorCount = 1;
         ws[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         ws[i].pBufferInfo = &bi;
     }
     vkUpdateDescriptorSets(dev, kCbvs, ws, 0, nullptr);
-    return r->ubo;
+    std::atomic_ref(r->ubo).store(set, std::memory_order_release);
+    return set;
 }
 
 // --- shaders and pipelines
@@ -3123,8 +3197,15 @@ void VkDev::Submit(uint64_t value) {
     di.pMemoryBarriers = &mb;
     vkCmdPipelineBarrier2(list.cb, &di);
     list.End();
-    VkCommandBufferSubmitInfo ci{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
-    ci.commandBuffer = list.cb;
+    // (the command buffers before it: the main list's up to each Fork, the forked lists')
+    std::vector<VkCommandBufferSubmitInfo> cis;
+    for (VkCommandBuffer q : queued) {
+        cis.push_back({VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO});
+        cis.back().commandBuffer = q;
+    }
+    queued.clear();
+    cis.push_back({VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO});
+    cis.back().commandBuffer = list.cb;
     VkSemaphoreSubmitInfo waits[2];
     // (XBE_VK_SPLIT's command buffers: the slot's own again from its next reset)
     uint32_t nw = 0;
@@ -3150,8 +3231,8 @@ void VkDev::Submit(uint64_t value) {
     VkSubmitInfo2 si{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
     si.waitSemaphoreInfoCount = nw;
     si.pWaitSemaphoreInfos = waits;
-    si.commandBufferInfoCount = 1;
-    si.pCommandBufferInfos = &ci;
+    si.commandBufferInfoCount = uint32_t(cis.size());
+    si.pCommandBufferInfos = cis.data();
     si.signalSemaphoreInfoCount = 1;
     si.pSignalSemaphoreInfos = &sig;
     std::lock_guard l(queue_lock);
@@ -3165,6 +3246,9 @@ void VkDev::Submit(uint64_t value) {
 void VkDev::Reset(uint32_t s) {
     slot = s % kSlots;
     vkResetCommandPool(dev, pools[slot], 0);
+    for (VkCommandPool fp : fork_pools[slot]) vkResetCommandPool(dev, fp, 0);
+    for (uint32_t& u : fork_used) u = 0;
+    main_used = 0;
     for (VkDescriptorPool p : transient[slot]) vkResetDescriptorPool(dev, p, 0);
     mixed[slot].clear();
     for (auto& [pool, i] : queries_used[slot]) vkResetQueryPool(dev, pool, i, 1);

@@ -72,6 +72,9 @@ inline std::atomic<int> g_weapon_whole{0};  // tests (cmd weaponwhole 1): the we
 // Screen sized targets are this many times wider than the render scale makes them, and the frame is shown at the
 // output's aspect. 1 keeps the console's frame.
 inline std::atomic<float> g_screen_widen{1.0f};
+// the render thread's count of the changes to the vertex constants it applied to the state it draws with (Threaded,
+// that thread's alone); 0 without one: each draw's constants compared with the last draw's then
+inline uint64_t g_vsc_changes = 0;
 // the screen's view widened by a Field of View past the game's (its view window times this): the weapon in hand drawn
 // as the game's view would (its clip space times this about the middle)
 inline std::atomic<float> g_weapon_scale{1.0f};

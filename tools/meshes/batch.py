@@ -39,6 +39,9 @@ WATER = re.compile(r"water", re.I)  # the water's own meshes (their texture's na
 # left as they are by their texture's name: the boats' hulls (low hard planks, long fans of thin triangles and
 # vertices on other edges: rounded, their decks folded at the bow)
 AS_THEY_ARE = re.compile(r"^(VT_Volgaboat_hull|VT_Volgaboat_innerhull|VT_Steamboat|VT_Tugboat|VT_Rowboat|VT_backgroundBoat)", re.I)
+# left as they are by their key (tools/meshes/keep_original.txt: meshes seen broken in the game, the town's walls)
+KEEP_ORIGINAL = {line.split()[0] for line in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "keep_original.txt"))
+                 if line.strip() and not line.startswith("#")}
 
 
 def bones(m):
@@ -122,6 +125,8 @@ def main():
         size = m.reg(0)[:, :3].max(0) - m.reg(0)[:, :3].min(0)
         cls = classes.get(f"{m.tex:016x}")
         organic = m.tex in skin or cls in ORGANIC_CLASSES
+        if key in KEEP_ORIGINAL:
+            return f"{name}: left as it is (keep_original.txt)"
         if far_lods.far(names.get(f"{m.tex:016x}", ""), m.count, largest[m.tex]):
             return f"{name}: left as it is (a soldier's distant version)"
         if WATER.search(names.get(f"{m.tex:016x}", "")):

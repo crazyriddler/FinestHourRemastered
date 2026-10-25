@@ -23,6 +23,9 @@ enum VertexDecode : uint8_t {
 struct VertexBuffer {
     const uint8_t* src = nullptr;
     uint32_t bytes = 0, stride = 0;
+    // made on the CPU from the game's vertices that stay as they are (a repacked range): what it stays the same by,
+    // its key and its source's write generation (0: made anew each draw)
+    uint64_t keep = 0, keep_gen = 0;
 };
 
 // where input register r comes from: host vertex format (a DXGI_FORMAT), buffer, byte offset in the vertex

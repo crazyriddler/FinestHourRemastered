@@ -192,6 +192,16 @@ The version installed is in `version.txt` beside the game. Unattended:
 - Into Red Square (the tank): no more dark patch on the cobbles ahead that came and went as the tank drew near (the
   shadow of a nearly see-through layer of rubble and dirt, cast as if it were solid).
 - Surface Materials: less streaking where the game's own texture is stretched along a surface (walls, beams).
+- Faster, on both renderers: much less CPU per frame (the game's vertices that never change are no longer copied and
+  converted again every frame, the weapon in hand and the render states cost far less, the shadow casters are
+  recorded on several threads) and less GPU time (shadows, ambient occlusion, bounce light, volumetric fog, dynamic
+  lights, Not One Step Back's oil smoke, the lens dirt, the anti-aliasing and the guard band all cost less). On my PC
+  the CPU-heavy places run 10 to 40% faster, the rest a little faster, with the same picture.
+- Depot Saboteurs: the town's walls no longer show cracks the night sky shows through, and a building's top band is
+  straight again. Its walls, doorways, steps and mountains are drawn as the game made them: my remastered versions
+  of them opened those cracks.
+- Pausing in a snow level could garble the snow tracks or the TV screen of the menu: both were drawn into the same
+  texture.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

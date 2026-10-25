@@ -190,6 +190,10 @@ inline std::array<uint64_t, 2> g_simple_dirty{~0ull, ~0ull};
 inline uint64_t g_vsc_dirty = ~0ull;
 inline void MarkSimple(uint32_t index) { g_simple_dirty[(index >> 10) & 1] |= 1ull << ((index >> 4) & 63); }
 inline void MarkVsc(uint32_t reg) { g_vsc_dirty |= 1ull << ((reg >> 2) & 63); }
-inline void MarkAll() { g_simple_dirty = {~0ull, ~0ull}, g_vsc_dirty = ~0ull; }
+// and rs's and tss's (after simple: the pieces from the 128th, rs then tss, 19 of them), a bit a piece: MarkRs, MarkTss
+inline uint32_t g_rs_dirty = ~0u;
+inline void MarkRs(uint32_t i) { g_rs_dirty |= 1u << ((i * 4) >> 6); }
+inline void MarkTss(uint32_t stage, uint32_t i) { g_rs_dirty |= 1u << ((kRsMax * 4 + (stage * kTssCount + i) * 4) >> 6); }
+inline void MarkAll() { g_simple_dirty = {~0ull, ~0ull}, g_vsc_dirty = ~0ull, g_rs_dirty = ~0u; }
 
 }  // namespace gpu

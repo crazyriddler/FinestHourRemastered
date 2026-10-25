@@ -3,6 +3,7 @@ with its own log, settings and caches), the same level started in both, the free
 round in both, a shot from each; the pairs side by side with their difference in work/vk/<tag>/lvNN.png.
 
     python tools/vk_parity.py [levels...] [--a release] [--b vk] [--api-a d3d12] [--api-b vulkan] [--tag parity]
+        [--env-a KEY=VALUE,...] [--env-b KEY=VALUE,...]
 
 --a/--b: the build each copy runs (out/build/<name>/CODFH.exe); --api-a/--api-b: XBE_RENDERER for it.
 """
@@ -59,9 +60,12 @@ def make(name, build):
     return d
 
 
-def run(name, api, levels, tag):
-    """one copy through the levels: its shots in work/vk/<tag>/<name>/lvNN_vK.bmp"""
+def run(name, api, levels, tag, extra=""):
+    """one copy through the levels: its shots in work/vk/<tag>/<name>/lvNN_vK.bmp (extra: "KEY=VALUE,..." for it alone)"""
     env = dict(os.environ, XBE_TOOL_EXE_DIR=os.path.join(VK, name), XBE_RENDERER=api)
+    for kv in filter(None, extra.split(",")):
+        k, _, v = kv.partition("=")
+        env[k] = v
     return subprocess.Popen([sys.executable, os.path.abspath(__file__), "--drive", name, "--tag", tag] + [str(l) for l in levels],
                             env=env)
 
@@ -162,6 +166,8 @@ def main():
     ap.add_argument("--api-a", default="d3d12")
     ap.add_argument("--api-b", default="vulkan")
     ap.add_argument("--tag", default="parity")
+    ap.add_argument("--env-a", default="", help="environment for copy a alone: KEY=VALUE,...")
+    ap.add_argument("--env-b", default="", help="environment for copy b alone")
     ap.add_argument("--drive")
     ap.add_argument("--compare-only", action="store_true")
     ap.add_argument("--views", help="the views to take (indices, comma separated), all by default")
@@ -176,11 +182,11 @@ def main():
         procs = []
         if a.only != "b":
             make("a", a.a)
-            procs.append(run("a", a.api_a, a.levels, a.tag))
+            procs.append(run("a", a.api_a, a.levels, a.tag, a.env_a))
             time.sleep(5)
         if a.only != "a":
             make("b", a.b)
-            procs.append(run("b", a.api_b, a.levels, a.tag))
+            procs.append(run("b", a.api_b, a.levels, a.tag, a.env_b))
         for p in procs:
             p.wait()
     compare(a.levels, a.tag)

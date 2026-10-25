@@ -46,6 +46,15 @@ void FreeSystem(uint32_t va);
 uint32_t AllocStack(uint32_t size);  // returns the top, guard below the bottom
 void FreeStack(uint32_t top);
 
+// writes to physical memory watched by page (what the GPU keeps a copy of): WatchWrites makes the pages of a range
+// read only until written (false: not physical memory); WriteGeneration, the sum of their write counts, changes
+// whenever one of them is written (~0: not physical memory)
+bool WatchWrites(uint32_t va, uint32_t size);
+// the range written by the host where a fault would not be taken (the system's own calls, a file read into it: they
+// fail on a read only page): its watched pages counted written and writable again
+void Unwatch(uint32_t va, uint32_t size);
+uint64_t WriteGeneration(uint32_t va, uint32_t size);
+
 uint32_t PhysicalFromVirtual(uint32_t va);
 uint32_t VirtualFromPhysical(uint32_t pa);
 

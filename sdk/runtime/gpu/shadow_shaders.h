@@ -92,7 +92,22 @@ float Cascade(int c, float3 P, float3 N, float ndl, float2 rot, float ch) {
     }
     int n = (int)p5.w;
     float s = 0;
+    // five taps spread over the disc first (its corners and one by the middle): all lit or all shaded, so is the
+    // rest (the full count is for the penumbra alone; most of the screen is wholly one or the other)
+    uint first = (1u << 0) | (1u << 1) | (1u << 3) | (1u << 4) | (1u << 7);
+    if (n >= 8) {
+        [unroll] for (int f = 0; f < 8; f++) {
+            if (!(first & (1u << f))) continue;
+            float2 o = kDisc[f];
+            o = float2(o.x * rot.x - o.y * rot.y, o.x * rot.y + o.y * rot.x);
+            s += Pcf(clamp(uv + o * r, lo, hi), z);
+        }
+        if (s < 1e-3 || s > 5 - 1e-3) return s / 5;
+    } else {
+        first = 0;
+    }
     [loop] for (int k = 0; k < n; k++) {
+        if (first & (1u << k)) continue;
         float2 o = kDisc[k];
         o = float2(o.x * rot.x - o.y * rot.y, o.x * rot.y + o.y * rot.x);
         s += Pcf(clamp(uv + o * r, lo, hi), z);
@@ -100,7 +115,7 @@ float Cascade(int c, float3 P, float3 N, float ndl, float2 rot, float ch) {
     return s / n;
 }
 
-// The volumetric haze (d3d12.cpp FogPass, half size): from the eye to the surface (or 120 m into the sky), 24 steps
+// The volumetric haze (d3d12.cpp FogPass, half size): from the eye to the surface (or 120 m into the sky), p9.w steps
 // through the air; each step's haze (thin, thicker low: p9.x density, p9.y the ground's height in view space along
 // the world's up p10.xyz) takes the sun's light where the sun's cascades see it (its beams past what shades them),
 // forward scattered (towards the sun brighter). Out: rgb the light the haze adds, a how much it hides behind it.
@@ -120,7 +135,7 @@ float4 fog(O i) : SV_Target {
     float3 dir = normalize(P);
     float3 up = p10.xyz;
     float jitter = frac(52.9829189 * frac(dot(i.pos.xy, float2(0.06711056, 0.00583715))));
-    const int n = 24;
+    int n = (int)p9.w;
     float stepl = len / n;
     float mu = dot(dir, p1.xyz);
     // the sun's light through the haze: a broad forward lobe (Henyey-Greenstein, g 0.6) and a little all round

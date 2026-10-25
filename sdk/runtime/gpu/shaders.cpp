@@ -3,6 +3,8 @@
 #include "core/log.h"
 #include "gpu/vertex.h"
 
+#include <immintrin.h>
+
 #include <algorithm>
 #include <cctype>
 #include <bit>
@@ -1085,16 +1087,57 @@ std::string LightingReport(const std::vector<uint32_t>& prog, uint16_t regs) {
 }
 
 struct CpuProgram {
-    std::vector<VsInst> list;
+    std::vector<VsInst> list;  // the instructions oPos needs, in order
     uint16_t regs = 0;
+    uint16_t inputs = 0;  // the inputs they read
 };
 
-std::shared_ptr<const CpuProgram> DecodeCpuProgram(const std::vector<uint32_t>& prog, uint16_t regs) {
+// the instructions oPos comes from: back from the end, an instruction kept when it writes a lane still to be read
+// (oPos's, then its sources'), its MAC's or its ILU's sources to be read then (the MAC: a for all, b for the two
+// operand ones, c for add and mad; the ILU: c)
+std::shared_ptr<const CpuProgram> DecodeCpuProgram(const std::vector<uint32_t>& prog, uint16_t regs, bool whole) {
     auto p = std::make_shared<CpuProgram>();
-    p->list = DecodeProgram(prog, regs);
+    std::vector<VsInst> all = DecodeProgram(prog, regs);
     p->regs = regs;
+    constexpr uint64_t kA0 = 1ull << 52;
+    auto lanes = [](uint32_t reg, uint32_t mask) {
+        uint64_t m = 0;
+        for (int l = 0; l < 4; l++)
+            if ((mask >> (3 - l)) & 1) m |= 1ull << (std::min<uint32_t>(reg, 12) * 4 + l);
+        return m;
+    };
+    uint64_t live = 0xFull << 48;  // oPos (R12)
+    std::vector<bool> keep(all.size());
+    for (size_t i = all.size(); i-- > 0;) {
+        const VsInst& v = all[i];
+        uint64_t mac_w = (v.mac ? lanes(v.mac_reg, v.mac_mask) : 0) | (v.mac == 13 ? kA0 : 0) |
+                         (v.out == 0 && !v.out_ilu ? lanes(12, v.out_mask) : 0);
+        uint64_t ilu_w = (v.ilu ? lanes(v.ilu_reg, v.ilu_mask) : 0) | (v.out == 0 && v.out_ilu ? lanes(12, v.out_mask) : 0);
+        bool mac_live = (mac_w & live) != 0, ilu_live = (ilu_w & live) != 0;
+        if (!mac_live && !ilu_live && !whole) continue;
+        keep[i] = true;
+        live &= ~(mac_w | ilu_w);
+        auto gen = [&](const VsOperand& o) {
+            if (o.kind == 1)
+                for (int l = 0; l < 4; l++) live |= 1ull << (std::min<uint32_t>(o.reg, 12) * 4 + o.sw[l]);
+            else if (o.kind == 2) p->inputs |= uint16_t(1u << o.reg);
+            else if (o.kind == 3 && o.rel) live |= kA0;
+        };
+        if (mac_live) {
+            gen(v.op[0]);
+            if (v.mac == 2 || (v.mac >= 4 && v.mac <= 12)) gen(v.op[1]);
+            if (v.mac == 3 || v.mac == 4) gen(v.op[2]);
+        }
+        if (ilu_live) gen(v.op[2]);
+    }
+    for (size_t i = 0; i < all.size(); i++)
+        if (keep[i]) p->list.push_back(std::move(all[i]));
     return p;
 }
+
+uint16_t CpuProgramInputs(const CpuProgram& p) { return p.inputs; }
+
+void IluScalar(uint32_t ilu, const float cc[4], float ir[4]);
 
 // as the HLSL the programs become (MacExpr, IluExpr, EmitInst): the MAC and the ILU read the registers as they were
 // before the instruction, then write
@@ -1128,8 +1171,21 @@ void RunCpuProgram(const CpuProgram& p, const float in[16][4], const std::array<
             case 12: for (int l = 0; l < 4; l++) mr[l] = a[l] >= b[l] ? 1.0f : 0.0f; break;
             default: break;
         }
+        IluScalar(v.ilu, cc, ir);
+        if (v.mac == 13) a0 = int(std::floor(mr[0] + 1e-3f));
+        for (int l = 0; l < 4; l++) {
+            if ((v.mac_mask >> (3 - l)) & 1) R[v.mac_reg][l] = mr[l];
+            if ((v.ilu_mask >> (3 - l)) & 1) R[v.ilu_reg][l] = ir[l];
+            if (v.out == 0 && ((v.out_mask >> (3 - l)) & 1)) R[12][l] = v.out_ilu ? ir[l] : mr[l];
+        }
+    }
+    std::copy(R[12], R[12] + 4, opos);
+}
+
+// the ILU's result for one vertex (cc its operand)
+void IluScalar(uint32_t ilu, const float cc[4], float ir[4]) {
         float x = cc[0];
-        switch (v.ilu) {
+        switch (ilu) {
             case 1: std::copy(cc, cc + 4, ir); break;
             case 2: ir[0] = ir[1] = ir[2] = ir[3] = 1.0f / x; break;
             case 3: {
@@ -1153,14 +1209,103 @@ void RunCpuProgram(const CpuProgram& p, const float in[16][4], const std::array<
             }
             default: break;
         }
-        if (v.mac == 13) a0 = int(std::floor(mr[0] + 1e-3f));
+}
+
+// four vertices at once (RunCpuProgram's steps on SSE lanes, a lane a vertex, the same results bit for bit): the
+// registers as four lanes per component, a constant read by a0 per lane, the ILU per lane by IluScalar
+void RunCpuProgram4(const CpuProgram& p, const float in[4][16][4], const std::array<std::array<float, 4>, 192>& c, float opos[4][4]) {
+    __m128 V[16][4];
+    const __m128* lanes[16] = {};
+    for (uint32_t r = 0; r < 16; r++) {
+        if (!((p.inputs >> r) & 1)) continue;
+        for (int l = 0; l < 4; l++) V[r][l] = _mm_set_ps(in[3][r][l], in[2][r][l], in[1][r][l], in[0][r][l]);
+        lanes[r] = V[r];
+    }
+    RunCpuProgram4(p, lanes, c, opos);
+}
+
+void RunCpuProgram4(const CpuProgram& p, const __m128* const lanes[16], const std::array<std::array<float, 4>, 192>& c, float opos[4][4]) {
+    __m128 R[13][4];
+    for (auto& r : R)
+        for (auto& l : r) l = _mm_setzero_ps();
+    int a0[4] = {};
+    const __m128 sign = _mm_set1_ps(-0.0f), zero = _mm_setzero_ps(), one = _mm_set1_ps(1.0f);
+    auto read = [&](const VsOperand& o, __m128 v[4]) {
+        if (o.kind == 1) {
+            const __m128* b = R[std::min<uint32_t>(o.reg, 12)];
+            for (int l = 0; l < 4; l++) v[l] = b[o.sw[l]];
+        } else if (o.kind == 2) {
+            if ((p.regs >> o.reg) & 1) {
+                const __m128* b = lanes[o.reg];
+                for (int l = 0; l < 4; l++) v[l] = b ? b[o.sw[l]] : zero;
+            } else {
+                static const float ones[4] = {1, 1, 1, 1}, unit[4] = {0, 0, 0, 1};
+                const float* b = o.reg == 3 ? ones : unit;
+                for (int l = 0; l < 4; l++) v[l] = _mm_set1_ps(b[o.sw[l]]);
+            }
+        } else if (!o.rel) {
+            const float* b = c[size_t(std::clamp(int(o.reg), 0, 191))].data();
+            for (int l = 0; l < 4; l++) v[l] = _mm_set1_ps(b[o.sw[l]]);
+        } else {
+            const float* b[4];
+            for (int k = 0; k < 4; k++) b[k] = c[size_t(std::clamp(int(o.reg) + a0[k], 0, 191))].data();
+            for (int l = 0; l < 4; l++) v[l] = _mm_set_ps(b[3][o.sw[l]], b[2][o.sw[l]], b[1][o.sw[l]], b[0][o.sw[l]]);
+        }
+        if (o.neg)
+            for (int l = 0; l < 4; l++) v[l] = _mm_xor_ps(v[l], sign);
+    };
+    // (a * b, but 0 where either is 0: the console's multiply)
+    auto mul = [&](__m128 a, __m128 b) { return _mm_andnot_ps(_mm_or_ps(_mm_cmpeq_ps(a, zero), _mm_cmpeq_ps(b, zero)), _mm_mul_ps(a, b)); };
+    for (const VsInst& v : p.list) {
+        __m128 a[4], b[4], cc[4], mr[4], ir[4];
+        read(v.op[0], a), read(v.op[1], b), read(v.op[2], cc);
+        for (int l = 0; l < 4; l++) mr[l] = ir[l] = zero;
+        switch (v.mac) {
+            case 1: case 13: for (int l = 0; l < 4; l++) mr[l] = a[l]; break;
+            case 2: for (int l = 0; l < 4; l++) mr[l] = mul(a[l], b[l]); break;
+            case 3: for (int l = 0; l < 4; l++) mr[l] = _mm_add_ps(a[l], cc[l]); break;
+            case 4: for (int l = 0; l < 4; l++) mr[l] = _mm_add_ps(mul(a[l], b[l]), cc[l]); break;
+            case 5: case 6: case 7: {
+                __m128 d = _mm_add_ps(_mm_add_ps(_mm_mul_ps(a[0], b[0]), _mm_mul_ps(a[1], b[1])), _mm_mul_ps(a[2], b[2]));
+                if (v.mac == 6) d = _mm_add_ps(d, b[3]);
+                if (v.mac == 7) d = _mm_add_ps(d, _mm_mul_ps(a[3], b[3]));
+                for (int l = 0; l < 4; l++) mr[l] = d;
+                break;
+            }
+            case 8: mr[0] = one, mr[1] = _mm_mul_ps(a[1], b[1]), mr[2] = a[2], mr[3] = b[3]; break;
+            // (std::min(a, b) is b < a ? b : a, std::max(a, b) a < b ? b : a: minps / maxps with b first)
+            case 9: for (int l = 0; l < 4; l++) mr[l] = _mm_min_ps(b[l], a[l]); break;
+            case 10: for (int l = 0; l < 4; l++) mr[l] = _mm_max_ps(b[l], a[l]); break;
+            case 11: for (int l = 0; l < 4; l++) mr[l] = _mm_and_ps(_mm_cmplt_ps(a[l], b[l]), one); break;
+            case 12: for (int l = 0; l < 4; l++) mr[l] = _mm_and_ps(_mm_cmpge_ps(a[l], b[l]), one); break;
+            default: break;
+        }
+        if (v.ilu) {
+            alignas(16) float cs[4][4], is[4][4];
+            for (int l = 0; l < 4; l++) _mm_store_ps(cs[l], cc[l]);
+            for (int k = 0; k < 4; k++) {
+                const float ck[4] = {cs[0][k], cs[1][k], cs[2][k], cs[3][k]};
+                float ik[4] = {};
+                IluScalar(v.ilu, ck, ik);
+                for (int l = 0; l < 4; l++) is[l][k] = ik[l];
+            }
+            for (int l = 0; l < 4; l++) ir[l] = _mm_load_ps(is[l]);
+        }
+        if (v.mac == 13) {
+            alignas(16) float x[4];
+            _mm_store_ps(x, mr[0]);
+            for (int k = 0; k < 4; k++) a0[k] = int(std::floor(x[k] + 1e-3f));
+        }
         for (int l = 0; l < 4; l++) {
             if ((v.mac_mask >> (3 - l)) & 1) R[v.mac_reg][l] = mr[l];
             if ((v.ilu_mask >> (3 - l)) & 1) R[v.ilu_reg][l] = ir[l];
             if (v.out == 0 && ((v.out_mask >> (3 - l)) & 1)) R[12][l] = v.out_ilu ? ir[l] : mr[l];
         }
     }
-    std::copy(R[12], R[12] + 4, opos);
+    alignas(16) float o[4][4];
+    for (int l = 0; l < 4; l++) _mm_store_ps(o[l], R[12][l]);
+    for (int k = 0; k < 4; k++)
+        for (int l = 0; l < 4; l++) opos[k][l] = o[l][k];
 }
 
 std::string WeaponCullGsHlsl() { return Common() + kWeaponCullGs; }
@@ -1480,39 +1625,6 @@ std::string GuardVertexHlsl(std::string s) {
     s += F("    SOut r;\n    r.pos = float4(o.cpos.xy * %.6f, o.cpos.zw);\n", kGuardScale);
     s += "    r.clip = 1;\n    r.back = 1;\n    r.tc0 = o.tc0;\n    r.da = o.d0.a;\n    return r;\n}\n";
     return s;
-}
-
-std::string MotionVertexHlsl(const std::string& s, unsigned wvp_at) {
-    size_t at = s.find("VOut main(VIn i) {");
-    std::string param = "VIn i", arg = "i";
-    if (at == std::string::npos) at = s.find("VOut main(VRaw ri) {"), param = "VRaw ri", arg = "ri";
-    if (at == std::string::npos) return {};
-    std::string fn = s.substr(at);
-    // the frame before's: its constants (c[ to cp[), its fixed function transform (wvp to wvpp)
-    auto word = [](char ch) { return std::isalnum(static_cast<unsigned char>(ch)) || ch == '_'; };
-    std::string prev;
-    prev.reserve(fn.size() + 64);
-    for (size_t k = 0; k < fn.size();) {
-        bool start = k == 0 || !word(fn[k - 1]);
-        if (start && fn.compare(k, 2, "c[") == 0) {
-            prev += "cp[", k += 2;
-            continue;
-        }
-        if (start && fn.compare(k, 3, "wvp") == 0 && (k + 3 >= fn.size() || !word(fn[k + 3]))) {
-            prev += "wvpp", k += 3;
-            continue;
-        }
-        prev += fn[k++];
-    }
-    prev.replace(prev.find("VOut main("), 10, "VOut mprev(");
-    std::string out = s.substr(0, at);
-    out += F("cbuffer VCP : register(b2) { float4 cp[192]; };\ncbuffer DCP : register(b3) { float4 dcp_pad[%u]; float4x4 wvpp; };\n",
-             wvp_at);
-    out += fn + prev;
-    out += "struct MOut { float4 pos : SV_Position; float4 cur : TEXCOORD0; float4 prev : TEXCOORD1; };\n";
-    out += "MOut motion(" + param + ") {\n    VOut a = main(" + arg + ");\n    VOut b = mprev(" + arg +
-           ");\n    MOut o;\n    o.pos = a.pos;\n    o.cur = a.pos;\n    o.prev = b.pos;\n    return o;\n}\n";
-    return out;
 }
 
 std::string ShadowAlphaHlsl(bool proj, bool blended) {

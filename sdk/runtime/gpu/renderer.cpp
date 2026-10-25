@@ -45,6 +45,7 @@
 #include "gpu/texture.h"
 #include "gpu/vertex.h"
 #include "kernel/kernel.h"
+#include "kernel/memory.h"
 
 namespace gpu {
 
@@ -65,8 +66,10 @@ constexpr uint32_t kRtvCount = 1024;
 // views of the passes on the shown frame, after the back buffers': SMAA edges, weights and blend, sharpened; then
 // the scene passes': its copy, two occlusion targets, four bloom levels
 constexpr uint32_t kPostRtvs = 4, kSceneRtvs = 16;
-constexpr uint32_t kSceneVel = 12;   // full size: the screen's velocity (MotionPass)
-constexpr uint32_t kSceneFree = 13;  // (none: the temporal anti-aliasing's history once)
+constexpr uint32_t kScenePost = 12;  // full size: the composite and the splashes before the Anti-Aliasing (ScenePost)
+// half size: the depth at the pixels the half size passes' centres read (kSceneAo's depthhalf), for the samples of the
+// occlusion and the bounce (a quarter of the texels to fetch from about the screen)
+constexpr uint32_t kSceneDepthHalf = 13;
 constexpr uint32_t kSceneAoHalf = 14;  // half size, two: the occlusion made and blurred (aoup brings it to scene_[1])
 constexpr uint32_t kSceneFog = 10;  // half size: the volumetric haze (FogPass)
 constexpr uint32_t kSceneGi = 11;   // half size: one bounce of light (kSceneAo's gi)
@@ -429,6 +432,11 @@ bool Changed(const Target& t) {
 
 // a lock alone proves nothing, reads lock too: only changed bytes mean the CPU wrote it
 bool LatchCpuWrite(Target& t) {
+    // (no lock anywhere since this target's last look: its epoch the same, the map not looked up: a draw's targets
+    // are latched each draw)
+    const uint64_t locks = DirtyCount();
+    if (locks == t.locks_seen) return false;
+    t.locks_seen = locks;
     uint64_t e = DirtyEpoch(t.data);
     if (e <= t.epoch) return false;
     t.epoch = e;
@@ -448,6 +456,8 @@ struct Tex {
     uint64_t palette = 0;  // hash of the colours a P8 texture was decoded with
     uint8_t flags = 0;  // Extension::Decoded's
     uint64_t id = 0;    // remaster content id of the top level, 0 for none
+    uint64_t epoch = 0;   // its lock epoch (DirtyEpoch) as last checked
+    uint32_t steady = 0;  // checks in a row its bytes were the same
 };
 
 // a remastered texture on the GPU: colour, and for a material its normal and material maps
@@ -605,6 +615,70 @@ struct StampTable {
     }
 };
 
+// Threads that record a share of a loop of draws each (DrawCasters on a list the device forked, rhi Fork): Start
+// hands share i to worker i, the caller records its own meanwhile, Wait returns once every worker is done
+class RecordPool {
+public:
+    explicit RecordPool(uint32_t n) {
+        for (uint32_t i = 0; i < n; i++) threads_.emplace_back([this, i] { Work(i); });
+    }
+    ~RecordPool() {
+        {
+            std::lock_guard l(m_);
+            stop_ = true;
+        }
+        cv_.notify_all();
+        for (auto& t : threads_) t.join();
+    }
+    uint32_t Size() const { return uint32_t(threads_.size()); }
+    void Start(uint32_t n, std::function<void(uint32_t)> fn) {
+        {
+            std::lock_guard l(m_);
+            fn_ = std::move(fn);
+            n_ = std::min<uint32_t>(n, Size());
+            left_ = n_;
+            gen_++;
+        }
+        cv_.notify_all();
+    }
+    void Wait() {
+        std::unique_lock l(m_);
+        done_cv_.wait(l, [&] { return left_ == 0; });
+    }
+
+private:
+    void Work(uint32_t i) {
+        using SetDescription = HRESULT(WINAPI*)(HANDLE, PCWSTR);
+        if (auto set = reinterpret_cast<SetDescription>(
+                reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "SetThreadDescription"))))
+            set(GetCurrentThread(), L"record");
+        uint64_t seen = 0;
+        for (;;) {
+            std::function<void(uint32_t)>* fn;
+            {
+                std::unique_lock l(m_);
+                cv_.wait(l, [&] { return stop_ || gen_ != seen; });
+                if (stop_) return;
+                seen = gen_;
+                if (i >= n_) continue;
+                fn = &fn_;
+            }
+            (*fn)(i);
+            {
+                std::lock_guard l(m_);
+                if (--left_ == 0) done_cv_.notify_all();
+            }
+        }
+    }
+    std::vector<std::thread> threads_;
+    std::mutex m_;
+    std::condition_variable cv_, done_cv_;
+    std::function<void(uint32_t)> fn_;
+    uint32_t n_ = 0, left_ = 0;
+    uint64_t gen_ = 0;
+    bool stop_ = false;
+};
+
 class Renderer final : public Backend, public Context {
 public:
     // (the device outlives the resources the members still hold: kept to the process's end)
@@ -716,6 +790,14 @@ private:
     };
     std::vector<SrvTable> srv_tables_ = std::vector<SrvTable>(4096);
     uint64_t srv_gen_ = 1, srv_ring_gen_ = ~0ull, srv_epoch_ = ~0ull;
+    // The tables kept from frame to frame (past the rings, kSrvPersist): two halves, one filled at a time; when the
+    // resources change (res_epoch_) or it is full, the other is taken, emptied, once the GPU is past every frame that
+    // used it (its tables read when the GPU draws); until then the frame's ring. Most draws' tables made once a level
+    static constexpr uint32_t kSrvPersistHalf = 16384;
+    std::vector<SrvTable> persist_tables_ = std::vector<SrvTable>(8192);
+    uint64_t persist_gen_ = 1, persist_epoch_ = ~0ull, persist_left_[2] = {0, 0};
+    uint32_t persist_half_ = 1, persist_used_ = 0;
+    bool persist_ok_ = false, persist_full_ = false;
     uint64_t srv_last_key_ = 0;
     uint32_t srv_last_slot_ = 0;
     void Transition(rhi::Resource* r, D3D12_RESOURCE_STATES& cur, D3D12_RESOURCE_STATES want) override;
@@ -742,6 +824,7 @@ private:
               float blend) override;
     rhi::Pipeline* EnsurePassPipeline(const char* hlsl, const char* entry, DXGI_FORMAT rtv, float blend);
     uint32_t pass_floats_ = 8;  // the next Pass's constants (floats of p), then 8 again
+    D3D12_RECT pass_rect_{};    // the next Pass's pixels when not all of them (right 0: all), then all again
     // Draw, in call order, each callee right after its caller
     bool DepthCopy(const State& s);
     rhi::Pipeline* EnsureDepthCopyPipeline();
@@ -750,6 +833,23 @@ private:
                       Assembled& a);
     bool BindTargets(const State& s);
     void EnsureVertexShader(const State& s, const Assembled& a, DrawShaders& sh);
+    // the draws' clock (their animations' time: wind, water, flow), seconds, read once a frame
+    float Seconds() {
+        if (seconds_frame_ != frame_) {
+            static const auto t0 = std::chrono::steady_clock::now();
+            seconds_ = std::chrono::duration<float>(std::chrono::steady_clock::now() - t0).count(), seconds_frame_ = frame_;
+        }
+        return seconds_;
+    }
+    float seconds_ = 0;
+    uint64_t seconds_frame_ = ~0ull;
+    // the shaders last found by key (EnsureVertexShader, EnsurePixelShader: two maps' lookups a draw saved), by the
+    // key's top bits; a blob stays in blobs_ while the cache lives
+    struct ShaderHit {
+        uint64_t key = 0, h = 0;
+        rhi::Blob* code = nullptr;
+    };
+    std::array<ShaderHit, 2048> shader_hits_{};
     bool BindStageTexturesAndTargets(const State& s, DrawTextures& stages);
     rhi::Resource* BindTexture(const State& s, int stage, DrawTextures& stages);
     rhi::Resource* BindTargetTexture(const State& s, int stage, const TextureDesc& d, Target& t, bool box,
@@ -954,6 +1054,10 @@ private:
     D3D12_RESOURCE_STATES guard_state_ = D3D12_RESOURCE_STATE_DEPTH_WRITE;
     uint32_t guard_w_ = 0, guard_h_ = 0, guard_dsv_ = ~0u;
     KeyMap<uint64_t, uint64_t> guard_vs_;
+    // the camera it was drawn for, and when (DrawGuard: every other frame while the camera stays about where it was)
+    float guard_view_[16] = {};
+    uint64_t guard_frame_ = 0;
+    bool guard_ok_ = false;
     rhi::Resource* DrawGuard(uint32_t w, uint32_t h);
     // Water Interaction: the frame's water seen from above (its height, R32) and the casters crossing it (how far up
     // the slab about the water they reach, R16) on a square about the eye, the wave field stepped from them
@@ -988,6 +1092,7 @@ private:
     D3D12_RESOURCE_STATES trail_st_[2] = {};
     Ref<rhi::Resource> trail_soft_;  // the trail softened (kTrailHlsl trailblur), what the snow reads
     D3D12_RESOURCE_STATES trail_soft_st_ = {};
+    bool trail_soft_full_ = false;   // all of it made once (after, the steps' part alone)
     int trail_cur_ = 0;
     bool trail_ok_ = false, trail_bound_ = false;
     float trail_x0_ = 0, trail_z0_ = 0;
@@ -1029,41 +1134,18 @@ private:
     float wave_world_[8][3] = {};  // this frame's drops in the world
     float wave_water_y_ = -1e9f;   // a water height the field read back lately (tests)
     rhi::View WaveRtv(uint32_t i) { return Cpu(rhi::Heap::Rtv, kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 6 + i); }
-    // Motion (MotionPass): the frame's opaque draws again with their constants of the frame before, matched by what
-    // they draw and their order; the screen's velocity, the per object motion blur, the temporal anti-aliasing
-    struct MotionDraw {
-        rhi::Pipeline* pso;
-        D3D12_VERTEX_BUFFER_VIEW vb[16];
-        uint32_t vb_count;
-        D3D12_INDEX_BUFFER_VIEW ib;
-        bool indexed;
-        uint32_t count;
-        int32_t base;
-        D3D_PRIMITIVE_TOPOLOGY topo;
-        rhi::GpuVa vc, dc, pvc, pdc;
-        bool weapon;  // the weapon in hand (after the world's depth was cleared): tested against the depth now
-    };
-    struct MotionSeen {
-        rhi::GpuVa vc, dc;
-        uint64_t gen;
-    };
-    std::vector<MotionDraw> motion_;
-    uint64_t motion_gen_ = 0;
-    StampTable<MotionSeen> motion_cur_, motion_prev_;
-    StampTable<uint32_t> motion_order_, motion_counts_prev_;
-    uint64_t motion_prev_gen_ = 0;  // ring_gen_ when motion_prev_ was this frame's: its entries of that generation count
-    KeyMap<uint64_t, uint64_t> motion_vs_;
-    KeyMap<uint64_t, Ref<rhi::Pipeline>> motion_psos_;
-    uint64_t motion_ps_ = 0, motion_ps_over_ = 0;
-    bool motion_tried_ = false;  // its pixel shaders made
-    bool motion_ok_ = false;  // this frame's velocity drawn
+    // (the softened trail's own: WaveRtv(7) was TvUiRtv's place, the TV's menu drawn into the trail after a pause)
+    rhi::View TrailSoftRtv() { return Cpu(rhi::Heap::Rtv, kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 2); }
+    // the camera of the frame before (the sun's highlights read last frame's shadow mask where its pixels were)
     float prev_view_[16] = {}, prev_proj_[16] = {};
     bool prev_cam_ok_ = false;
-    void RecordMotion(const State& s, const Assembled& a, const DrawShaders& sh, const PsoKey& k);
-    void MotionPass(Target& rt);
-    void MotionBlurPass(Target& rt);
-    void FxaaPass(Target& rt);
-    void MotionParams(float out[28]);
+    void FxaaPass(Target& rt, rhi::Resource* from);
+    // the lens's dirt for the composite (kSceneComposite lensdirt): made once for the screen's size, at t9
+    Ref<rhi::Resource> lens_dirt_;
+    D3D12_RESOURCE_STATES lens_dirt_state_ = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    uint32_t lens_w_ = 0, lens_h_ = 0;
+    rhi::View LensRtv() { return Cpu(rhi::Heap::Rtv, kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 18); }
+    rhi::Resource* LensDirt(const std::string& text, rhi::GpuVa cb, uint32_t w, uint32_t h);
     uint64_t ring_gen_ = 0;     // the frame's uploads so far went (Submit(true), a wrapped descriptor ring)
     uint64_t casters_gen_ = 0;  // ring_gen_ the casters were recorded in
     // the sun's reach on the screen for the materials' highlights: the last shadow mask (scene_[kSceneShadow], its
@@ -1085,12 +1167,25 @@ private:
     KeyMap<uint64_t, Ref<rhi::Pipeline>> shadow_psos_;
     std::unordered_set<uint64_t> known_shadow_;
     rhi::Pipeline* EnsureShadowPipeline(const ShadowKey& k);
+    struct CasterPsos {
+        ShadowKey key{};  // the caster's (a tread's made from it)
+        rhi::Pipeline *pso = nullptr, *screen = nullptr, *guard = nullptr, *top = nullptr;
+    };
+    KeyMap<uint64_t, CasterPsos> caster_psos_;  // RecordCaster's, by all they are made from
     bool ShadowDesc(const ShadowKey& k, rhi::PipelineDesc& d, D3D12_INPUT_ELEMENT_DESC el[16]) const;
     void RecordCaster(const State& s, const Assembled& a, const DrawShaders& sh, const PixelKey& pk, const PsoKey& k,
                       const DrawTextures& stages);
     void GatherLights(const State& s, const Assembled& a, const DrawShaders& sh, const PixelKey& pk);
     void ResolveLight();
     bool DrawShadowMap();
+    // The casters' draws again (DrawShadowMap's, DrawGuard's: which pipeline, the instances, the guard's viewport by
+    // their depth range): from first to last into l, its own state alone (another thread's list, or the main list,
+    // the command state cmd_ left behind). DrawCasters shares them out between threads when there are many
+    // (RecordPool, rhi Fork): the targets set on each list (dsv, size), then each share
+    enum class CasterPass { Shadow, Guard };
+    void DrawCasterRange(rhi::List* l, CasterPass pass, size_t first, size_t last, uint32_t instances, uint32_t w, uint32_t h) const;
+    void DrawCasters(CasterPass pass, rhi::View dsv, uint32_t w, uint32_t h, uint32_t instances);
+    std::unique_ptr<RecordPool> record_pool_;
     rhi::Resource* ShadowMask(Target& rt, Target& ds);
     bool CharacterMask(Target& rt, Target& ds);
     Ref<rhi::Resource> shadow_atlas_;
@@ -1106,6 +1201,9 @@ private:
     bool atlas_valid_ = false;
     double atlas_time_ = 0;
     float atlas_eye_[3] = {}, atlas_ahead_[3] = {}, atlas_light_[3] = {};
+    // the far cascades (2 and 3): drawn every other time when only the time asked for it (DrawShadowMap)
+    float atlas_far_eye_[3] = {}, atlas_far_ahead_[3] = {};
+    bool atlas_far_due_ = true;
     int atlas_level_ = -2;
     uint32_t atlas_quality_ = ~0u;
     // the camera the frame's 3D was drawn with (the fixed function transforms, which the game's own matrices
@@ -1197,7 +1295,30 @@ private:
     D3D12_RESOURCE_STATES world_depth_state_ = D3D12_RESOURCE_STATE_COMMON;
     bool world_depth_saved_ = false;
     void CollectEmitter(const State& s, const Assembled& a, const DrawShaders& sh, const EmitterKind& kind);
-    bool WeaponPieces(const State& s, const Assembled& a, const DrawShaders& sh);
+    // (known_check: the model's bytes' hash already known, 0: hashed here)
+    bool WeaponPieces(const State& s, const Assembled& a, const DrawShaders& sh, uint64_t known_check = 0);
+    struct WeaponFloats {
+        uint64_t content = 0;
+        bool ok = false;
+        Assembled a;
+    };
+    KeyMap<uint64_t, WeaponFloats> weapon_floats_;  // a remastered weapon's original as floats, by where it is drawn from
+    // WeaponPieces's: what a model alone decides (by the pointers and sizes it is drawn with, made again when its
+    // vertices' or indices' bytes differ: check), and the frame's working arrays
+    struct WeaponMesh {
+        uint64_t check = 0;
+        bool ok = false;                                   // its indices within its vertices
+        std::vector<std::array<uint32_t, 3>> tris;         // in DrawGeometry's order
+        std::vector<uint32_t> verts;                       // the corners of the triangles that are triangles, once each
+        std::vector<uint32_t> joined;                      // the pieces' parents: the corners at the same place joined
+        uint16_t lanes_of = 0;                             // the program's inputs lanes were made for
+        std::vector<__m128> lanes;                         // verts four a group, its inputs' x y z w a lane a corner
+    };
+    KeyMap<uint64_t, WeaponMesh> weapon_meshes_;
+    std::vector<std::array<float, 3>> wp_scr_;
+    std::vector<uint32_t> wp_parent_, wp_roots_;
+    std::vector<uint8_t> wp_on_, wp_in43_, wp_shown_;
+    std::vector<std::array<float, 2>> wp_share_;
     // the weapon in hand's triangles kept (WeaponPieces, in the draw's triangle order): DrawGeometry draws them alone
     std::vector<uint8_t> weapon_keep_;
     bool weapon_filter_ = false;
@@ -1226,10 +1347,16 @@ private:
     Ref<rhi::Resource> sky_tiles_[2];
     D3D12_RESOURCE_STATES sky_tiles_state_[2] = {};
     uint32_t sky_tiles_w_ = 0, sky_tiles_h_ = 0;
+    // level 1's sky: SkyFeather's disc's taps at a quarter size (skyquarter)
+    Ref<rhi::Resource> sky_quarter_;
+    D3D12_RESOURCE_STATES sky_quarter_state_ = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    uint32_t sky_quarter_w_ = 0, sky_quarter_h_ = 0;
+    rhi::View SkyQuarterRtv() { return Cpu(rhi::Heap::Rtv, kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 3); }
     rhi::View MeterRtv() { return Cpu(rhi::Heap::Rtv, kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 1); }
     bool BindGbuf(bool on);
     void ReflectionPass(Target& rt, const float p[16]);
     bool soft_saved_ = false;  // world_depth_ holds the frame's depth for its soft particles
+    bool depth_copy_fresh_ = false;  // world_depth_ is the scene's depth as it is: nothing written to it since the copy
     void UpdateDynLights();
     uint32_t DynLightConstants(float* pos_radius, float* color, uint32_t max);
     // the last draw's uploads and views
@@ -1242,6 +1369,7 @@ private:
     std::array<std::array<float, 4>, 192> vc_sent_{};
     DrawConstants dc_sent_{};
     uint64_t vc_gen_ = ~0ull, dc_gen_ = ~0ull;
+    uint64_t vc_changes_ = 0;  // g_vsc_changes when the last constants went up
     rhi::Table last_srv_{}, last_smp_{};
     // the shadows' GPU time (XBE_SHADOW_STATS): timestamps around the atlas and the mask, per frame slot
     Ref<rhi::QueryPool> shadow_queries_;
@@ -1264,8 +1392,8 @@ private:
     void ResolveGpuMarks();
     void ReadGpuMarks();
     // tests ("drawtimes" on the control channel): the next frame's draws timed one by one, logged (the GPU's time
-    // since the draw before, what each was)
-    static constexpr uint32_t kDrawTimes = 4096;
+    // from just before each to just after it, what each was)
+    static constexpr uint32_t kDrawTimes = 8192;
     struct DrawTime {
         uint64_t tex, vs, ps;
         uint32_t w, h, count, topo, blend, scene;
@@ -1542,6 +1670,22 @@ private:
         Ref<rhi::Resource> vb, ib;
     };
     std::unordered_map<const void*, Resident> resident_;
+    // the game's vertices and indices that stay as they are (StaticCopy): a copy kept in upload memory the GPU reads,
+    // made again only when a page of theirs was written (mem::WatchWrites); written again and again, as they were
+    struct StaticCopyEntry {
+        rhi::GpuVa va = 0;
+        uint64_t gen = 0;
+        uint64_t frame = 0;    // made again last
+        uint32_t changes = 0;  // made again soon after the time before, in a row
+        bool dynamic = false;
+    };
+    std::unordered_map<uint64_t, StaticCopyEntry> static_copies_;
+    std::vector<Ref<rhi::Resource>> static_pool_;
+    uint8_t* static_map_ = nullptr;
+    rhi::GpuVa static_va_ = 0;
+    uint64_t static_used_ = 0, static_total_ = 0;
+    int static_level_ = -1;
+    rhi::GpuVa StaticCopy(const void* src, uint32_t bytes, uint64_t keep = 0, uint64_t keep_gen = 0);
     const Resident& ResidentOf(const Assembled& a);
     std::vector<uint8_t> weapon_vdrop_;  // WeaponPieces: each vertex of a piece left out
     bool tearing_ = false;
@@ -1596,9 +1740,9 @@ void Renderer::CreateBackBufferViews() {
 
 void Renderer::CreateHeaps() {
     rhi::HeapSizes hs;
-    hs.srv = kSrvCount + kUiDescriptors + 8;  // (a table at the last of them reads 7 places)
+    hs.srv = kSrvCount + kUiDescriptors + 8 + 2 * kSrvPersistHalf + 8;  // (a table at the last of them reads 7 places)
     hs.sampler = kSamplerCount + 4;  // the overlay's at the end
-    hs.rtv = kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 18;
+    hs.rtv = kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 19;
     hs.dsv = kDsvCount;
     dev_->CreateHeaps(hs);
     for (uint32_t i = kRtvCount; i-- > 0;) free_rtv_.push_back(i);
@@ -2892,11 +3036,18 @@ uint64_t Renderer::FixedShader(uint64_t id, const std::string& src, const char* 
     return h;
 }
 
+// XBE_DUMP_HLSL's list (hashes in hex, comma separated) has h
+bool DumpWanted(const char* list, uint64_t h) {
+    char hex[17];
+    std::snprintf(hex, sizeof(hex), "%016llx", (unsigned long long)h);
+    return std::strstr(list, hex) != nullptr;
+}
+
 rhi::Blob* Renderer::Compile(const std::string& src, const char* entry, const char* profile, uint64_t& hash) {
     hash = SourceHash(src, entry, profile);
-    // tests: XBE_DUMP_HLSL=<hash in hex>: that shader's source in logs/hlsl_<hash>.hlsl
+    // tests: XBE_DUMP_HLSL=<hashes in hex, comma separated>: those shaders' sources in logs/hlsl_<hash>.hlsl
     static const char* dump = std::getenv("XBE_DUMP_HLSL");
-    if (dump && std::strtoull(dump, nullptr, 16) == hash) {
+    if (dump && DumpWanted(dump, hash)) {
         char name[64];
         std::snprintf(name, sizeof(name), "hlsl_%016llx.hlsl", (unsigned long long)hash);
         if (FILE* f = _wfopen((app::ExeDir() / "logs" / name).c_str(), L"wb")) {
@@ -3031,6 +3182,7 @@ void Renderer::Pass(const char* hlsl, const char* entry, DXGI_FORMAT rtv, rhi::V
     pass_floats_ = 8;
     cl_->SetTargets(1, &rh, nullptr);
     SetFullViewport(w, h);
+    if (pass_rect_.right > 0) SetScissor(pass_rect_), pass_rect_ = {};
     if (blend >= 0) {
         float f[4] = {blend, blend, blend, blend};
         SetBlendFactor(f);
@@ -3325,7 +3477,7 @@ struct PaletteCache {
     uint32_t colours[256] = {};
     uint64_t hash = 0;
 };
-PaletteCache g_palettes[16];
+PaletteCache g_palettes[256];  // (by address: a few dozen palettes in turn no longer hashed again each bind)
 
 // a P8 texture is decoded with the stage's palette: 256 colours, fewer by the size code in the top two bits
 void ReadStagePalette(const State& s, int stage, const TextureDesc& d, StagePalette& palette) {
@@ -3339,7 +3491,7 @@ void ReadStagePalette(const State& s, int stage, const TextureDesc& d, StagePale
     uint32_t size_code = kernel::R32(header + kPaletteCommon) >> kPaletteSizeShift;
     size_t bytes = (std::size(g_palettes[0].colours) >> size_code) * sizeof(uint32_t);
     const void* src = kernel::HostPtr(palette.va);
-    PaletteCache& e = g_palettes[(palette.va >> 4) & 15];
+    PaletteCache& e = g_palettes[(palette.va >> 4) & 255];
     if (e.va != palette.va || e.bytes != bytes || std::memcmp(e.colours, src, bytes)) {
         std::memset(e.colours, 0, sizeof(e.colours));
         std::memcpy(e.colours, src, bytes);
@@ -3361,14 +3513,22 @@ rhi::Resource* Renderer::BindGuestTexture(const State& s, int stage, const Textu
     uint32_t total = TotalSize(d);
     bool same = SameTexture(tx, d);
     if (!same && !CreateTexture(tx, d, fi, key)) return nullptr;
-    // cheap change check once per frame: lock epochs plus a sample of the bytes
+    // cheap change check once per frame: lock epochs plus a sample of the bytes. A texture whose bytes stayed the
+    // same for 600 checks in a row (the level's own, nearly all of them) has its bytes hashed every fourth frame
+    // (by its address: a quarter of them each frame), its lock epoch and palette every frame: a write without a
+    // lock to one of those shows at most three frames late
     if (tx.frame != presents_ + 1 || !same || tx.palette != palette.hash) {
         tx.frame = presents_ + 1;
-        tx.palette = palette.hash;
+        const uint64_t epoch = DirtyEpoch(d.data);
+        static const bool every = std::getenv("XBE_SIG_EVERY_FRAME") != nullptr;  // (tests)
+        const bool rest = !every && same && tx.palette == palette.hash && epoch == tx.epoch && tx.steady >= 600 &&
+                          ((presents_ + (d.data >> 12)) & 3) != 0;
+        tx.palette = palette.hash, tx.epoch = epoch;
         const uint8_t* p = static_cast<const uint8_t*>(kernel::HostPtr(d.data));
         PerfClock::time_point perf_t = g_draw_timers ? PerfClock::now() : PerfClock::time_point{};
-        uint64_t sig = MemSig(d.data, total) ^ DirtyEpoch(d.data) ^ palette.hash;
+        uint64_t sig = rest ? tx.sig : MemSig(d.data, total) ^ epoch ^ palette.hash;
         if (g_draw_timers) g_perf.sig += PerfMs(perf_t);
+        if (!rest) tx.steady = sig == tx.sig && same ? tx.steady + 1 : 0;
         if (sig != tx.sig || !same) {
             PerfScope perf_up{g_perf.texup};
             g_perf.texups++;
@@ -3583,10 +3743,16 @@ std::string VertexHlsl(const State& s, const Assembled& a, const DrawShaders& sh
 
 // sets sh.vh and sh.vs_code, compiling the shader on a cache miss
 void Renderer::EnsureVertexShader(const State& s, const Assembled& a, DrawShaders& sh) {
+    ShaderHit& hit = shader_hits_[size_t(sh.vkey * 0x9E3779B97F4A7C15ull >> 53)];
+    if (hit.key == sh.vkey && hit.code) {
+        sh.vs_code = hit.code, sh.vh = hit.h;
+        return;
+    }
     auto vit = shader_src_.find(sh.vkey);
     if (vit != shader_src_.end()) {
         sh.vs_code = blobs_[vit->second].Get();
         sh.vh = vit->second;
+        hit = {sh.vkey, sh.vh, sh.vs_code};
         return;
     }
     std::string src = VertexHlsl(s, a, sh);
@@ -3613,18 +3779,25 @@ bool Renderer::BindStageTexturesAndTargets(const State& s, DrawTextures& stages)
 // sets sh.ph and sh.ps_code, compiling the shader on a cache miss
 void Renderer::EnsurePixelShader(const PixelKey& pk, DrawShaders& sh) {
     // pixel shaders share the map with vertex shaders, the salt keeps their keys apart
-    auto pit = shader_src_.find(sh.pkey ^ kPixelKeySalt);
+    const uint64_t key = sh.pkey ^ kPixelKeySalt;
+    static const char* dump = std::getenv("XBE_DUMP_HLSL");
+    ShaderHit& hit = shader_hits_[size_t(key * 0x9E3779B97F4A7C15ull >> 53)];
+    if (hit.key == key && hit.code && !dump) {
+        sh.ps_code = hit.code, sh.ph = hit.h;
+        return;
+    }
+    auto pit = shader_src_.find(key);
     if (pit != shader_src_.end()) {
         sh.ps_code = blobs_[pit->second].Get();
         sh.ph = pit->second;
+        hit = {key, sh.ph, sh.ps_code};
         // (tests: XBE_DUMP_HLSL, a shader known from the cache: its source made again)
-        static const char* dump = std::getenv("XBE_DUMP_HLSL");
-        static bool dumped = false;
-        if (dump && !dumped && std::strtoull(dump, nullptr, 16) == sh.ph) {
-            dumped = true;
+        static std::unordered_set<uint64_t> dumped;
+        if (dump && DumpWanted(dump, sh.ph) && dumped.insert(sh.ph).second) {
             uint64_t h = 0;
             blobs_.erase(sh.ph);
             sh.ps_code = Compile(PixelHlsl(pk), "main", "ps_5_0", h);
+            hit = {};
         }
         return;
     }
@@ -3891,20 +4064,37 @@ void FillLightConstants(const State& s, const FixedKey& fk, DrawConstants& c) {
 
 void Renderer::UploadConstants(const State& s, const DrawShaders& sh, const PsoKey& k, const DrawTextures& stages,
                                    GuestExtent size, DrawConstants& c) {
-    // the vertex constants (as the extension leaves them): uploaded when they differ from the last draw's this frame
+    // the vertex constants (as the extension leaves them): uploaded when they differ from the last draw's this frame.
+    // Without an extension, by the render thread's count of their changes (g_vsc_changes: 3 KB no longer compared and
+    // copied each draw), else compared
     static thread_local std::array<std::array<float, 4>, 192> vsc;
-    vsc = s.vsc;
+    const std::array<std::array<float, 4>, 192>* vp = &s.vsc;
     FillSurfaceConstants(s, size, c);
     FillFogConstants(s, sh.prog, c);
     FillCombinerConstants(s, c);
-    if (ext_) ext_->Constants(reinterpret_cast<float(*)[4]>(vsc.data()), c.ext, bound_rt_, k.blend ? k.src : 1);
+    if (ext_) {
+        vsc = s.vsc;
+        ext_->Constants(reinterpret_cast<float(*)[4]>(vsc.data()), c.ext, bound_rt_, k.blend ? k.src : 1);
+        vp = &vsc;
+    }
     static const bool no_reuse = std::getenv("XBE_TEST_NO_CB_REUSE") != nullptr;  // tests
     if (no_reuse) vc_gen_ = dc_gen_ = ~0ull;
-    if (vc_gen_ != ring_gen_ || std::memcmp(&vsc, &vc_sent_, sizeof(vsc))) {
+    static const bool compare = std::getenv("XBE_VSC_COMPARE") != nullptr;  // (tests: compared as before)
+    const bool counted = !ext_ && g_vsc_changes != 0 && !compare;
+    // tests (XBE_VSC_CHECK): where the count says nothing changed, the constants compared with the last uploaded too
+    static const bool vsc_check = std::getenv("XBE_VSC_CHECK") != nullptr;
+    if (vsc_check && counted && vc_gen_ == ring_gen_ && vc_changes_ == g_vsc_changes) {
+        static std::atomic<uint64_t> runs{0}, off{0};
+        if (std::memcmp(vp, &vc_sent_, sizeof(vc_sent_))) off++;
+        if (++runs % 100000 == 0) LOGR("constants: %llu draws kept the last constants, %llu of them apart", (unsigned long long)runs.load(),
+                                       (unsigned long long)off.load());
+    }
+    if (vc_gen_ != ring_gen_ || (counted ? vc_changes_ != g_vsc_changes : std::memcmp(vp, &vc_sent_, sizeof(vsc)) != 0)) {
         Alloc vc = Upload(sizeof(s.vsc) + kShadowConstantsTail, 256);
-        std::memcpy(vc.cpu, vsc.data(), sizeof(vsc));
+        std::memcpy(vc.cpu, vp->data(), sizeof(vsc));
         last_vc_ = vc.gpu, last_tail_ = vc.cpu + sizeof(s.vsc);
-        vc_sent_ = vsc, vc_gen_ = ring_gen_;
+        if (!counted || vsc_check) vc_sent_ = *vp;
+        vc_gen_ = ring_gen_, vc_changes_ = g_vsc_changes;
     }
     FillTextureConstants(s, stages, c);
     if (stages.mat) {
@@ -4025,8 +4215,7 @@ void Renderer::UploadConstants(const State& s, const DrawShaders& sh, const PsoK
             }
         }
         if (m.water && set.water) {
-            static const auto t0 = std::chrono::steady_clock::now();
-            float t = std::chrono::duration<float>(std::chrono::steady_clock::now() - t0).count();
+            float t = Seconds();
             c.mrefl[0] = 0.8f;
             c.mrefl[2] = -(0.1f + std::fmod(t, 600.0f));
             // the world's up in view space (trail[1]: the shader's flat water)
@@ -4223,46 +4412,97 @@ void Renderer::SetTextureViewsAndSamplers(const State& s, const Assembled& a, Dr
         }
         views[i] = {stages.res[i], sv};
     }
-    // the table: made already this frame, or made now
+    // the table: kept from the frames before (the persistent tables), made already this frame (the frame's ring), or
+    // made now
     uint64_t key = Hash(views, sizeof(views)) | 1;
-    auto sync = [&] {
-        uint64_t epoch = res_epoch_.load(std::memory_order_relaxed);
-        if (srv_ring_gen_ != ring_gen_ || srv_epoch_ != epoch) srv_gen_++, srv_ring_gen_ = ring_gen_, srv_epoch_ = epoch, srv_last_key_ = 0;
-    };
-    sync();
-    uint32_t slot = 0;
-    bool found = false;
-    const size_t mask = srv_tables_.size() - 1;
-    if (key == srv_last_key_) {
-        slot = srv_last_slot_, found = true;
-    } else {
-        for (size_t i = key & mask, n = 0; n < 8; i = (i + 1) & mask, n++) {
-            const SrvTable& t = srv_tables_[i];
-            if (t.gen != srv_gen_) break;
+    {
+        const uint64_t epoch = res_epoch_.load(std::memory_order_relaxed);
+        if (persist_epoch_ != epoch || persist_full_ || !persist_ok_) {
+            const uint32_t other = 1 - persist_half_;
+            if (frame_ >= persist_left_[other] + kFrames) {
+                persist_left_[persist_half_] = frame_;
+                static const bool plog = std::getenv("XBE_PERSIST_LOG") != nullptr;  // (tests: why the tables were made again)
+                if (plog) LOGR("tables: half %u -> %u at frame %llu (%s, %u slots used)", persist_half_, other, (unsigned long long)frame_,
+                               persist_epoch_ != epoch ? "resources" : persist_full_ ? "full" : "start", persist_used_);
+                persist_half_ = other, persist_used_ = 0, persist_gen_++, persist_epoch_ = epoch, persist_full_ = false, persist_ok_ = true;
+            } else if (persist_epoch_ != epoch) {
+                persist_ok_ = false;  // (its tables name resources gone: the frame's ring until the other half is free)
+            }
+        }
+    }
+    static const bool no_persist = std::getenv("XBE_TEST_NO_PERSIST_TABLES") != nullptr;  // tests
+    bool kept = false;
+    if (persist_ok_ && !persist_full_ && !no_persist) {
+        const size_t pmask = persist_tables_.size() - 1;
+        for (size_t i = key & pmask, n = 0; n < 8; i = (i + 1) & pmask, n++) {
+            const SrvTable& t = persist_tables_[i];
+            if (t.gen != persist_gen_) break;
             if (t.key == key) {
-                slot = t.slot, found = true;
+                g_perf.srv_hits++;
+                last_srv_ = Gpu(rhi::Heap::Srv, t.slot);
+                kept = true;
                 break;
             }
         }
+        if (!kept && persist_used_ + 7 <= kSrvPersistHalf) {
+            const uint32_t slot = kSrvCount + kUiDescriptors + 8 + persist_half_ * kSrvPersistHalf + persist_used_;
+            persist_used_ += 7;
+            for (uint32_t i = 0; i < 7; i++) dev_->CreateSrv(views[i].r, &views[i].d, Cpu(rhi::Heap::Srv, slot + i));
+            size_t at = key & pmask;
+            for (size_t n = 0; n < 8; n++) {
+                size_t i = (size_t(key) + n) & pmask;
+                if (persist_tables_[i].gen != persist_gen_) {
+                    at = i;
+                    break;
+                }
+            }
+            persist_tables_[at] = {key, persist_gen_, slot};
+            last_srv_ = Gpu(rhi::Heap::Srv, slot);
+            kept = true;
+        }
+        if (!kept) persist_full_ = true;
     }
-    g_perf.srv_hits += found;
-    if (!found) {
-        slot = AllocSrvSlots(7);
-        sync();  // (a wrapped ring is another generation)
-        for (uint32_t i = 0; i < 7; i++) dev_->CreateSrv(views[i].r, &views[i].d, Cpu(rhi::Heap::Srv, slot + i));
-        size_t at = key & mask;
-        for (size_t n = 0; n < 8; n++) {  // a free place near the key's, else its own
-            size_t i = (size_t(key) + n) & mask;
-            if (srv_tables_[i].gen != srv_gen_) {
-                at = i;
-                break;
+    if (kept) cl_->SetTable(2, last_srv_);
+    else {
+        auto sync = [&] {
+            uint64_t epoch = res_epoch_.load(std::memory_order_relaxed);
+            if (srv_ring_gen_ != ring_gen_ || srv_epoch_ != epoch) srv_gen_++, srv_ring_gen_ = ring_gen_, srv_epoch_ = epoch, srv_last_key_ = 0;
+        };
+        sync();
+        uint32_t slot = 0;
+        bool found = false;
+        const size_t mask = srv_tables_.size() - 1;
+        if (key == srv_last_key_) {
+            slot = srv_last_slot_, found = true;
+        } else {
+            for (size_t i = key & mask, n = 0; n < 8; i = (i + 1) & mask, n++) {
+                const SrvTable& t = srv_tables_[i];
+                if (t.gen != srv_gen_) break;
+                if (t.key == key) {
+                    slot = t.slot, found = true;
+                    break;
+                }
             }
         }
-        srv_tables_[at] = {key, srv_gen_, slot};
+        g_perf.srv_hits += found;
+        if (!found) {
+            slot = AllocSrvSlots(7);
+            sync();  // (a wrapped ring is another generation)
+            for (uint32_t i = 0; i < 7; i++) dev_->CreateSrv(views[i].r, &views[i].d, Cpu(rhi::Heap::Srv, slot + i));
+            size_t at = key & mask;
+            for (size_t n = 0; n < 8; n++) {  // a free place near the key's, else its own
+                size_t i = (size_t(key) + n) & mask;
+                if (srv_tables_[i].gen != srv_gen_) {
+                    at = i;
+                    break;
+                }
+            }
+            srv_tables_[at] = {key, srv_gen_, slot};
+        }
+        srv_last_key_ = key, srv_last_slot_ = slot;
+        last_srv_ = Gpu(rhi::Heap::Srv, slot);
+        cl_->SetTable(2, last_srv_);
     }
-    srv_last_key_ = key, srv_last_slot_ = slot;
-    last_srv_ = Gpu(rhi::Heap::Srv, slot);
-    cl_->SetTable(2, last_srv_);
     uint32_t samplers = EnsureStageSamplers(s, stages, UnitTexcoords(a));
     last_smp_ = Gpu(rhi::Heap::Sampler, samplers);
     SetSamplerTable(last_smp_);
@@ -4327,6 +4567,58 @@ const Renderer::Resident& Renderer::ResidentOf(const Assembled& a) {
     return it->second;
 }
 
+// The game's vertices or indices as they lie in its memory (or what was made from them on the CPU: keep, its key and
+// its source's generation), a copy the GPU reads kept while none of their pages was
+// written since (0: copied each draw as before): physical memory (its buffers), not changed within 30 frames of the
+// copy before three times in a row (those written each frame or so, the effects', copied each draw), 512 MB at most
+// a level
+rhi::GpuVa Renderer::StaticCopy(const void* src, uint32_t bytes, uint64_t keep, uint64_t keep_gen) {
+    static const bool off = std::getenv("XBE_NO_STATIC_COPIES") != nullptr;  // tests: as before
+    if (off || !bytes || !src) return 0;
+    uint32_t va = 0;
+    uint64_t gen = keep_gen;
+    if (!keep) {
+        const uintptr_t at = reinterpret_cast<uintptr_t>(src) - reinterpret_cast<uintptr_t>(mem::Base());
+        if (at >= (1ull << 32)) return 0;
+        va = uint32_t(at);
+        gen = mem::WriteGeneration(va, bytes);
+        if (gen == ~0ull) return 0;
+    }
+    if (static_level_ != g_level.load()) {
+        static_level_ = g_level.load(), static_copies_.clear();
+        for (auto& r : static_pool_) Release(std::move(r));
+        static_pool_.clear(), static_map_ = nullptr, static_va_ = 0, static_used_ = static_total_ = 0;
+    }
+    const uint64_t key = keep ? keep : (uint64_t(va) << 32) | bytes;
+    StaticCopyEntry& e = static_copies_[key];
+    if (e.dynamic) return 0;
+    if (e.va && e.gen == gen) return e.va;
+    if (e.va) {
+        e.changes = frame_ - e.frame < 30 ? e.changes + 1 : 1;
+        if (e.changes >= 3) return e.dynamic = true, e.va = 0, 0;
+    }
+    // (a new chunk of 32 MB when the last is full; the old copy's room left as it is)
+    constexpr uint64_t kChunk = 32ull << 20;
+    if (bytes > kChunk / 4) return 0;
+    const uint64_t o = (static_used_ + 255) & ~255ull;
+    if (!static_map_ || o + bytes > kChunk) {
+        if (static_total_ + kChunk > (512ull << 20)) return 0;
+        Ref<rhi::Resource> r;
+        CreateResource(rhi::HeapType::Upload, BufferDesc(kChunk), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, r);
+        if (!r) return 0;
+        static_map_ = reinterpret_cast<uint8_t*>(r->Map()), static_va_ = r->Va(), static_used_ = 0, static_total_ += kChunk;
+        static_pool_.push_back(std::move(r));
+        return StaticCopy(src, bytes, keep, keep_gen);
+    }
+    // (watched first, its generation then: a write after the watch counts, the copy has it or the next draw makes it)
+    if (!keep) mem::WatchWrites(va, bytes);
+    e.gen = keep ? keep_gen : mem::WriteGeneration(va, bytes);
+    std::memcpy(static_map_ + o, src, bytes);
+    e.va = static_va_ + o, e.frame = frame_;
+    static_used_ = o + bytes;
+    return e.va;
+}
+
 void Renderer::UploadVertexBuffers(const Assembled& a) {
     D3D12_VERTEX_BUFFER_VIEW vbv[16];
     if (a.resident) {
@@ -4337,6 +4629,12 @@ void Renderer::UploadVertexBuffers(const Assembled& a) {
     }
     for (uint32_t i = 0; i < a.buffer_count; i++) {
         const VertexBuffer& b = a.buffers[i];
+        if (!(recolor_ && recolor_elem_.buffer == i))
+            if (const rhi::GpuVa kept = StaticCopy(b.src, b.bytes, b.keep, b.keep_gen)) {
+                vbv[i] = {kept, b.bytes, b.stride};
+                last_vbv_[i] = vbv[i];
+                continue;
+            }
         Alloc vb = Upload(b.bytes, 16);
         std::memcpy(vb.cpu, b.src, b.bytes);
         vbv[i] = {vb.gpu, b.bytes, b.stride};
@@ -4431,9 +4729,13 @@ void Renderer::DrawGeometry(const Assembled& a) {
     }
     if (a.index_count) {
         uint32_t ibytes = a.index_count * (a.index16 ? 2 : 4);
-        Alloc ib = Upload(ibytes, 4);
-        std::memcpy(ib.cpu, a.index_src, ibytes);
-        D3D12_INDEX_BUFFER_VIEW ibv{ib.gpu, ibytes, a.index16 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT};
+        rhi::GpuVa iva = StaticCopy(a.index_src, ibytes);
+        if (!iva) {
+            Alloc ib = Upload(ibytes, 4);
+            std::memcpy(ib.cpu, a.index_src, ibytes);
+            iva = ib.gpu;
+        }
+        D3D12_INDEX_BUFFER_VIEW ibv{iva, ibytes, a.index16 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT};
         last_ibv_ = ibv;
         cl_->SetIndexBuffer(&ibv);
         cl_->DrawIndexed(a.index_count, 1, 0, a.base_vertex, 0);
@@ -4582,6 +4884,17 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
         if (!id) break;
         if (id == stages.id[0]) return;
     }
+    // tests (XBE_HIDE_REGS=<texture>:<registers>): that texture's draws of those input registers alone hidden
+    {
+        static const std::pair<uint64_t, uint32_t> hide_regs = [] {
+            const char* e = std::getenv("XBE_HIDE_REGS");
+            unsigned long long t = 0;
+            unsigned r = 0;
+            if (e) std::sscanf(e, "%llx:%x", &t, &r);
+            return std::pair<uint64_t, uint32_t>{t, r};
+        }();
+        if (hide_regs.first && draw_tex0_ == hide_regs.first && a.regs == hide_regs.second) return;
+    }
     // tests (XBE_HIDE_BLENDED): the blended draws alone of a hidden texture's id
     {
         static const uint64_t blended = [] {
@@ -4599,6 +4912,7 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
                  SimpleState(s, kMBlendEnable) && SimpleState(s, kMSrcBlend) == 0x302 && !SimpleState(s, kMZWriteEnable) &&
                  (soft_saved_ || (soft_saved_ = CopyDepth(*bound_ds_)));
     pk.soft = soft_draw_ ? 1 : 0;
+    if (bound_ds_ && bound_ds_ == scene_ds_ && SimpleState(s, kMZWriteEnable)) depth_copy_fresh_ = false;
     if (app::Get().pixel_lighting && !s.layout2d && !a.pretransformed) {
         // (the vertex shader's key holds what the id is made from: the program or fixed function key and the
         // registers; looked up once a shader)
@@ -4868,9 +5182,37 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
     weapon_filter_ = false;
     // (a remastered mesh: the pieces found on the original, each of its triangles left out with the original's
     // vertices it is made from)
-    if (c.layout[2] > 0 && c.layout[2] < 1 && sh.prog && a.topology == Topology::Triangles && (!mesh_ || mesh_floats || (mesh_floats = AssembleFloats(s, prim, start, count, indices, mesh_asm_))) &&
-        WeaponPieces(s, mesh_ ? mesh_asm_ : a, sh)) {
+    // (the original's floats kept by where it is drawn from while its guest bytes are the same, ContentHash: not
+    // converted again each frame; those bytes' hash its model's check)
+    const Assembled* weapon_from = mesh_ ? nullptr : &a;
+    uint64_t weapon_check = 0;
+    if (c.layout[2] > 0 && c.layout[2] < 1 && sh.prog && a.topology == Topology::Triangles && mesh_) {
+        if (mesh_floats) {
+            weapon_from = &mesh_asm_;
+        } else {
+            const uint32_t fields[] = {prim, start, count, s.streams[0].vb ? kernel::R32(s.streams[0].vb + 4) : 0u, s.streams[0].stride, s.base_vertex,
+                                       s.vs_handle};
+            if (weapon_floats_.size() > 64) weapon_floats_.clear();
+            WeaponFloats& wf = weapon_floats_[Hash(fields, sizeof(fields))];
+            const uint64_t content = ContentHash(s, prim, start, count, indices);
+            if (!content || wf.content != content || !wf.ok) {
+                wf.ok = AssembleFloats(s, prim, start, count, indices, wf.a);
+                wf.content = content;
+            }
+            if (wf.ok) weapon_from = &wf.a, weapon_check = content;
+        }
+    }
+    if (c.layout[2] > 0 && c.layout[2] < 1 && sh.prog && a.topology == Topology::Triangles && weapon_from &&
+        WeaponPieces(s, *weapon_from, sh, weapon_check)) {
         c.layout[2] = 0;
+        // (its pieces worked out here: its pipeline without the geometry shader's triangle test, which would let
+        // every triangle through)
+        static const bool keep_gs = std::getenv("XBE_WEAPON_KEEP_GS") != nullptr;  // (tests)
+        if ((k.topo & kWeaponCullKey) && !keep_gs) {
+            k.topo &= ~kWeaponCullKey;
+            if (rhi::Pipeline* plain = EnsurePipeline(k, sh.vs_code, sh.ps_code)) SetPso(plain);
+            else k.topo |= kWeaponCullKey;
+        }
         if (mesh_ && weapon_filter_ && mesh_->tri_source.size() == mesh_->indices.size() / 3) {
             // (each of its triangles out with the original's it was made from)
             const std::vector<uint8_t> orig = weapon_keep_;
@@ -4953,8 +5295,7 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
         if (const remaster::Material* m = remaster::Find(draw_tex0_)) {
             // (the trees are lit models as characters are: foliage sways lit or not, cloth only where no one wears it)
             if (m->sway >= 1 || (m->sway > 0 && !draw_character_)) {
-                static const auto t0 = std::chrono::steady_clock::now();
-                float t = std::chrono::duration<float>(std::chrono::steady_clock::now() - t0).count();
+                float t = Seconds();
                 float p11 = cam_ok_ && cam_proj_[5] > 0 ? cam_proj_[5] : 1.6f;
                 c.mrefl[3] = m->sway * 6.0f * float(size.h) * 0.5f * p11;
                 c.tess2[1] = std::fmod(t, 1000.0f);
@@ -4970,8 +5311,7 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
     if (emitter && hdr_ && glow.glow > 1 && app::Get().bloom) c.layout[3] = glow.glow;
     // a flame's sprite: the time for its inner flow (Animated Fire), its flicker kind (fire, not a shot's flash)
     if (emitter && glow.flicker && app::Get().animated_fire && !tess_draw_) {
-        static const auto t0 = std::chrono::steady_clock::now();
-        c.tess2[0] = 0.1f + std::fmod(std::chrono::duration<float>(std::chrono::steady_clock::now() - t0).count(), 500.0f);
+        c.tess2[0] = 0.1f + std::fmod(Seconds(), 500.0f);
     }
     // falling water (the pipes' and the sewer's waterfall sheets, water_flowing: nearly black, their texture's streaks
     // lit only by the dark prelit colours): the sheet's texture runs down it and the water catches the light (Water)
@@ -4979,12 +5319,11 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
         static const uint64_t kFlowing[] = {0x3d399e0f1b26898bull, 0xdf5acfa8682d9ea1ull, 0xe15b8faaa2324069ull};
         for (uint64_t id : kFlowing)
             if (draw_tex0_ == id) {
-                static const auto t0 = std::chrono::steady_clock::now();
                 static const float speed = [] {
                     const char* e = std::getenv("XBE_FLOW_SPEED");
                     return e ? float(std::atof(e)) : 0.9f;
                 }();
-                c.flow[0] = 0.1f + std::fmod(std::chrono::duration<float>(std::chrono::steady_clock::now() - t0).count(), 600.0f);
+                c.flow[0] = 0.1f + std::fmod(Seconds(), 600.0f);
                 // the game's own flow when its sector draws the material's animation (src/game/matfx.cpp: the
                 // texture transform set), else ours along u
                 c.flow[1] = s.tss[0][kTssTextureTransformFlags] ? 0.0f : speed, c.flow[2] = 2.6f, c.flow[3] = 1.15f;
@@ -4996,8 +5335,7 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
         static const uint64_t kProps[] = {0x0e83fc4858f212cfull, 0x1f00add88e7ed459ull, 0xd63f67e622630665ull};
         for (uint64_t id : kProps)
             if (draw_tex0_ == id) {
-                static const auto t0 = std::chrono::steady_clock::now();
-                float t = std::chrono::duration<float>(std::chrono::steady_clock::now() - t0).count();
+                float t = Seconds();
                 c.flow[0] = -1, c.flow[1] = std::fmod(t * 40.0f, 6.2831853f), c.flow[2] = 0.85f;
                 c.flow[3] = std::fmod(t * 9.0f, 6.2831853f);  // the blades' faint sweep (slower than the spin: its strobe)
             }
@@ -5107,9 +5445,11 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
 
     // geometry (falling water's later: DrawLate)
     if (!KeepLate(a, k, flat)) {
+        const bool timed = dt_state_ == 1 && dt_info_.size() * 2 + 2 < kDrawTimes;
+        if (timed) cl_->Timestamp(dt_q_.Get(), uint32_t(dt_info_.size() * 2 + 1));
         DrawGeometry(a);
-        if (dt_state_ == 1 && dt_info_.size() + 1 < kDrawTimes) {
-            cl_->Timestamp(dt_q_.Get(), uint32_t(dt_info_.size() + 1));
+        if (timed) {
+            cl_->Timestamp(dt_q_.Get(), uint32_t(dt_info_.size() * 2 + 2));
             dt_info_.push_back({draw_tex0_, k.vs, k.ps, bound_rt_ ? bound_rt_->w : 0, bound_rt_ ? bound_rt_->h : 0,
                                 a.index_count ? a.index_count : a.draw_count, k.topo, k.blend, uint32_t(bound_rt_ && bound_rt_ == scene_rt_)});
         }
@@ -5120,7 +5460,6 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
     if (stages.mat && stages.mat->m && stages.mat->m->water && app::Get().water && app::Get().water_interaction)
         RecordWaterTop(s, a, sh, k);
     RecordVeil(s, a, sh, k, stages);
-    RecordMotion(s, a, sh, k);
     if (map_on_) CollectMap(s, a, sh, pk, k);
 }
 
@@ -5320,6 +5659,7 @@ void Renderer::Clear(const State& s, uint32_t count, const uint8_t* rects, uint3
     if (ds && ds == scene_ds_ && (flags & kClearZ) && !occlusion_done_) {
         SceneOcclusion();
         SaveWorldDepth(*ds);
+        depth_copy_fresh_ = false;  // (the clear to come)
         GpuMark("world depth copy");
         // the sky's clouds, sun and moon on the world now: the weapon in hand drawn over them (its see-through parts
         // show them too)
@@ -6071,244 +6411,49 @@ void Renderer::ResolveLight() {
     shadow_q_ = shadow::QualityFor(app::Get().shadow_quality, mf.units);
 }
 
-// A draw for the screen's velocity (MotionPass): the 3D's opaque and cut out draws before the weapon in hand, matched
-// to the frame before's by what they draw (their shader, vertices, texture) and their order among the alike
-void Renderer::RecordMotion(const State& s, const Assembled& a, const DrawShaders& sh, const PsoKey& k) {
-    const app::Settings& set = app::Get();
-    if (!set.motion_blur || s.layout2d || a.pretransformed || sh.quad) return;
-    if (!bound_rt_ || bound_rt_ != scene_rt_ || bound_ds_ != scene_ds_ || a.topology != Topology::Triangles) return;
-    // what is drawn into the depth (solid, cut out), and what is seen through (smoke, sparks, fire, tracers: over
-    // what is behind them, flagged)
-    const bool over = !(k.zwrite && (!k.blend || SimpleState(s, kMAlphaTestEnable)));
-    if (!k.zen && !over) return;
-    uint64_t ident[6] = {sh.vkey, uint64_t(reinterpret_cast<uintptr_t>(a.buffer_count ? a.buffers[0].src : nullptr)),
-                         uint64_t(a.vertex_count) << 32 | a.index_count, uint64_t(uint32_t(a.base_vertex)) << 32 | a.draw_count,
-                         draw_tex0_, 0};
-    uint64_t base = Hash(ident, sizeof(ident));
-    uint32_t order = motion_order_.Get(base)++;
-    uint64_t key = Hash(&base, 8, order);
-    motion_cur_.Get(key) = {last_vc_, last_dc_, ring_gen_};
-    const MotionSeen* prev = motion_prev_.Find(key);
-    // new this frame (or its constants rewritten by a flush since): the camera's motion alone
-    if (!prev || prev->gen != motion_prev_gen_) return;
-    // one of many alike (shell casings, debris): their order changes between frames, matched by it they swap
-    // motions and smear; the camera's motion alone
-    const uint32_t* many = motion_counts_prev_.Find(base);
-    if (order > 0 || (many && *many > 1)) return;
-    if (motion_.empty()) motion_gen_ = ring_gen_;
-    if (motion_gen_ != ring_gen_ || motion_.size() >= 8192) return;
-    // its motion vertex shader and pipeline
-    auto vit = motion_vs_.find(sh.vkey);
-    if (vit == motion_vs_.end()) {
-        std::string src = MotionVertexHlsl(VertexHlsl(s, a, sh), unsigned(offsetof(DrawConstants, wvp) / 16));
-        uint64_t h = 0;
-        if (src.empty() || !Compile(src, "motion", "vs_5_0", h)) h = 0;
-        vit = motion_vs_.emplace(sh.vkey, h).first;
+rhi::Resource* Renderer::LensDirt(const std::string& text, rhi::GpuVa cb, uint32_t w, uint32_t h) {
+    if (lens_dirt_ && lens_w_ == w && lens_h_ == h) return lens_dirt_.Get();
+    if (lens_dirt_) Release(std::move(lens_dirt_));
+    lens_w_ = lens_h_ = 0;
+    rhi::Pipeline* pso = EnsurePassPipeline(text.c_str(), "lensdirt", DXGI_FORMAT_R32_FLOAT, -1);
+    if (!pso) return nullptr;
+    D3D12_RESOURCE_DESC td = Texture2DDesc(DXGI_FORMAT_R32_FLOAT, w, h);
+    td.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+    D3D12_CLEAR_VALUE cv{};
+    cv.Format = td.Format;
+    lens_dirt_state_ = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    if (!CreateResource(rhi::HeapType::Default, td, lens_dirt_state_, &cv, lens_dirt_)) {
+        lens_dirt_.Reset();
+        return nullptr;
     }
-    if (!vit->second) return;
-    if (!motion_tried_) {
-        motion_tried_ = true;
-        std::string ps = std::string("cbuffer MV : register(b4) {") + kMotionFns + kMotionPsMain;
-        if (!Compile(ps, "main", "ps_5_0", motion_ps_)) motion_ps_ = 0;
-        if (!Compile("#define OVER 1\n" + ps, "main", "ps_5_0", motion_ps_over_)) motion_ps_over_ = 0;
-    }
-    if (!motion_ps_ || (over && !motion_ps_over_)) return;
-    struct {
-        uint64_t vs;
-        uint32_t regs, topo;
-        uint32_t elements[16];
-    } mk{};
-    mk.vs = vit->second, mk.regs = k.regs, mk.topo = (k.topo & 0xFF) | (over ? 0x10000u : 0u);
-    std::memcpy(mk.elements, k.elements, sizeof(mk.elements));
-    uint64_t ph = Hash(&mk, sizeof(mk));
-    auto pit = motion_psos_.find(ph);
-    if (pit == motion_psos_.end()) {
-        Ref<rhi::Pipeline> pso;
-        auto vs = blobs_.find(mk.vs);
-        auto ps = blobs_.find(over ? motion_ps_over_ : motion_ps_);
-        if (vs != blobs_.end() && vs->second && ps != blobs_.end() && ps->second) {
-            D3D12_INPUT_ELEMENT_DESC el[16];
-            uint32_t n = 0;
-            for (uint32_t r = 0; r < 16; r++) {
-                if (!((mk.regs >> r) & 1)) continue;
-                uint32_t e = mk.elements[r];
-                el[n++] = {"ATTR", r, DXGI_FORMAT(e & 0xFF), (e >> 8) & 0xFF, e >> 16, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0};
-            }
-            rhi::PipelineDesc d{};
-            d.layout = rhi::Layout::Motion;
-            d.InputLayout = {el, n};
-            d.VS = vs->second.Get();
-            d.PS = ps->second.Get();
-            d.SampleMask = UINT_MAX;
-            d.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-            d.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-            d.RasterizerState.DepthClipEnable = TRUE;
-            d.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-            d.PrimitiveTopologyType = TopologyType(mk.topo & 0xFF);
-            d.NumRenderTargets = 1;
-            d.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
-            d.SampleDesc.Count = 1;
-            g_perf.psos++;
-            if (!(pso = dev_->CreatePipeline(d))) LOGE("d3d12: motion pipeline creation failed");
-        }
-        pit = motion_psos_.emplace(ph, pso).first;
-    }
-    if (!pit->second) return;
-    MotionDraw m{};
-    m.pso = pit->second.Get();
-    m.vb_count = a.buffer_count;
-    std::memcpy(m.vb, last_vbv_, sizeof(D3D12_VERTEX_BUFFER_VIEW) * a.buffer_count);
-    m.indexed = a.index_count != 0;
-    m.ib = last_ibv_;
-    m.count = a.index_count ? a.index_count : a.draw_count;
-    m.base = a.base_vertex;
-    m.topo = PrimitiveTopology(a);
-    if (tess_draw_) {
-        m.indexed = true;
-        m.count = uint32_t(tess_list_.size());
-        m.base = a.index_count ? a.base_vertex : 0;
-        m.topo = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-    }
-    m.vc = last_vc_, m.dc = last_dc_, m.pvc = prev->vc, m.pdc = prev->dc;
-    m.weapon = occlusion_done_;
-    motion_.push_back(m);
-}
-
-// the velocity passes' parameters (kMotionFns): the projection, the viewport's depth and the size, the view now to the
-// clip space of the frame before, the jitter
-void Renderer::MotionParams(float out[28]) {
-    float mv0[4] = {1 / cam_proj_[0], 1 / cam_proj_[5], cam_proj_[10], cam_proj_[14]};
-    float mv1[4] = {cam_min_z_, cam_max_z_ - cam_min_z_, float(scene_w_), float(scene_h_)};
-    const float* pv = prev_cam_ok_ ? prev_view_ : cam_view_;
-    const float* pp = prev_cam_ok_ ? prev_proj_ : cam_proj_;
-    float inv[16], vp[16], cam[16];
-    if (!shadow::Invert(cam_view_, inv)) std::memcpy(inv, cam_view_, sizeof(inv));
-    shadow::Mul(pv, pp, vp);
-    shadow::Mul(inv, vp, cam);
-    float mv2[4] = {0, 0, 0, 0};
-    std::memcpy(out, mv0, 16), std::memcpy(out + 4, mv1, 16), std::memcpy(out + 8, cam, 64), std::memcpy(out + 24, mv2, 16);
-}
-
-// The screen's velocity into scene_[kSceneVel]: the camera's motion everywhere from the world's depth, then the
-// recorded draws' own (this frame's constants and the frame before's) where the world's depth has them
-void Renderer::MotionPass(Target& rt) {
-    if (!scene_ds_ || !scene_[kSceneVel]) return;
-    Target& ds = *scene_ds_;
-    constexpr DXGI_FORMAT kF16 = DXGI_FORMAT_R16G16B16A16_FLOAT, kDepth = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
-    rhi::Resource* depth = world_depth_saved_ ? world_depth_.Get() : ds.res.Get();
-    Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    if (world_depth_saved_) Transition(world_depth_.Get(), world_depth_state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    float mp[28];
-    MotionParams(mp);
-    // the camera's
-    std::string text = std::string(kPassVs) + "cbuffer MV : register(b1) {" + kMotionFns + kCamVelMain;
-    rhi::Pipeline* pso = EnsurePassPipeline(text.c_str(), "camvel", kF16, -1);
-    if (!pso) {
-        Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-        return;
-    }
+    dev_->CreateRtv(lens_dirt_.Get(), nullptr, LensRtv());
     uint32_t slot = AllocSrvSlots(7);
     for (uint32_t i = 0; i < 7; i++) {
         D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
-        sv.Format = i == 0 ? kDepth : kBgra;
+        sv.Format = kBgra;
         sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         sv.Texture2D.MipLevels = 1;
-        dev_->CreateSrv(i == 0 ? depth : nullptr, &sv, Cpu(rhi::Heap::Srv, slot + i));
+        dev_->CreateSrv(nullptr, &sv, Cpu(rhi::Heap::Srv, slot + i));
     }
-    Transition(scene_[kSceneVel].Get(), scene_state_[kSceneVel], D3D12_RESOURCE_STATE_RENDER_TARGET);
-    rhi::View rh = SceneRtv(kSceneVel);
+    rhi::View rh = LensRtv();
     cl_->SetTargets(1, &rh, nullptr);
-    SetFullViewport(rt.w, rt.h);
-    Alloc cb = Upload(256, 256);
-    std::memcpy(cb.cpu, mp, sizeof(mp));
-    DrawFullScreen(pso, cb.gpu, slot);
-    // the objects' own: the world's against its depth, the weapon in hand's against the depth now (its own)
-    if (!motion_.empty() && motion_gen_ == ring_gen_ && motion_ps_) {
-        uint32_t wslot = AllocSrvSlots(1);
-        {
-            D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
-            sv.Format = kDepth;
-            sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-            sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-            sv.Texture2D.MipLevels = 1;
-            dev_->CreateSrv(ds.res.Get(), &sv, Cpu(rhi::Heap::Srv, wslot));
-        }
-        cl_->SetLayout(rhi::Layout::Motion);
-        cmd_.smp_ok = false;  // (the root's arguments go with its signature)
-        cl_->SetCbv(4, cb.gpu);
-        rhi::Pipeline* bound = nullptr;
-        int table = -1;
-        for (const MotionDraw& m : motion_) {
-            int want = m.weapon ? 1 : 0;
-            if (want != table) {
-                table = want;
-                cl_->SetTable(5, Gpu(rhi::Heap::Srv, want ? wslot : slot));
-            }
-            if (m.pso != bound) SetPso(bound = m.pso);
-            cl_->SetCbv(0, m.vc);
-            cl_->SetCbv(1, m.dc);
-            cl_->SetCbv(2, m.pvc);
-            cl_->SetCbv(3, m.pdc);
-            cl_->SetVertexBuffers(0, m.vb_count, m.vb);
-            SetTopology(m.topo);
-            if (m.indexed) {
-                cl_->SetIndexBuffer(&m.ib);
-                cl_->DrawIndexed(m.count, 1, 0, m.base, 0);
-            } else {
-                cl_->Draw(m.count, 1, 0, 0);
-            }
-        }
-        cl_->SetLayout(rhi::Layout::Main);
-        cl_->SetTable(4, sun_table_);
-        cmd_.smp_ok = false;
-    }
-    Transition(scene_[kSceneVel].Get(), scene_state_[kSceneVel], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+    SetFullViewport(w, h);
+    DrawFullScreen(pso, cb, slot);
+    Transition(lens_dirt_.Get(), lens_dirt_state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     bound_rt_ = bound_ds_ = nullptr;
-    motion_ok_ = true;
-}
-
-// Per object motion blur on the scene's target (kMotionBlurHlsl)
-void Renderer::MotionBlurPass(Target& rt) {
-    if (!scene_ds_) return;
-    std::string text = std::string(kPassVs) + kMotionBlurHlsl;
-    rhi::Pipeline* pso = EnsurePassPipeline(text.c_str(), "mblur", rt.fmt, -1);
-    if (!pso) return;
-    Target& ds = *scene_ds_;
-    CopyScene(rt);
-    Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    std::pair<rhi::Resource*, DXGI_FORMAT> src[3] = {{scene_[0].Get(), rt.fmt},
-                                                      {scene_[kSceneVel].Get(), DXGI_FORMAT_R16G16B16A16_FLOAT},
-                                                      {ds.res.Get(), DXGI_FORMAT_R24_UNORM_X8_TYPELESS}};
-    uint32_t slot = AllocSrvSlots(7);
-    for (uint32_t i = 0; i < 7; i++) {
-        D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
-        sv.Format = i < 3 ? src[i].second : kBgra;
-        sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-        sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        sv.Texture2D.MipLevels = 1;
-        dev_->CreateSrv(i < 3 ? src[i].first : nullptr, &sv, Cpu(rhi::Heap::Srv, slot + i));
-    }
-    Transition(rt.res.Get(), rt.state, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    rhi::View rh = Cpu(rhi::Heap::Rtv, rt.view);
-    cl_->SetTargets(1, &rh, nullptr);
-    SetFullViewport(rt.w, rt.h);
-    Alloc cb = Upload(256, 256);
-    static const bool vel_debug = std::getenv("XBE_VELOCITY_DEBUG") != nullptr;
-    float mb[4] = {float(rt.w), float(rt.h), vel_debug ? 2.0f : 1.0f, world_depth_saved_ ? 1.0f : 0.0f};
-    std::memcpy(cb.cpu, mb, sizeof(mb));
-    DrawFullScreen(pso, cb.gpu, slot);
-    Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-    bound_rt_ = bound_ds_ = nullptr;
+    lens_w_ = w, lens_h_ = h;
+    LOGR("lens: dirt made for %ux%u", w, h);
+    return lens_dirt_.Get();
 }
 
 // Anti-Aliasing: FXAA on the scene's target (kFxaaHlsl), before the 2D is drawn over it
-void Renderer::FxaaPass(Target& rt) {
+void Renderer::FxaaPass(Target& rt, rhi::Resource* from) {
     std::string text = std::string(kPassVs) + kFxaaHlsl;
     rhi::Pipeline* pso = EnsurePassPipeline(text.c_str(), "fxaa", rt.fmt, -1);
     if (!pso) return;
-    CopyScene(rt);
+    // (from: the composite drawn elsewhere, readable; else the scene's target copied to read)
+    if (!from) CopyScene(rt), from = scene_[0].Get();
     uint32_t slot = AllocSrvSlots(7);
     for (uint32_t i = 0; i < 7; i++) {
         D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
@@ -6316,7 +6461,7 @@ void Renderer::FxaaPass(Target& rt) {
         sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         sv.Texture2D.MipLevels = 1;
-        dev_->CreateSrv(i == 0 ? scene_[0].Get() : nullptr, &sv, Cpu(rhi::Heap::Srv, slot + i));
+        dev_->CreateSrv(i == 0 ? from : nullptr, &sv, Cpu(rhi::Heap::Srv, slot + i));
     }
     Transition(rt.res.Get(), rt.state, D3D12_RESOURCE_STATE_RENDER_TARGET);
     rhi::View rh = Cpu(rhi::Heap::Rtv, rt.view);
@@ -6353,29 +6498,78 @@ void Renderer::RecordCaster(const State& s, const Assembled& a, const DrawShader
     if (alpha_test && !alpha) return;
     if (casters_.empty()) casters_gen_ = ring_gen_;
     if (casters_gen_ != ring_gen_ || casters_.size() >= 8192) return;
-    // the caster variant of the draw's vertex shader
-    auto vit = shadow_vs_.find(sh.vkey);
-    if (vit == shadow_vs_.end()) {
-        std::string src = ShadowVertexHlsl(VertexHlsl(s, a, sh));
-        uint64_t h = 0;
-        if (src.empty() || !Compile(src, "main", "vs_5_0", h)) h = 0;
-        if (h) RememberVertexRecipe(s, a, sh, kVariantShadow, h);
-        vit = shadow_vs_.emplace(sh.vkey, h).first;
+    // characters (skinned, lit by their own lights) and what they hold (lit fixed function): their pixels are marked
+    // on the screen, where shadows leave out the model's own coarse facets
+    const bool character = (sh.prog && pk.lit && !(prog_light_.count(sh.vkey) && prog_light_[sh.vkey].ok)) ||
+                           (sh.fixed_transform && (sh.fk.light & 1));
+    const bool proj = (pk.proj & 1) != 0;
+    // seen from above (Water Interaction): its cover of the water
+    const bool water = stages.mat && stages.mat->m && stages.mat->m->water;  // (the water itself, where solid, crosses nothing)
+    const bool top_on = app::Get().water && app::Get().water_interaction && top_cover_ps_ && !water;
+    // its pipelines (the caster's, the screen mask's, the guard band's, the cover's) by all they are made from, made
+    // once (CasterPsos): one lookup a draw
+    struct {
+        uint64_t vkey, vh;
+        uint32_t regs, topo, flags, pad;
+        uint32_t elements[16];
+    } sig_of{sh.vkey, sh.vh, k.regs, k.topo & 0xFFu,
+             uint32_t(alpha) | uint32_t(k.blend) << 1 | uint32_t(proj) << 2 | uint32_t(character) << 3 | uint32_t(tess_draw_) << 4 | uint32_t(top_on) << 5,
+             0, {}};
+    std::memcpy(sig_of.elements, k.elements, sizeof(sig_of.elements));
+    const uint64_t sig = Hash(&sig_of, sizeof(sig_of));
+    auto cit = caster_psos_.find(sig);
+    if (cit == caster_psos_.end()) {
+        if (caster_psos_.size() > 65536) caster_psos_.clear();
+        CasterPsos cp{};
+        // the caster variant of the draw's vertex shader
+        auto vit = shadow_vs_.find(sh.vkey);
+        if (vit == shadow_vs_.end()) {
+            std::string src = ShadowVertexHlsl(VertexHlsl(s, a, sh));
+            uint64_t h = 0;
+            if (src.empty() || !Compile(src, "main", "vs_5_0", h)) h = 0;
+            if (h) RememberVertexRecipe(s, a, sh, kVariantShadow, h);
+            vit = shadow_vs_.emplace(sh.vkey, h).first;
+        }
+        ShadowKey& key = cp.key;
+        key.vs = vit->second;
+        if (alpha) key.ps = shadow_alpha_ps_[(k.blend ? 2 : 0) + (proj ? 1 : 0)];
+        key.regs = k.regs, key.topo = k.topo & 0xFF;  // the primitive type alone (not the draw's tessellation or targets)
+        std::memcpy(key.elements, k.elements, sizeof(key.elements));
+        if (key.vs && (!alpha || key.ps) && (cp.pso = EnsureShadowPipeline(key))) {
+            if (character && !alpha) {
+                ShadowKey mk = key;
+                mk.vs = sh.vh, mk.ps = mask_ps_, mk.topo |= kShadowScreenKey;
+                if (tess_draw_) mk.topo |= kTessKey;
+                cp.screen = EnsureShadowPipeline(mk);
+            }
+            // the guard band's variant
+            auto git = guard_vs_.find(sh.vkey);
+            if (git == guard_vs_.end()) {
+                std::string src = GuardVertexHlsl(VertexHlsl(s, a, sh));
+                uint64_t h = 0;
+                if (src.empty() || !Compile(src, "main", "vs_5_0", h)) h = 0;
+                if (h) RememberVertexRecipe(s, a, sh, kVariantGuard, h);
+                git = guard_vs_.emplace(sh.vkey, h).first;
+            }
+            if (git->second) {
+                ShadowKey gk = key;
+                gk.vs = git->second, gk.topo |= kGuardKey;
+                cp.guard = EnsureShadowPipeline(gk);
+            }
+            if (top_on)
+                if (uint64_t tv = TopVertexShader(s, a, sh)) {
+                    ShadowKey tk = key;
+                    tk.vs = tv, tk.ps = top_cover_ps_, tk.topo |= kTopKey;
+                    cp.top = EnsureShadowPipeline(tk);
+                }
+        }
+        cit = caster_psos_.emplace(sig, cp).first;
     }
-    if (!vit->second) return;
-    ShadowKey key{};
-    key.vs = vit->second;
-    if (alpha) {
-        bool proj = (pk.proj & 1) != 0;
-        key.ps = shadow_alpha_ps_[(k.blend ? 2 : 0) + (proj ? 1 : 0)];
-        if (!key.ps) return;
-    }
-    key.regs = k.regs, key.topo = k.topo & 0xFF;  // the primitive type alone (not the draw's tessellation or targets)
-    std::memcpy(key.elements, k.elements, sizeof(key.elements));
-    rhi::Pipeline* pso = EnsureShadowPipeline(key);
-    if (!pso) return;
+    const CasterPsos& cp = cit->second;
+    if (!cp.pso) return;
+    const ShadowKey& key = cp.key;
     Caster c{};
-    c.pso = pso;
+    c.pso = cp.pso;
     c.vb_count = a.buffer_count;
     std::memcpy(c.vb, last_vbv_, sizeof(D3D12_VERTEX_BUFFER_VIEW) * a.buffer_count);
     c.indexed = a.index_count != 0;
@@ -6396,42 +6590,7 @@ void Renderer::RecordCaster(const State& s, const Assembled& a, const DrawShader
     c.vc = last_vc_, c.dc = last_dc_, c.tail = last_tail_;
     c.srv = last_srv_, c.smp = last_smp_;
     c.alpha = alpha;
-    // characters (skinned, lit by their own lights) and what they hold (lit fixed function): their pixels are marked
-    // on the screen, where shadows leave out the model's own coarse facets
-    bool character = (sh.prog && pk.lit && !(prog_light_.count(sh.vkey) && prog_light_[sh.vkey].ok)) ||
-                     (sh.fixed_transform && (sh.fk.light & 1));
-    if (character && !alpha) {
-        ShadowKey mk = key;
-        mk.vs = sh.vh, mk.ps = mask_ps_, mk.topo |= kShadowScreenKey;
-        if (tess_draw_) mk.topo |= kTessKey;
-        c.screen = EnsureShadowPipeline(mk);
-    }
-    // the guard band's variant
-    {
-        auto git = guard_vs_.find(sh.vkey);
-        if (git == guard_vs_.end()) {
-            std::string src = GuardVertexHlsl(VertexHlsl(s, a, sh));
-            uint64_t h = 0;
-            if (src.empty() || !Compile(src, "main", "vs_5_0", h)) h = 0;
-            if (h) RememberVertexRecipe(s, a, sh, kVariantGuard, h);
-            git = guard_vs_.emplace(sh.vkey, h).first;
-        }
-        if (git->second) {
-            ShadowKey gk = key;
-            gk.vs = git->second, gk.topo |= kGuardKey;
-            c.guard = EnsureShadowPipeline(gk);
-        }
-    }
-    // seen from above (Water Interaction): its cover of the water
-    c.top = nullptr;
-    bool water = stages.mat && stages.mat->m && stages.mat->m->water;  // (the water itself, where solid, crosses nothing)
-    if (app::Get().water && app::Get().water_interaction && top_cover_ps_ && !water) {
-        if (uint64_t tv = TopVertexShader(s, a, sh)) {
-            ShadowKey tk = key;
-            tk.vs = tv, tk.ps = top_cover_ps_, tk.topo |= kTopKey;
-            c.top = EnsureShadowPipeline(tk);
-        }
-    }
+    c.screen = cp.screen, c.guard = cp.guard, c.top = cp.top;
     // a tank's tread (its texture's): seen from below onto the snow's trail
     c.tread = nullptr;
     {
@@ -6492,6 +6651,9 @@ bool Renderer::DrawShadowMap() {
     // Drawn again only when needed: at 144 times a second at most (a moving model's shadow is a frame late at
     // worst), at once when the view turned or moved, the light turned or the level or quality changed. Between,
     // the atlas stays with the cascades it was drawn for, which the mask reads from the camera of the moment.
+    // When only the time asked for it, the far cascades (2 and 3: the most casters, the least seen of a model's
+    // movement) are drawn every other time, kept as they were drawn between.
+    bool near_only = false;
     {
         static const auto t0 = std::chrono::steady_clock::now();
         double now = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
@@ -6511,10 +6673,25 @@ bool Renderer::DrawShadowMap() {
             shadows_drawn_ = true;
             return true;
         }
+        float far_moved[3] = {m[12] - atlas_far_eye_[0], m[13] - atlas_far_eye_[1], m[14] - atlas_far_eye_[2]};
+        static const bool far_always = std::getenv("XBE_SHADOW_FAR_ALWAYS") != nullptr;  // (tests: every cascade each time)
+        near_only = atlas_valid_ && !atlas_far_due_ && !far_always && q.cascades >= 3 && dot3(light_.dir, atlas_light_) >= 0.99996f &&
+                    atlas_level_ == g_level.load() && atlas_quality_ == app::Get().shadow_quality && dot3(m + 8, atlas_far_ahead_) >= 0.9945f &&
+                    dot3(far_moved, far_moved) <= (0.5f * mf.units) * (0.5f * mf.units);
+        atlas_far_due_ = near_only;  // (after the near ones alone, the far ones next time)
+        if (!near_only) std::memcpy(atlas_far_eye_, m + 12, 12), std::memcpy(atlas_far_ahead_, m + 8, 12);
         atlas_valid_ = true, atlas_time_ = now, atlas_level_ = g_level.load(), atlas_quality_ = app::Get().shadow_quality;
         std::memcpy(atlas_eye_, m + 12, 12), std::memcpy(atlas_ahead_, m + 8, 12), std::memcpy(atlas_light_, light_.dir, 12);
     }
-    shadow::Fit(cam, light_.dir, q, cascades_);
+    {
+        shadow::Cascades kept = cascades_;
+        shadow::Fit(cam, light_.dir, q, cascades_);
+        if (near_only)
+            for (int c = 2; c < q.cascades; c++) {
+                std::memcpy(cascades_.world_to_light[c], kept.world_to_light[c], sizeof(kept.world_to_light[c]));
+                cascades_.far_z[c] = kept.far_z[c], cascades_.texel[c] = kept.texel[c], cascades_.depth_range[c] = kept.depth_range[c];
+            }
+    }
     static const bool shadow_stats = std::getenv("XBE_SHADOW_STATS") != nullptr;
     if (shadow_stats && presents_ % 600 == 0) {
         LOGR("shadows: camera P %.3f %.3f %.3f %.3f near %.1f depth %.3f..%.3f eye %.0f %.0f %.0f ahead %.2f %.2f %.2f", cam.p00, cam.p11,
@@ -6540,30 +6717,12 @@ bool Renderer::DrawShadowMap() {
     ShadowTimestamp(0);
     Transition(shadow_atlas_.Get(), shadow_state_, D3D12_RESOURCE_STATE_DEPTH_WRITE);
     rhi::View dsv = Cpu(rhi::Heap::Dsv, shadow_dsv_);
-    cl_->ClearDsv(dsv, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-    cl_->SetTargets(0, nullptr, &dsv);
-    SetFullViewport(q.tile * 2, q.tile * 2);
-    rhi::Pipeline* bound = nullptr;
+    // (the near cascades alone: the atlas's top row, the first two instances)
+    D3D12_RECT top_row{0, 0, LONG(q.tile * 2), LONG(q.tile)};
+    cl_->ClearDsv(dsv, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, near_only ? 1 : 0, near_only ? &top_row : nullptr);
     static const int exp = std::getenv("XBE_SHADOW_EXP") ? std::atoi(std::getenv("XBE_SHADOW_EXP")) : 0;
-    uint32_t instances = exp == 1 ? 1 : uint32_t(cascades_.count);
-    for (const Caster& c : casters_) {
-        if (exp == 2) break;
-        if (c.pso != bound) SetPso(bound = c.pso);
-        cl_->SetCbv(0, c.vc);
-        cl_->SetCbv(1, c.dc);
-        if (c.alpha) {
-            cl_->SetTable(2, c.srv);
-            SetSamplerTable(c.smp);
-        }
-        cl_->SetVertexBuffers(0, c.vb_count, c.vb);
-        SetTopology(c.topo);
-        if (c.indexed) {
-            cl_->SetIndexBuffer(&c.ib);
-            cl_->DrawIndexed(c.count, instances, 0, c.base, 0);
-        } else {
-            cl_->Draw(c.count, instances, 0, 0);
-        }
-    }
+    uint32_t instances = exp == 1 ? 1 : near_only ? 2 : uint32_t(cascades_.count);
+    if (exp != 2) DrawCasters(CasterPass::Shadow, dsv, q.tile * 2, q.tile * 2, instances);
     shadow_casters_n_ += casters_.size();
     Transition(shadow_atlas_.Get(), shadow_state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     ShadowTimestamp(1);
@@ -7450,7 +7609,30 @@ void Renderer::SnowTracks() {
             count++;
         }
         q[3] = float(count);
+        // steps alone (no shift of the square, no treads): only the texels about them (a boot's reach, 30 cm, 12
+        // texels) are made again, the trail's own (trail_cur_) drawn into from the other with that part copied
+        // into it first; the softened trail again there and as far as its taps reach
+        bool part = !(first == 0 && (shift[0] || shift[1] || treads)) && count > 0;
+        D3D12_RECT rr{LONG(n), LONG(n), 0, 0};
+        for (uint32_t i = 0; part && i < count; i++) {
+            const float* a = q + 8 + i * 8;
+            rr.left = std::min(rr.left, LONG(std::floor(a[0])) - 13), rr.top = std::min(rr.top, LONG(std::floor(a[1])) - 13);
+            rr.right = std::max(rr.right, LONG(std::ceil(a[0])) + 14), rr.bottom = std::max(rr.bottom, LONG(std::ceil(a[1])) + 14);
+        }
+        D3D12_RECT br{std::max(0L, rr.left - 4), std::max(0L, rr.top - 4), std::min(LONG(n), rr.right + 4), std::min(LONG(n), rr.bottom + 4)};
+        rr = {std::max(0L, rr.left), std::max(0L, rr.top), std::min(LONG(n), rr.right), std::min(LONG(n), rr.bottom)};
+        if (part && (rr.right <= rr.left || rr.bottom <= rr.top)) continue;  // (all off the square)
         int src = trail_cur_, dst = 1 - trail_cur_;
+        if (part) {
+            src = 1 - trail_cur_, dst = trail_cur_;
+            Transition(trail_[dst].Get(), trail_st_[dst], D3D12_RESOURCE_STATE_COPY_SOURCE);
+            Transition(trail_[src].Get(), trail_st_[src], D3D12_RESOURCE_STATE_COPY_DEST);
+            rhi::CopyLocation sl(trail_[dst].Get(), D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX), dl(trail_[src].Get(), D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX);
+            sl.SubresourceIndex = dl.SubresourceIndex = 0;
+            D3D12_BOX b{UINT(rr.left), UINT(rr.top), 0, UINT(rr.right), UINT(rr.bottom), 1};
+            cl_->CopyTexture(dl, UINT(rr.left), UINT(rr.top), 0, sl, &b);
+            pass_rect_ = rr;
+        }
         Transition(trail_[src].Get(), trail_st_[src], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         Transition(trail_[dst].Get(), trail_st_[dst], D3D12_RESOURCE_STATE_RENDER_TARGET);
         rhi::Resource* srcs[3] = {trail_[src].Get(), treads && !first ? tread_.Get() : nullptr, nullptr};
@@ -7466,14 +7648,18 @@ void Renderer::SnowTracks() {
             D3D12_CLEAR_VALUE cv{};
             cv.Format = td.Format;
             trail_soft_st_ = D3D12_RESOURCE_STATE_RENDER_TARGET;
-            if (CreateResource(rhi::HeapType::Default, td, trail_soft_st_, &cv, trail_soft_))
-                dev_->CreateRtv(trail_soft_.Get(), nullptr, WaveRtv(7));
+            if (CreateResource(rhi::HeapType::Default, td, trail_soft_st_, &cv, trail_soft_)) {
+                dev_->CreateRtv(trail_soft_.Get(), nullptr, TrailSoftRtv());
+                trail_soft_full_ = false;
+            }
         }
         if (trail_soft_) {
             Transition(trail_soft_.Get(), trail_soft_st_, D3D12_RESOURCE_STATE_RENDER_TARGET);
             rhi::Resource* bsrc[3] = {trail_[dst].Get(), nullptr, nullptr};
             DXGI_FORMAT bfmt[3] = {DXGI_FORMAT_R16G16_FLOAT, kBgra, kBgra};
-            Pass(kTrailHlsl, "trailblur", DXGI_FORMAT_R16G16_FLOAT, WaveRtv(7), n, n, bsrc, bfmt, q, -1);
+            if (part && trail_soft_full_) pass_rect_ = br;
+            trail_soft_full_ = true;
+            Pass(kTrailHlsl, "trailblur", DXGI_FORMAT_R16G16_FLOAT, TrailSoftRtv(), n, n, bsrc, bfmt, q, -1);
             Transition(trail_soft_.Get(), trail_soft_st_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         }
     }
@@ -7591,9 +7777,100 @@ void Renderer::MapFrame() {
 
 // The guard band (guard_): the frame's casters drawn again from the camera with its view widened by 1 / kGuardScale,
 // depth alone; null when the frame has none
+void Renderer::DrawCasterRange(rhi::List* l, CasterPass pass, size_t first, size_t last, uint32_t instances, uint32_t w,
+                               uint32_t h) const {
+    const bool guard = pass == CasterPass::Guard;
+    rhi::Pipeline* bound = nullptr;
+    D3D_PRIMITIVE_TOPOLOGY topo = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
+    rhi::Table smp{};
+    bool smp_set = false;
+    float zr[2] = {-1, -1};
+    for (size_t i = first; i < last; i++) {
+        const Caster& c = casters_[i];
+        rhi::Pipeline* pso = guard ? c.guard : c.pso;
+        if (!pso) continue;
+        if (guard && (c.zmin != zr[0] || c.zmax != zr[1])) {
+            zr[0] = c.zmin, zr[1] = c.zmax;
+            l->SetViewport({0, 0, float(w), float(h), c.zmin, c.zmax});
+        }
+        if (pso != bound) l->SetPipeline(bound = pso);
+        l->SetCbv(0, c.vc);
+        l->SetCbv(1, c.dc);
+        if (c.alpha) {
+            l->SetTable(2, c.srv);
+            if (!smp_set || !(c.smp == smp)) l->SetTable(3, smp = c.smp), smp_set = true;
+        }
+        l->SetVertexBuffers(0, c.vb_count, c.vb);
+        if (c.topo != topo) l->SetTopology(topo = c.topo);
+        if (c.indexed) {
+            l->SetIndexBuffer(&c.ib);
+            l->DrawIndexed(c.count, instances, 0, c.base, 0);
+        } else {
+            l->Draw(c.count, instances, 0, 0);
+        }
+    }
+}
+
+void Renderer::DrawCasters(CasterPass pass, rhi::View dsv, uint32_t w, uint32_t h, uint32_t instances) {
+    // shared out when there are many: a share of 384 at least (XBE_RECORD_SHARE: tests), the main thread's with the
+    // workers' (as many as the device forks and the pool has: XBE_RECORD_THREADS, 0 none)
+    static const uint32_t threads = [] {
+        const char* e = std::getenv("XBE_RECORD_THREADS");
+        uint32_t hw = std::max(1u, std::thread::hardware_concurrency());
+        return e ? uint32_t(std::max(0, std::atoi(e))) : hw >= 8 ? 3u : hw >= 6 ? 2u : 0u;
+    }();
+    static const size_t least = std::getenv("XBE_RECORD_SHARE") ? std::max(1, std::atoi(std::getenv("XBE_RECORD_SHARE"))) : 384;
+    const size_t n = casters_.size();
+    uint32_t forks = std::min<uint32_t>({threads, dev_->MaxForks(), uint32_t(n / least)});
+    forks = forks > 0 ? forks - (n / (forks + 1) < least ? 1 : 0) : 0;
+    auto targets = [&](rhi::List* l) {
+        l->SetTargets(0, nullptr, &dsv);
+        l->SetViewport({0, 0, float(w), float(h), 0, 1});
+        l->SetScissor({0, 0, LONG(w), LONG(h)});
+    };
+    if (!forks) {
+        targets(cl_);
+        DrawCasterRange(cl_, pass, 0, n, instances, w, h);
+    } else {
+        if (!record_pool_) record_pool_ = std::make_unique<RecordPool>(threads);
+        forks = std::min(forks, record_pool_->Size());
+        rhi::List* const* lists = dev_->Fork(forks);
+        static std::atomic<int> told{0};
+        if (told++ < 2) LOGR("shadows: %zu casters recorded on %u threads", n, forks + 1);
+        // (the main list anew: the frame's tables and layout set again, nothing else taken as set)
+        cl_->SetLayout(rhi::Layout::Main);
+        cl_->SetTable(4, sun_table_);
+        const size_t share = (n + forks) / (forks + 1);
+        record_pool_->Start(forks, [&, lists](uint32_t i) {
+            targets(lists[i]);
+            DrawCasterRange(lists[i], pass, share * (i + 1), std::min(n, share * (i + 2)), instances, w, h);
+        });
+        targets(cl_);
+        DrawCasterRange(cl_, pass, 0, std::min(n, share), instances, w, h);
+        record_pool_->Wait();
+        dev_->Join();
+    }
+    // (what the loop set on the main list, not in cmd_)
+    cmd_ = CmdState{};
+    bound_rt_ = bound_ds_ = nullptr;
+}
+
 rhi::Resource* Renderer::DrawGuard(uint32_t w, uint32_t h) {
     if (casters_.empty() || casters_gen_ != ring_gen_) return nullptr;
     uint32_t gw = std::max(1u, w * 3 / 4), gh = std::max(1u, h * 3 / 4);
+    // the band of the frame before, once in two, while the camera has turned less than about two degrees and moved
+    // less than 20 units since it was drawn (what lies past the edges for the occlusion: a frame's lag unseen; its
+    // casters' redraw, bound by their vertices, half the time)
+    static const bool every = std::getenv("XBE_GUARD_EVERY_FRAME") != nullptr;  // tests: drawn each frame as before
+    if (!every && guard_ok_ && guard_ && guard_w_ == gw && guard_h_ == gh && cam_ok_ && frame_ == guard_frame_ + 1) {
+        bool still = true;
+        for (int r = 0; r < 3 && still; r++)
+            still = cam_view_[r] * guard_view_[r] + cam_view_[4 + r] * guard_view_[4 + r] + cam_view_[8 + r] * guard_view_[8 + r] > 0.9994f;
+        for (int j = 12; j < 15 && still; j++) still = std::fabs(cam_view_[j] - guard_view_[j]) < 20.0f;
+        if (still) return guard_.Get();
+    }
+    guard_ok_ = cam_ok_, guard_frame_ = frame_;
+    if (cam_ok_) std::memcpy(guard_view_, cam_view_, sizeof(guard_view_));
     if (!guard_ || guard_w_ != gw || guard_h_ != gh) {
         if (guard_) Release(std::move(guard_));
         if (guard_dsv_ == ~0u) {
@@ -7622,33 +7899,15 @@ rhi::Resource* Renderer::DrawGuard(uint32_t w, uint32_t h) {
     Transition(guard_.Get(), guard_state_, D3D12_RESOURCE_STATE_DEPTH_WRITE);
     rhi::View dsv = Cpu(rhi::Heap::Dsv, guard_dsv_);
     cl_->ClearDsv(dsv, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-    cl_->SetTargets(0, nullptr, &dsv);
-    SetFullViewport(gw, gh);
-    rhi::Pipeline* bound = nullptr;
-    float zr[2] = {-1, -1};
-    for (const Caster& c : casters_) {
-        if (!c.guard) continue;
-        if (c.zmin != zr[0] || c.zmax != zr[1]) {
-            zr[0] = c.zmin, zr[1] = c.zmax;
-            D3D12_VIEWPORT vp{0, 0, float(gw), float(gh), c.zmin, c.zmax};
-            SetViewport(vp);
-        }
-        if (c.guard != bound) SetPso(bound = c.guard);
-        cl_->SetCbv(0, c.vc);
-        cl_->SetCbv(1, c.dc);
-        if (c.alpha) {
-            cl_->SetTable(2, c.srv);
-            SetSamplerTable(c.smp);
-        }
-        cl_->SetVertexBuffers(0, c.vb_count, c.vb);
-        SetTopology(c.topo);
-        if (c.indexed) {
-            cl_->SetIndexBuffer(&c.ib);
-            cl_->DrawIndexed(c.count, 1, 0, c.base, 0);
-        } else {
-            cl_->Draw(c.count, 1, 0, 0);
-        }
+    // the screen's own part of the band (the occlusion reads it only past the screen's edges, DG): its depth the
+    // nearest, the casters' pixels there left out by the depth test before their shaders run (two texels in from it)
+    static const bool whole = std::getenv("XBE_GUARD_WHOLE") != nullptr;  // (tests: the band drawn all over)
+    if (!whole) {
+        const float lo = 0.5f - kGuardScale / 2, hi = 0.5f + kGuardScale / 2;
+        D3D12_RECT inner{LONG(std::ceil(gw * lo)) + 2, LONG(std::ceil(gh * lo)) + 2, LONG(std::floor(gw * hi)) - 2, LONG(std::floor(gh * hi)) - 2};
+        if (inner.right > inner.left && inner.bottom > inner.top) cl_->ClearDsv(dsv, D3D12_CLEAR_FLAG_DEPTH, 0.0f, 0, 1, &inner);
     }
+    DrawCasters(CasterPass::Guard, dsv, gw, gh, 1);
     Transition(guard_.Get(), guard_state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     bound_rt_ = bound_ds_ = nullptr;
     return guard_.Get();
@@ -7781,7 +8040,9 @@ void Renderer::FogPass(Target& rt, Target& ds) {
     // the world's up in view space, the ground 1.6 m under the eye
     float up[3] = {cam_view_[4], cam_view_[5], cam_view_[6]};
     float sunlight = std::clamp(light_.direct * 1.4f, 0.0f, 1.2f);
-    float p9[4] = {density, -160, sunlight, 0}, p10[4] = {up[0], up[1], up[2], 0};
+    // the steps along each ray (16: no change seen from 24; XBE_FOG_STEPS: tests)
+    static const int steps = std::getenv("XBE_FOG_STEPS") ? std::clamp(std::atoi(std::getenv("XBE_FOG_STEPS")), 4, 64) : 16;
+    float p9[4] = {density, -160, sunlight, float(steps)}, p10[4] = {up[0], up[1], up[2], 0};
     std::memcpy(P + kMaskFloats, p9, sizeof(p9));
     std::memcpy(P + kMaskFloats + 4, p10, sizeof(p10));
     // the half size target's size (the parameters' p2 are the full one's: the march only needs uv)
@@ -7900,12 +8161,12 @@ bool Renderer::EnsureSceneTargets(DXGI_FORMAT fmt, uint32_t w, uint32_t h) {
     scene_w_ = scene_h_ = 0;
     const rhi::HeapType hp = rhi::HeapType::Default;
     for (uint32_t i = 0; i < kSceneRtvs; i++) {
-        if (i == kSceneFree) continue;
-        DXGI_FORMAT f = i == 0 ? fmt
+        DXGI_FORMAT f = i == 0 || i == kScenePost ? fmt
+                        : i == kSceneDepthHalf ? DXGI_FORMAT_R32_FLOAT
                         : i < 3 || i >= kSceneAoHalf ? DXGI_FORMAT_R8_UNORM
                         : i == kSceneShadow       ? DXGI_FORMAT_R8G8B8A8_UNORM
                                                   : DXGI_FORMAT_R16G16B16A16_FLOAT;
-        uint32_t div = i >= kSceneAoHalf ? 2 : i < 3 || i == kSceneShadow || i >= kSceneVel ? 1 : i >= kSceneRays ? 2 : 2u << (i - 3);
+        uint32_t div = i >= kSceneAoHalf || i == kSceneDepthHalf ? 2 : i < 3 || i == kSceneShadow || i == kScenePost ? 1 : i >= kSceneRays ? 2 : 2u << (i - 3);
         D3D12_RESOURCE_DESC td = Texture2DDesc(f, std::max(1u, w / div), std::max(1u, h / div));
         td.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
         D3D12_CLEAR_VALUE cv{};
@@ -8087,8 +8348,10 @@ bool Renderer::EnsureInvVp() {
 // screen's edge, or ends (its cut end, or a piece the console never showed, alone in a corner). Its triangles joined
 // into the pieces they make on the screen (shared corners, and corners at the same place), a piece any of whose
 // triangles the 4:3 view shows is drawn whole, a piece wholly outside it is left out. The program runs here for each
-// corner (as for the glowing particles). False: not worked out (the geometry shader's triangle test instead).
-bool Renderer::WeaponPieces(const State& s, const Assembled& a, const DrawShaders& sh) {
+// corner (as for the glowing particles), four corners at a time. What the model alone decides (its triangles, its
+// corners at the same place joined) is kept for it while its vertices and indices are the same (WeaponMesh). False:
+// not worked out (the geometry shader's triangle test instead).
+bool Renderer::WeaponPieces(const State& s, const Assembled& a, const DrawShaders& sh, uint64_t known_check) {
     if (!s.vs || !bound_rt_) return false;
     const auto started = std::chrono::steady_clock::now();
     auto it = cpu_prog_.find(sh.vkey);
@@ -8130,121 +8393,164 @@ bool Renderer::WeaponPieces(const State& s, const Assembled& a, const DrawShader
         if (e.buffer < a.buffer_count && a.buffers[e.buffer].stride) vcount = a.buffers[e.buffer].bytes / a.buffers[e.buffer].stride;
     }
     if (!vcount || vcount > 16384) return false;
-    // the triangles, in DrawGeometry's order (a strip's degenerate joins counted, kept)
     const uint32_t n = a.index_count ? a.index_count : a.draw_count;
-    auto index = [&](uint32_t i) -> int64_t {
-        int64_t v = !a.index_count ? int64_t(i)
-                                   : int64_t(a.index16 ? static_cast<const uint16_t*>(a.index_src)[i] : static_cast<const uint32_t*>(a.index_src)[i]);
-        return v + (a.index_count ? a.base_vertex : 0);
-    };
-    struct Tri {
-        uint32_t v[3];
-        bool ok;
-    };
-    std::vector<Tri> tris;
-    if (a.strip) {
-        for (uint32_t i = 2; i < n; i++) tris.push_back({{uint32_t(index(i - 2)), uint32_t(index(i - 1)), uint32_t(index(i))}, true});
-    } else {
-        for (uint32_t i = 0; i + 2 < n; i += 3) tris.push_back({{uint32_t(index(i)), uint32_t(index(i + 1)), uint32_t(index(i + 2))}, true});
+    // the model's own: its triangles in DrawGeometry's order (a strip's degenerate joins counted, kept), the corners
+    // of those that are triangles, its corners at the same place (a model's seams) joined; made again when its
+    // vertices (their bytes) or its indices differ
+    WeaponMesh* wm = nullptr;
+    {
+        const VertexElement& e0 = a.elements[0];
+        const VertexBuffer* b0 = e0.buffer < a.buffer_count ? &a.buffers[e0.buffer] : nullptr;
+        uint32_t key_fields[] = {vcount, n, uint32_t(a.base_vertex), uint32_t(a.strip), uint32_t(a.index16), uint32_t(a.index_count != 0),
+                                 b0 ? b0->stride : 0, e0.offset, a.regs, uint32_t(a.buffer_count), uint32_t(Hash(&a.elements[0], sizeof(a.elements)))};
+        // (by where the guest keeps its vertices and its program, not by the pointers the draw reads through: a frame's
+        // own copy of its indices, a repacked stream's, the headers' copies, the game's indices streamed: new each
+        // frame, the cache never met; its bytes are its check)
+        const uint32_t guest[] = {s.streams[0].vb ? kernel::R32(s.streams[0].vb + 4) : 0u, s.streams[1].vb ? kernel::R32(s.streams[1].vb + 4) : 0u,
+                                  s.vs_handle, s.base_vertex};
+        const uint64_t key = Hash(guest, sizeof(guest), Hash(key_fields, sizeof(key_fields)));
+        uint64_t check = Hash(key_fields, sizeof(key_fields));
+        if (known_check) {
+            check ^= known_check;
+        } else {
+            // (every stream's bytes: the corners' inputs are kept with it)
+            for (uint32_t bi = 0; bi < a.buffer_count; bi++) {
+                const VertexBuffer& b = a.buffers[bi];
+                if (b.src && b.stride) check = HashBulk(b.src, std::min<size_t>(b.bytes, size_t(vcount) * b.stride), check);
+            }
+            if (a.index_count) check = HashBulk(a.index_src, size_t(n) * (a.index16 ? 2 : 4), check);
+        }
+        if (weapon_meshes_.size() > 64) weapon_meshes_.clear();
+        wm = &weapon_meshes_[key];
+        if (wm->check != check || wm->tris.empty() != (n < 3)) {
+            static const bool rlog = std::getenv("XBE_WEAPON_LOG") != nullptr;
+            static uint64_t rebuilt = 0, kept = 0;
+            static uint64_t fresh = 0;
+            fresh += wm->check == 0;
+            if (rlog && ++rebuilt % 50 == 0)
+                LOGR("weapon: models made %llu (%llu new places, %zu kept, %u vertices, raw %d, src %p ix %p)", (unsigned long long)rebuilt,
+                     (unsigned long long)fresh, weapon_meshes_.size(), vcount, int(a.buffer_count), (const void*)a.buffers[0].src, a.index_src);
+            *wm = WeaponMesh{};
+            wm->check = check;
+            auto index = [&](uint32_t i) -> int64_t {
+                int64_t v = !a.index_count ? int64_t(i)
+                                           : int64_t(a.index16 ? static_cast<const uint16_t*>(a.index_src)[i] : static_cast<const uint32_t*>(a.index_src)[i]);
+                return v + (a.index_count ? a.base_vertex : 0);
+            };
+            if (a.strip) {
+                for (uint32_t i = 2; i < n; i++) wm->tris.push_back({uint32_t(index(i - 2)), uint32_t(index(i - 1)), uint32_t(index(i))});
+            } else {
+                for (uint32_t i = 0; i + 2 < n; i += 3) wm->tris.push_back({uint32_t(index(i)), uint32_t(index(i + 1)), uint32_t(index(i + 2))});
+            }
+            wm->ok = true;
+            std::vector<uint8_t> seen(vcount, 0);
+            for (const auto& tr : wm->tris) {
+                if (tr[0] >= vcount || tr[1] >= vcount || tr[2] >= vcount) {
+                    wm->ok = false;
+                    break;
+                }
+                if (tr[0] == tr[1] || tr[1] == tr[2] || tr[0] == tr[2]) continue;
+                for (uint32_t v : tr)
+                    if (!seen[v]) seen[v] = 1, wm->verts.push_back(v);
+            }
+            wm->joined.resize(vcount);
+            for (uint32_t i = 0; i < vcount; i++) wm->joined[i] = i;
+            auto find = [&](uint32_t x) {
+                while (wm->joined[x] != x) x = wm->joined[x] = wm->joined[wm->joined[x]];
+                return x;
+            };
+            // (the corners in the order the triangles first reach them: a place's first corner the one the others
+            // join, as before)
+            KeyMap<uint64_t, uint32_t> at_place;
+            for (uint32_t v : wm->verts) {
+                float p0[4];
+                input(0, v, p0);
+                uint64_t k = (uint64_t(uint32_t(std::lround(p0[0] * 64))) << 42) ^ (uint64_t(uint32_t(std::lround(p0[1] * 64))) << 21) ^
+                             uint64_t(uint32_t(std::lround(p0[2] * 64)));
+                auto [p, fresh] = at_place.emplace(k, v);
+                if (!fresh) wm->joined[find(v)] = find(p->second);
+            }
+        }
     }
-    // each corner's place on the screen (the console's pixels, the wide view's; w the view depth), worked out once
+    if (!wm->ok) return false;
+    const auto& tris = wm->tris;
+    // each corner's place on the screen (the console's pixels, the wide view's; w the view depth)
     const float gw = float(bound_rt_->gw), gh = float(bound_rt_->gh), half = 1.0f / widen_;
-    std::vector<std::array<float, 3>> scr(vcount);
-    std::vector<uint8_t> done(vcount, 0);
-    std::vector<uint32_t> parent(vcount);
-    for (uint32_t i = 0; i < vcount; i++) parent[i] = i;
+    const float ws = g_weapon_scale.load();  // (at the game's own field of view, as DrawGeometry places it: Layout2D's g_weapon_scale)
+    auto& scr = wp_scr_;
+    scr.resize(vcount);
+    {
+        const uint16_t inputs = CpuProgramInputs(*prog);
+        static const bool check = std::getenv("XBE_CPU_PROG_CHECK") != nullptr;  // (tests: the four lanes against one at a time)
+        const auto& verts = wm->verts;
+        const int nin = std::popcount(inputs);
+        // the corners' inputs as the program reads them, four corners a group (made with the model's, for the program's
+        // inputs: the vertices are the same bytes while it is kept)
+        if (wm->lanes_of != inputs || wm->lanes.size() != (verts.size() + 3) / 4 * size_t(nin) * 4) {
+            wm->lanes_of = inputs;
+            wm->lanes.assign((verts.size() + 3) / 4 * size_t(nin) * 4, _mm_setzero_ps());
+            for (size_t i = 0; i < verts.size(); i += 4) {
+                const size_t m = std::min<size_t>(4, verts.size() - i);
+                __m128* g = &wm->lanes[i / 4 * size_t(nin) * 4];
+                for (uint32_t r = 0, j = 0; r < 16; r++) {
+                    if (!((inputs >> r) & 1)) continue;
+                    alignas(16) float l[4][4];
+                    for (size_t k = 0; k < 4; k++) {
+                        float v[4];
+                        input(r, verts[i + std::min(k, m - 1)], v);
+                        for (int c = 0; c < 4; c++) l[c][k] = v[c];
+                    }
+                    for (int c = 0; c < 4; c++) g[j * 4 + c] = _mm_load_ps(l[c]);
+                    j++;
+                }
+            }
+        }
+        for (size_t i = 0; i < verts.size(); i += 4) {
+            float o[4][4];
+            const size_t m = std::min<size_t>(4, verts.size() - i);
+            const __m128* lanes[16] = {};
+            const __m128* g = wm->lanes.data() + i / 4 * size_t(nin) * 4;
+            for (uint32_t r = 0, j = 0; r < 16; r++)
+                if ((inputs >> r) & 1) lanes[r] = g + 4 * j++;
+            RunCpuProgram4(*prog, lanes, s.vsc, o);
+            float in[4][16][4] = {};
+            if (check)
+                for (size_t k = 0; k < 4; k++)
+                    for (uint32_t r = 0; r < 16; r++)
+                        if ((inputs >> r) & 1) input(r, verts[i + std::min(k, m - 1)], in[k][r]);
+            for (size_t k = 0; k < m; k++) {
+                if (check) {
+                    float o1[4];
+                    RunCpuProgram(*prog, in[k], s.vsc, o1);
+                    static std::atomic<int> off{0};
+                    if (std::memcmp(o1, o[k], sizeof(o1)) && off++ < 8)
+                        LOGR("weapon: four lanes' oPos %g %g %g %g, one's %g %g %g %g", o[k][0], o[k][1], o[k][2], o[k][3], o1[0], o1[1], o1[2], o1[3]);
+                }
+                bool ok = o[k][3] > 0 && std::isfinite(o[k][0]) && std::isfinite(o[k][1]);
+                scr[verts[i + k]] = {ok ? (o[k][0] * 2 / gw - 1) * ws : 0.0f, ok ? (1 - o[k][1] * 2 / gh) * ws : 0.0f, ok ? 1.0f : 0.0f};
+            }
+        }
+    }
+    auto& parent = wp_parent_;
+    parent = wm->joined;
     auto find = [&](uint32_t x) {
         while (parent[x] != x) x = parent[x] = parent[parent[x]];
         return x;
     };
     auto join = [&](uint32_t x, uint32_t y) { parent[find(x)] = find(y); };
-    KeyMap<uint64_t, uint32_t> at_place;  // corners at the same place (a model's seams) as one
-    auto corner = [&](uint32_t v) -> const std::array<float, 3>& {
-        if (!done[v]) {
-            float in[16][4], o[4];
-            for (uint32_t r = 0; r < 16; r++) input(r, v, in[r]);
-            RunCpuProgram(*prog, in, s.vsc, o);
-            bool ok = o[3] > 0 && std::isfinite(o[0]) && std::isfinite(o[1]);
-            // (at the game's own field of view, as DrawGeometry places it: Layout2D's g_weapon_scale)
-            const float ws = g_weapon_scale.load();
-            scr[v] = {ok ? (o[0] * 2 / gw - 1) * ws : 0.0f, ok ? (1 - o[1] * 2 / gh) * ws : 0.0f, ok ? 1.0f : 0.0f};
-            done[v] = 1;
-            uint64_t key = (uint64_t(uint32_t(std::lround(in[0][0] * 64))) << 42) ^ (uint64_t(uint32_t(std::lround(in[0][1] * 64))) << 21) ^
-                           uint64_t(uint32_t(std::lround(in[0][2] * 64)));
-            auto [p, fresh] = at_place.emplace(key, v);
-            if (!fresh) join(v, p->second);
-        }
-        return scr[v];
-    };
-    // on the screen: joined into pieces; a piece the 4:3 view shows is kept
-    std::vector<uint8_t> on(tris.size(), 0), in43(tris.size(), 0);
-    for (size_t t = 0; t < tris.size(); t++) {
-        Tri& tr = tris[t];
-        if (tr.v[0] >= vcount || tr.v[1] >= vcount || tr.v[2] >= vcount) return false;
-        if (tr.v[0] == tr.v[1] || tr.v[1] == tr.v[2] || tr.v[0] == tr.v[2]) continue;
-        float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f;
-        bool behind = false;
-        for (uint32_t v : tr.v) {
-            const auto& q = corner(v);
-            if (q[2] == 0) behind = true;
-            x0 = std::min(x0, q[0]), x1 = std::max(x1, q[0]), y0 = std::min(y0, q[1]), y1 = std::max(y1, q[1]);
-        }
-        if (behind) continue;  // (through the eye: not on the screen as a triangle; kept)
-        // the triangle itself against a rectangle (its corners clipped by the rectangle's sides; something left: it
-        // shows there), not its bounding box: a long thin one by a corner has a box reaching in, and none of it does
-        auto overlaps = [&](float rx0, float rx1, float ry0, float ry1) {
-            if (x1 < rx0 || x0 > rx1 || y1 < ry0 || y0 > ry1) return false;
-            float poly[2][12][2];
-            int n = 3, cur = 0;
-            for (int k = 0; k < 3; k++) poly[0][k][0] = scr[tr.v[k]][0], poly[0][k][1] = scr[tr.v[k]][1];
-            for (int side = 0; side < 4 && n > 0; side++) {
-                const int axis = side / 2;
-                const float lim = side == 0 ? rx0 : side == 1 ? rx1 : side == 2 ? ry0 : ry1;
-                const bool keep_greater = side == 0 || side == 2;
-                int m = 0;
-                for (int i = 0; i < n && m < 10; i++) {
-                    const float* a0 = poly[cur][i];
-                    const float* b0 = poly[cur][(i + 1) % n];
-                    float da = keep_greater ? a0[axis] - lim : lim - a0[axis];
-                    float db = keep_greater ? b0[axis] - lim : lim - b0[axis];
-                    if (da >= 0) poly[1 - cur][m][0] = a0[0], poly[1 - cur][m][1] = a0[1], m++;
-                    if ((da >= 0) != (db >= 0) && m < 10) {
-                        float f = da / (da - db);
-                        poly[1 - cur][m][0] = a0[0] + (b0[0] - a0[0]) * f, poly[1 - cur][m][1] = a0[1] + (b0[1] - a0[1]) * f, m++;
-                    }
-                }
-                n = m, cur = 1 - cur;
-            }
-            return n >= 3;
-        };
-        on[t] = overlaps(-1, 1, -1, 1);
-        in43[t] = on[t] && overlaps(-half, half, -1, 1);
-        if (on[t]) join(tr.v[0], tr.v[1]), join(tr.v[1], tr.v[2]);
-    }
-    std::unordered_set<uint32_t> shown;
-    for (size_t t = 0; t < tris.size(); t++)
-        if (in43[t]) shown.insert(find(tris[t].v[0]));
-    weapon_keep_.assign(tris.size(), 1);
-    size_t dropped = 0;
-    for (size_t t = 0; t < tris.size(); t++)
-        if (on[t] && !shown.count(find(tris[t].v[0]))) weapon_keep_[t] = 0, dropped++;
-    // a piece shown that lies nearly all past the 4:3 view (a sleeve's open end, of which the console showed a sliver
-    // at its screen's edge): left out, the sliver with it (a loose corner floating there on a wide screen). A piece of
-    // which the view shows a fair share (an arm reaching in from the corner to the gun) is drawn whole. The shares by
-    // area of what shows on the screen: its triangles clipped to the screen, and to the 4:3 view's sides
-    auto shown_area = [&](const Tri& tr, float xlo, float xhi) {
-        float poly[2][12][2];
-        int n = 3, cur = 0;
-        for (int k = 0; k < 3; k++) poly[0][k][0] = scr[tr.v[k]][0], poly[0][k][1] = scr[tr.v[k]][1];
-        const float lims[4] = {xlo, xhi, -1.0f, 1.0f};
-        for (int side = 0; side < 4 && n > 0; side++) {
+    // a triangle clipped by the rectangle's sides (Sutherland-Hodgman), its corners left
+    auto clip = [&](const std::array<uint32_t, 3>& tr, const float lims[4], float poly[2][12][2], int& cur) {
+        int cnt = 3;
+        cur = 0;
+        for (int k = 0; k < 3; k++) poly[0][k][0] = scr[tr[k]][0], poly[0][k][1] = scr[tr[k]][1];
+        for (int side = 0; side < 4 && cnt > 0; side++) {
             const int axis = side / 2;
             const float lim = lims[side];
             const bool keep_greater = side == 0 || side == 2;
             int m = 0;
-            for (int i = 0; i < n && m < 10; i++) {
+            for (int i = 0; i < cnt && m < 10; i++) {
                 const float* a0 = poly[cur][i];
-                const float* b0 = poly[cur][(i + 1) % n];
+                const float* b0 = poly[cur][(i + 1) % cnt];
                 float da = keep_greater ? a0[axis] - lim : lim - a0[axis];
                 float db = keep_greater ? b0[axis] - lim : lim - b0[axis];
                 if (da >= 0) poly[1 - cur][m][0] = a0[0], poly[1 - cur][m][1] = a0[1], m++;
@@ -8253,40 +8559,102 @@ bool Renderer::WeaponPieces(const State& s, const Assembled& a, const DrawShader
                     poly[1 - cur][m][0] = a0[0] + (b0[0] - a0[0]) * f, poly[1 - cur][m][1] = a0[1] + (b0[1] - a0[1]) * f, m++;
                 }
             }
-            n = m, cur = 1 - cur;
+            cnt = m, cur = 1 - cur;
+        }
+        return cnt;
+    };
+    // on the screen: joined into pieces; a piece the 4:3 view shows is kept
+    auto& on = wp_on_;
+    auto& in43 = wp_in43_;
+    on.assign(tris.size(), 0), in43.assign(tris.size(), 0);
+    for (size_t t = 0; t < tris.size(); t++) {
+        const auto& tr = tris[t];
+        if (tr[0] == tr[1] || tr[1] == tr[2] || tr[0] == tr[2]) continue;
+        float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f;
+        bool behind = false;
+        for (uint32_t v : tr) {
+            const auto& q = scr[v];
+            if (q[2] == 0) behind = true;
+            x0 = std::min(x0, q[0]), x1 = std::max(x1, q[0]), y0 = std::min(y0, q[1]), y1 = std::max(y1, q[1]);
+        }
+        if (behind) continue;  // (through the eye: not on the screen as a triangle; kept)
+        // the triangle itself against a rectangle (its corners clipped by the rectangle's sides; something left: it
+        // shows there), not its bounding box: a long thin one by a corner has a box reaching in, and none of it does
+        auto overlaps = [&](float rx0, float rx1, float ry0, float ry1) {
+            if (x1 < rx0 || x0 > rx1 || y1 < ry0 || y0 > ry1) return false;
+            if (x0 >= rx0 && x1 <= rx1 && y0 >= ry0 && y1 <= ry1) return true;  // (wholly within: nothing clipped)
+            float poly[2][12][2];
+            int cur;
+            const float lims[4] = {rx0, rx1, ry0, ry1};
+            return clip(tr, lims, poly, cur) >= 3;
+        };
+        on[t] = overlaps(-1, 1, -1, 1);
+        in43[t] = on[t] && overlaps(-half, half, -1, 1);
+        if (on[t]) join(tr[0], tr[1]), join(tr[1], tr[2]);
+    }
+    auto& shown = wp_shown_;
+    shown.assign(vcount, 0);
+    for (size_t t = 0; t < tris.size(); t++)
+        if (in43[t]) shown[find(tris[t][0])] = 1;
+    weapon_keep_.assign(tris.size(), 1);
+    size_t dropped = 0;
+    for (size_t t = 0; t < tris.size(); t++)
+        if (on[t] && !shown[find(tris[t][0])]) weapon_keep_[t] = 0, dropped++;
+    // a piece shown that lies nearly all past the 4:3 view (a sleeve's open end, of which the console showed a sliver
+    // at its screen's edge): left out, the sliver with it (a loose corner floating there on a wide screen). A piece of
+    // which the view shows a fair share (an arm reaching in from the corner to the gun) is drawn whole. The shares by
+    // area of what shows on the screen: its triangles clipped to the screen, and to the 4:3 view's sides
+    auto shown_area = [&](const std::array<uint32_t, 3>& tr, float xlo, float xhi) {
+        float poly[2][12][2];
+        int cur = 0, cnt = 3;
+        float bx0 = 1e9f, bx1 = -1e9f, by0 = 1e9f, by1 = -1e9f;
+        for (uint32_t v : tr) bx0 = std::min(bx0, scr[v][0]), bx1 = std::max(bx1, scr[v][0]), by0 = std::min(by0, scr[v][1]), by1 = std::max(by1, scr[v][1]);
+        if (bx0 >= xlo && bx1 <= xhi && by0 >= -1.0f && by1 <= 1.0f) {
+            // (wholly within: its own corners, in their order, as the clip would leave them)
+            for (int k = 0; k < 3; k++) poly[0][k][0] = scr[tr[k]][0], poly[0][k][1] = scr[tr[k]][1];
+        } else {
+            const float lims[4] = {xlo, xhi, -1.0f, 1.0f};
+            cnt = clip(tr, lims, poly, cur);
         }
         float area = 0;
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i < cnt; i++) {
             const float* p0 = poly[cur][i];
-            const float* p1 = poly[cur][(i + 1) % n];
+            const float* p1 = poly[cur][(i + 1) % cnt];
             area += p0[0] * p1[1] - p1[0] * p0[1];
         }
         return std::fabs(area) * 0.5f;
     };
-    KeyMap<uint32_t, std::array<float, 2>> share;  // a piece's area on the screen, and in the 4:3 view
+    auto& share = wp_share_;  // a piece's area on the screen, and in the 4:3 view (by its root)
+    auto& roots = wp_roots_;
+    share.assign(vcount, {-1.0f, 0.0f});
+    roots.clear();
     for (size_t t = 0; t < tris.size(); t++) {
         if (!on[t] || !weapon_keep_[t]) continue;
-        auto& a2 = share.try_emplace(find(tris[t].v[0]), std::array<float, 2>{0.0f, 0.0f}).first->second;
+        const uint32_t r = find(tris[t][0]);
+        auto& a2 = share[r];
+        if (a2[0] < 0) a2 = {0.0f, 0.0f}, roots.push_back(r);
         a2[0] += shown_area(tris[t], -1.0f, 1.0f);
         a2[1] += shown_area(tris[t], -half, half);
     }
     constexpr float kMostlyOut = 0.15f;  // the 4:3 view's share of what shows, below it: a cut end
     for (size_t t = 0; t < tris.size(); t++) {
         if (!on[t] || !weapon_keep_[t]) continue;
-        const auto& a2 = share[find(tris[t].v[0])];
+        const auto& a2 = share[find(tris[t][0])];
         if (a2[0] > 1e-6f && a2[1] < a2[0] * kMostlyOut) weapon_keep_[t] = 0, dropped++;
     }
     static const bool log_share = std::getenv("XBE_WEAPON_LOG") != nullptr;
     if (log_share && presents_ % 120 == 0)
-        for (const auto& [root, a2] : share)
+        for (uint32_t root : roots) {
+            const auto& a2 = share[root];
             if (a2[1] < a2[0] * 0.999f) LOGR("weapon:   piece %u shows %.4f, %.0f%% of it in the 4:3 view", root, a2[0], 100 * a2[1] / std::max(a2[0], 1e-9f));
+        }
     // tests (cmd weaponwhole 3 / 4): the triangles wholly outside the 4:3 view wound one way (a strip's alternate
     // triangles counted as the strip draws them) left out, the rest drawn
     if (int ww = g_weapon_whole.load(std::memory_order_relaxed); ww == 3 || ww == 4) {
         weapon_keep_.assign(tris.size(), 1), dropped = 0;
         for (size_t t = 0; t < tris.size(); t++) {
             if (!on[t] || in43[t]) continue;
-            const auto &p0 = scr[tris[t].v[0]], &p1 = scr[tris[t].v[1]], &p2 = scr[tris[t].v[2]];
+            const auto &p0 = scr[tris[t][0]], &p1 = scr[tris[t][1]], &p2 = scr[tris[t][2]];
             float area = (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p2[0] - p0[0]) * (p1[1] - p0[1]);
             if (a.strip && (t & 1)) area = -area;
             if ((ww == 3) == (area > 0)) weapon_keep_[t] = 0, dropped++;
@@ -8296,7 +8664,7 @@ bool Renderer::WeaponPieces(const State& s, const Assembled& a, const DrawShader
     weapon_vdrop_.assign(vcount, 0);
     for (size_t t = 0; t < tris.size(); t++)
         if (!weapon_keep_[t])
-            for (uint32_t v : tris[t].v) weapon_vdrop_[v] = 1;
+            for (uint32_t v : tris[t]) weapon_vdrop_[v] = 1;
     static const bool log = std::getenv("XBE_WEAPON_LOG") != nullptr;
     if (log && presents_ % 120 == 0) {
         LOGR("weapon: tex %016llx %zu triangles, %zu left out, %.3f ms", (unsigned long long)draw_tex0_, tris.size(), dropped,
@@ -8306,12 +8674,12 @@ bool Renderer::WeaponPieces(const State& s, const Assembled& a, const DrawShader
         KeyMap<uint32_t, Box> boxes;
         for (size_t t = 0; t < tris.size(); t++) {
             if (!on[t]) continue;
-            Box& b = boxes[find(tris[t].v[0])];
+            Box& b = boxes[find(tris[t][0])];
             b.n++;
-            for (uint32_t v : tris[t].v) b.x0 = std::min(b.x0, scr[v][0]), b.x1 = std::max(b.x1, scr[v][0]), b.y0 = std::min(b.y0, scr[v][1]), b.y1 = std::max(b.y1, scr[v][1]);
+            for (uint32_t v : tris[t]) b.x0 = std::min(b.x0, scr[v][0]), b.x1 = std::max(b.x1, scr[v][0]), b.y0 = std::min(b.y0, scr[v][1]), b.y1 = std::max(b.y1, scr[v][1]);
         }
         for (auto& [root, b] : boxes)
-            LOGR("weapon:   piece %u: %d on screen, x %.2f..%.2f y %.2f..%.2f%s", root, b.n, b.x0, b.x1, b.y0, b.y1, shown.count(root) ? " shown" : "");
+            LOGR("weapon:   piece %u: %d on screen, x %.2f..%.2f y %.2f..%.2f%s", root, b.n, b.x0, b.x1, b.y0, b.y1, shown[root] ? " shown" : "");
     }
     return true;
 }
@@ -8348,7 +8716,8 @@ void Renderer::CollectEmitter(const State& s, const Assembled& a, const DrawShad
             default: return false;
         }
     };
-    // a vertex's place in the world
+    // a vertex's place in the world (a program's: only the inputs it reads for its position fetched)
+    const uint16_t prog_inputs = prog ? CpuProgramInputs(*prog) : 0;
     const float* W = s.transforms[kTsWorld].data();
     const float gw = float(bound_rt_->gw), gh = float(bound_rt_->gh);
     auto place = [&](uint32_t i, float q[3]) {
@@ -8358,9 +8727,25 @@ void Renderer::CollectEmitter(const State& s, const Assembled& a, const DrawShad
             for (int k = 0; k < 3; k++) q[k] = p[0] * W[k] + p[1] * W[4 + k] + p[2] * W[8 + k] + W[12 + k];
             return true;
         }
-        float in[16][4], o[4];
-        for (uint32_t r = 0; r < 16; r++) input(r, i, in[r]);
+        float in[16][4] = {}, o[4];
+        for (uint32_t r = 0; r < 16; r++)
+            if ((prog_inputs >> r) & 1) input(r, i, in[r]);
         RunCpuProgram(*prog, in, s.vsc, o);
+        // tests (XBE_CPU_PROG_CHECK): the whole program's oPos the same
+        static const bool check = std::getenv("XBE_CPU_PROG_CHECK") != nullptr;
+        if (check) {
+            static KeyMap<uint64_t, std::shared_ptr<const CpuProgram>> whole;
+            auto& w = whole[sh.vkey];
+            if (!w) w = DecodeCpuProgram(s.vs->program, a.regs, true);
+            float all_in[16][4], o2[4];
+            for (uint32_t r = 0; r < 16; r++) input(r, i, all_in[r]);
+            RunCpuProgram(*w, all_in, s.vsc, o2);
+            static std::atomic<uint64_t> runs{0}, off{0};
+            if (std::memcmp(o, o2, sizeof(o))) {
+                if (off++ < 8) LOGR("emit: pruned program's oPos %g %g %g %g, whole %g %g %g %g", o[0], o[1], o[2], o[3], o2[0], o2[1], o2[2], o2[3]);
+            }
+            if (++runs % 20000 == 0) LOGR("emit: %llu programs run, %llu apart", (unsigned long long)runs.load(), (unsigned long long)off.load());
+        }
         // oPos: the console's screen pixels, w the view depth
         float z = o[3];
         if (!(z > 1.0f)) return false;
@@ -8444,7 +8829,9 @@ void Renderer::CollectEmitter(const State& s, const Assembled& a, const DrawShad
 
 // the world's depth before the weapon in hand clears it: its lights are added once the weapon is drawn
 void Renderer::SaveWorldDepth(Target& ds) {
-    world_depth_saved_ = CopyDepth(ds);
+    // (the soft particles' copy when nothing wrote depth after it: the smoke, drawn last, writes none)
+    static const bool always = std::getenv("XBE_DEPTH_COPY_ALWAYS") != nullptr;  // tests: copied again as before
+    world_depth_saved_ = (depth_copy_fresh_ && &ds == scene_ds_ && !always) || CopyDepth(ds);
 }
 
 // the depth buffer now into world_depth_ (the soft particles', then the world's for the lights), readable
@@ -8470,6 +8857,7 @@ bool Renderer::CopyDepth(Target& ds) {
     cl_->CopyResource(world_depth_.Get(), ds.res.Get());
     Transition(world_depth_.Get(), world_depth_state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+    depth_copy_fresh_ = &ds == scene_ds_;
     return true;
 }
 
@@ -8807,11 +9195,16 @@ void Renderer::SceneOcclusion() {
         return e ? std::atoi(e) : 0;
     }();
     const int sdbg = int(ShadowDebug());
-    // one bounce of light, from the scene as drawn (its copy, scene_[0])
+    // the depth at half size for the samples of the bounce and the occlusion
     bool gi = set.bounce_light && scene_[kSceneGi];
+    rhi::Resource* half = scene_[kSceneDepthHalf].Get();
+    if (gi || set.ao || set.contact_shadows)
+        ScenePass(kSceneAo, "depthhalf", kSceneDepthHalf, DXGI_FORMAT_R32_FLOAT, std::max(1u, w / 2), std::max(1u, h / 2),
+                  {{ds.res.Get(), kDepth}}, p);
+    // one bounce of light, from the scene as drawn (its copy, scene_[0])
     if (gi) {
         ScenePass(kSceneAo, "gi", kSceneGi, DXGI_FORMAT_R16G16B16A16_FLOAT, std::max(1u, w / 2), std::max(1u, h / 2),
-                  {{ds.res.Get(), kDepth}, {scene_[0].Get(), rt.fmt}}, p);
+                  {{ds.res.Get(), kDepth}, {scene_[0].Get(), rt.fmt}, {nullptr, kBgra}, {half, DXGI_FORMAT_R32_FLOAT}}, p);
     }
     gi_ready_ = gi;
     if (!set.ao && !set.contact_shadows) {
@@ -8828,7 +9221,7 @@ void Renderer::SceneOcclusion() {
     // by depth (aoup: an edge keeps its own side) for the veil and the composite
     const uint32_t hw = std::max(1u, w / 2), hh = std::max(1u, h / 2);
     ScenePass(kSceneAo, dbg == 2 ? "ao_depth" : dbg == 3 ? "ao_viewz" : dbg == 4 ? "ao_guard" : "ao", kSceneAoHalf, DXGI_FORMAT_R8_UNORM,
-              hw, hh, {{ds.res.Get(), kDepth}, {nullptr, kBgra}, {guard, DXGI_FORMAT_R32_FLOAT}}, p);
+              hw, hh, {{ds.res.Get(), kDepth}, {nullptr, kBgra}, {guard, DXGI_FORMAT_R32_FLOAT}, {half, DXGI_FORMAT_R32_FLOAT}}, p);
     float ph[16];
     std::memcpy(ph, p, sizeof(ph));
     ph[4] = 1, ph[5] = 0;
@@ -8862,10 +9255,7 @@ void Renderer::ScenePost() {
     float p[16];
     SceneParams(rt, p);
     uint32_t w = rt.w, h = rt.h;
-    motion_ok_ = false;
     GpuMark("weapon and late draws");
-    if (set.motion_blur && cam_ok_) MotionPass(rt);
-    GpuMark("motion");
     CopyScene(rt);
     if (set.auto_exposure) Exposure(rt);
     GpuMark("exposure");
@@ -8958,12 +9348,28 @@ void Renderer::ScenePost() {
                            {{scene_[0].Get(), rt.fmt}}, p);
         Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
     }
-    SceneFinal(rt, p, set.bloom, rays, dof);
+    // with the Anti-Aliasing: the composite and the splashes into scene_[kScenePost], read from there into the
+    // scene's target (not drawn into it, then copied to read back)
+    Target post;
+    static const bool copy = std::getenv("XBE_POST_COPY") != nullptr;  // (tests: drawn into the target, copied to read)
+    const bool via = set.fxaa && scene_[kScenePost] && !copy;
+    if (via) {
+        post.res = scene_[kScenePost], post.state = scene_state_[kScenePost], post.fmt = rt.fmt;
+        post.w = rt.w, post.h = rt.h, post.gw = rt.gw, post.gh = rt.gh;
+        post.view = kRtvCount + kFrames + kPostRtvs + kScenePost;
+    }
+    Target& out = via ? post : rt;
+    SceneFinal(out, p, set.bloom, rays, dof);
     GpuMark("final");
-    DrawSplashes(rt);
+    DrawSplashes(out);
     GpuMark("splashes");
-    if (set.motion_blur && motion_ok_) MotionBlurPass(rt);
-    if (set.fxaa) FxaaPass(rt);
+    if (via) {
+        Transition(post.res.Get(), post.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        scene_state_[kScenePost] = post.state;
+        FxaaPass(rt, scene_[kScenePost].Get());
+    } else if (set.fxaa) {
+        FxaaPass(rt, nullptr);
+    }
     GpuMark("fxaa");
     world_depth_saved_ = false;
 }
@@ -9029,6 +9435,7 @@ void Renderer::SkyPass(Target& rt, const float p[16]) {
     rhi::Resource* depth = world_depth_saved_ ? world_depth_.Get() : ds.res.Get();
     // level 1: where its smoke and far water are near (skyfx leaves the costly parts out elsewhere)
     rhi::Resource* tiles = nullptr;
+    rhi::Resource* quarter = nullptr;
     if (sky_cb_[3] > 1.5f) {
         uint32_t tw = (rt.w + 15) / 16, th = (rt.h + 15) / 16;
         if (!sky_tiles_[1] || sky_tiles_w_ != tw || sky_tiles_h_ != th) {
@@ -9066,20 +9473,46 @@ void Renderer::SkyPass(Target& rt, const float p[16]) {
             Transition(sky_tiles_[1].Get(), sky_tiles_state_[1], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
             tiles = sky_tiles_[1].Get();
         }
+        // the disc's taps at a quarter size (kSkyTilesHlsl skyquarter)
+        const uint32_t qw = std::max(1u, (rt.w + 3) / 4), qh = std::max(1u, (rt.h + 3) / 4);
+        if (!sky_quarter_ || sky_quarter_w_ != qw || sky_quarter_h_ != qh) {
+            if (sky_quarter_) Release(std::move(sky_quarter_));
+            D3D12_RESOURCE_DESC td = Texture2DDesc(DXGI_FORMAT_R16G16B16A16_FLOAT, qw, qh);
+            td.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+            D3D12_CLEAR_VALUE cv{};
+            cv.Format = td.Format;
+            sky_quarter_state_ = D3D12_RESOURCE_STATE_RENDER_TARGET;
+            if (CreateResource(rhi::HeapType::Default, td, sky_quarter_state_, &cv, sky_quarter_)) {
+                dev_->CreateRtv(sky_quarter_.Get(), nullptr, SkyQuarterRtv());
+                sky_quarter_w_ = qw, sky_quarter_h_ = qh;
+            } else {
+                sky_quarter_.Reset();
+            }
+        }
+        if (sky_quarter_) {
+            float q[8] = {float(rt.w), float(rt.h), 0, 0, 0, 0, 0, 0};
+            Transition(sky_quarter_.Get(), sky_quarter_state_, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            rhi::Resource* s2[3] = {scene_[0].Get(), depth, nullptr};
+            DXGI_FORMAT f2[3] = {rt.fmt, DXGI_FORMAT_R24_UNORM_X8_TYPELESS, kBgra};
+            Pass(kSkyTilesHlsl, "skyquarter", DXGI_FORMAT_R16G16B16A16_FLOAT, SkyQuarterRtv(), qw, qh, s2, f2, q, -1);
+            Transition(sky_quarter_.Get(), sky_quarter_state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            quarter = sky_quarter_.Get();
+        }
     }
     SkyAverage(depth, p);
     uint32_t slot = AllocSrvSlots(7);
-    std::pair<rhi::Resource*, DXGI_FORMAT> src[4] = {{scene_[0].Get(), rt.fmt},
+    std::pair<rhi::Resource*, DXGI_FORMAT> src[5] = {{scene_[0].Get(), rt.fmt},
                                                       {depth, DXGI_FORMAT_R24_UNORM_X8_TYPELESS},
                                                       {tiles, DXGI_FORMAT_R8G8_UNORM},
-                                                      {SkyAvg(), DXGI_FORMAT_R16G16B16A16_FLOAT}};
+                                                      {SkyAvg(), DXGI_FORMAT_R16G16B16A16_FLOAT},
+                                                      {quarter, DXGI_FORMAT_R16G16B16A16_FLOAT}};
     for (uint32_t i = 0; i < 7; i++) {
         D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
-        sv.Format = i < 4 && src[i].first ? src[i].second : kBgra;
+        sv.Format = i < 5 && src[i].first ? src[i].second : kBgra;
         sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         sv.Texture2D.MipLevels = 1;
-        dev_->CreateSrv(i < 4 ? src[i].first : nullptr, &sv, Cpu(rhi::Heap::Srv, slot + i));
+        dev_->CreateSrv(i < 5 ? src[i].first : nullptr, &sv, Cpu(rhi::Heap::Srv, slot + i));
     }
     Transition(rt.res.Get(), rt.state, D3D12_RESOURCE_STATE_RENDER_TARGET);
     rhi::View rh = Cpu(rhi::Heap::Rtv, rt.view);
@@ -9197,7 +9630,8 @@ void Renderer::ReflectionPass(Target& rt, const float p[16]) {
 // highlights rolled off. t0 the scene, t1 the world's depth (kept before the weapon's clear), t2 the bloom, t3 the
 // shafts, t4 the blurred scene, t6 the depth now (the weapon in hand's).
 void Renderer::SceneFinal(Target& rt, const float p[16], bool bloom, bool rays, bool dof) {
-    std::string text = std::string(kSceneCommon) + kSceneComposite;
+    static const bool tile_check = std::getenv("XBE_LIGHTS_TILE_CHECK") != nullptr;  // (tests: kSceneComposite's TILE_CHECK)
+    std::string text = std::string(tile_check ? "#define TILE_CHECK\n" : "") + kSceneCommon + kSceneComposite;
     rhi::Pipeline* pso = EnsurePassPipeline(text.c_str(), "composite", rt.fmt, -1);
     if (!pso || !scene_ds_) return;
     Target& ds = *scene_ds_;
@@ -9224,6 +9658,35 @@ void Renderer::SceneFinal(Target& rt, const float p[16], bool bloom, bool rays, 
     constexpr uint32_t kMaxLights = 32;
     float lpos[kMaxLights * 4], lcol[kMaxLights * 4];
     uint32_t nlights = app::Get().dynamic_lights ? DynLightConstants(lpos, lcol, kMaxLights) : 0;
+    // the lights each tile of the screen may see (kSceneComposite's LightTiles: 32 x 18, a bit a light): the box of a
+    // light's sphere's corners on the screen, the whole screen when the sphere reaches the near plane
+    uint32_t ltiles[32 * 18] = {};
+    {
+        MaterialFrame mf;
+        {
+            std::lock_guard lock(g_material_frame_lock);
+            mf = g_material_frame;
+        }
+        static const bool all_tiles = std::getenv("XBE_LIGHTS_ALL_TILES") != nullptr;  // (tests: every light everywhere)
+        for (uint32_t k = 0; k < nlights; k++) {
+            const float* c = lpos + k * 4;
+            const float r = c[3];
+            float x0 = 0, x1 = 1, y0 = 0, y1 = 1;
+            if (!all_tiles && c[2] - r > std::max(mf.near_plane, 1.0f) && mf.view_x > 0 && mf.view_y > 0) {
+                x0 = y0 = 1e9f, x1 = y1 = -1e9f;
+                for (int corner = 0; corner < 8; corner++) {
+                    const float x = c[0] + (corner & 1 ? r : -r), y = c[1] + (corner & 2 ? r : -r), z = c[2] + (corner & 4 ? r : -r);
+                    const float u = (x / (z * mf.view_x) + 1) * 0.5f, v = (1 - y / (z * mf.view_y)) * 0.5f;
+                    x0 = std::min(x0, u), x1 = std::max(x1, u), y0 = std::min(y0, v), y1 = std::max(y1, v);
+                }
+            }
+            const int tx0 = std::clamp(int(std::floor(x0 * 32)) - 1, 0, 31), tx1 = std::clamp(int(std::floor(x1 * 32)) + 1, 0, 31);
+            const int ty0 = std::clamp(int(std::floor(y0 * 18)) - 1, 0, 17), ty1 = std::clamp(int(std::floor(y1 * 18)) + 1, 0, 17);
+            if (x1 < 0 || x0 > 1 || y1 < 0 || y0 > 1) continue;  // (wholly off the screen)
+            for (int ty = ty0; ty <= ty1; ty++)
+                for (int tx = tx0; tx <= tx1; tx++) ltiles[ty * 32 + tx] |= 1u << k;
+        }
+    }
     const app::Settings& set = app::Get();
     if (!nlights || !set.heat_haze) fx_.heats = 0;
     if (!nlights || !set.explosion_flash) fx_.flash = 0;
@@ -9251,6 +9714,13 @@ void Renderer::SceneFinal(Target& rt, const float p[16], bool bloom, bool rays, 
     std::memcpy(cb.cpu + (24 + kMaxLights * 4) * sizeof(float), lcol, nlights * 4 * sizeof(float));
     std::memcpy(cb.cpu + (24 + kMaxLights * 8) * sizeof(float), fx_.heat, sizeof(fx_.heat));
     std::memcpy(cb.cpu + (24 + kMaxLights * 8 + 32) * sizeof(float), fx_.heatz, sizeof(fx_.heatz));
+    {
+        static const bool none = std::getenv("XBE_LIGHTS_NO_TILES") != nullptr;  // (tests: every tile empty, TILE_CHECK's control)
+        if (none) std::memset(ltiles, 0, sizeof(ltiles));
+        Alloc tb = Upload(sizeof(ltiles), 256);
+        std::memcpy(tb.cpu, ltiles, sizeof(ltiles));
+        cl_->SetCbv(5, tb.gpu);
+    }
     // the blasts' rings at heatz[3..4].yzw (x, y, radius now; strength in its sign's place: radius * strength), the
     // dirt at heatz[2].y and its seed at heatz[2].z (Shockwaves)
     {
@@ -9315,15 +9785,18 @@ void Renderer::SceneFinal(Target& rt, const float p[16], bool bloom, bool rays, 
         const float off = 0;
         std::memcpy(cb.cpu + (24 + kMaxLights * 8 + 32 + 6 * 4 + 1) * sizeof(float), &off, sizeof(off));
     }
-    if (motes_drawn) {
+    // the lens's dirt at t9, made for the screen's size (LensDirt)
+    rhi::Resource* dirt = app::Get().lens_flare ? LensDirt(text, cb.gpu, rt.w, rt.h) : nullptr;
+    if (motes_drawn || dirt) {
         uint32_t mslot = AllocSrvSlots(3);
         for (uint32_t i = 0; i < 3; i++) {
             D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
-            sv.Format = i ? kBgra : DXGI_FORMAT_R11G11B10_FLOAT;
+            rhi::Resource* r = i == 0 && motes_drawn ? motes_.Get() : i == 2 ? dirt : nullptr;
+            sv.Format = !r ? kBgra : i == 0 ? DXGI_FORMAT_R11G11B10_FLOAT : DXGI_FORMAT_R32_FLOAT;
             sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
             sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
             sv.Texture2D.MipLevels = 1;
-            dev_->CreateSrv(i ? nullptr : motes_.Get(), &sv, Cpu(rhi::Heap::Srv, mslot + i));
+            dev_->CreateSrv(r, &sv, Cpu(rhi::Heap::Srv, mslot + i));
         }
         cl_->SetTable(4, Gpu(rhi::Heap::Srv, mslot));
         Transition(rt.res.Get(), rt.state, D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -9331,7 +9804,7 @@ void Renderer::SceneFinal(Target& rt, const float p[16], bool bloom, bool rays, 
         SetFullViewport(rt.w, rt.h);
     }
     DrawFullScreen(pso, cb.gpu, slot);
-    if (motes_drawn) cl_->SetTable(4, sun_table_);
+    if (motes_drawn || dirt) cl_->SetTable(4, sun_table_);
     Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
     bound_rt_ = bound_ds_ = nullptr;
 }
@@ -10158,7 +10631,7 @@ void Renderer::DrawTimesBegin() {
 
 void Renderer::DrawTimesResolve() {
     if (dt_state_ != 1) return;
-    cl_->ResolveTimestamps(dt_q_.Get(), 0, uint32_t(dt_info_.size() + 1), dt_rb_.Get(), 0);
+    cl_->ResolveTimestamps(dt_q_.Get(), 0, uint32_t(dt_info_.size() * 2 + 1), dt_rb_.Get(), 0);
     dt_state_ = 2;
     dt_frame_ = frame_;
 }
@@ -10172,7 +10645,7 @@ void Renderer::DrawTimesRead() {
     double total = 0;
     for (size_t i = 0; i < dt_info_.size(); i++) {
         const DrawTime& d = dt_info_[i];
-        double us = q[i + 1] >= q[i] ? double(q[i + 1] - q[i]) * 1e6 / double(freq) : 0;
+        double us = q[i * 2 + 2] >= q[i * 2 + 1] ? double(q[i * 2 + 2] - q[i * 2 + 1]) * 1e6 / double(freq) : 0;
         total += us;
         LOGR("drawtime %zu: %.1f us tex %016llx vs %016llx ps %016llx rt %ux%u count %u topo %X blend %u scene %u", i, us,
              (unsigned long long)d.tex, (unsigned long long)d.vs, (unsigned long long)d.ps, d.w, d.h, d.count, d.topo, d.blend, d.scene);
@@ -10419,13 +10892,6 @@ void Renderer::Present(const Surface& front) {
     light_resolved_ = false;
     casters_.clear();
     veil_.clear();
-    // the frame's draws' constants for the next frame's motion (those still in place: none rewritten by a flush)
-    std::swap(motion_prev_, motion_cur_);
-    motion_prev_gen_ = ring_gen_;
-    motion_cur_.Clear();
-    std::swap(motion_counts_prev_, motion_order_);
-    motion_order_.Clear();
-    motion_.clear();
     prev_cam_ok_ = cam_ok_;
     if (cam_ok_) std::memcpy(prev_view_, cam_view_, sizeof(prev_view_)), std::memcpy(prev_proj_, cam_proj_, sizeof(prev_proj_));
     cam_ok_ = false;
@@ -10435,6 +10901,7 @@ void Renderer::Present(const Surface& front) {
     scene_done_ = false;
     occlusion_done_ = false;
     soft_saved_ = false;
+    depth_copy_fresh_ = false;
     gbuf_used_ = false;
     sky_done_ = false;
     PumpRemaster();

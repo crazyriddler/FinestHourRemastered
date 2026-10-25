@@ -1,4 +1,6 @@
 #pragma once
+#include <immintrin.h>
+
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -88,9 +90,16 @@ struct TessInfo {
     bool skinned = false;  // its matrices read by a0 (a character's bones), not a rigid model's one placement
 };
 TessInfo TessRows(const std::vector<uint32_t>& program, uint16_t regs);
-std::shared_ptr<const CpuProgram> DecodeCpuProgram(const std::vector<uint32_t>& program, uint16_t regs);
+// (whole: every instruction kept, tests)
+std::shared_ptr<const CpuProgram> DecodeCpuProgram(const std::vector<uint32_t>& program, uint16_t regs, bool whole = false);
+// the inputs (v0 to v15, a bit each) it reads for oPos
+uint16_t CpuProgramInputs(const CpuProgram& p);
 // one vertex: its inputs (v0 to v15), the constants in hardware order; oPos as the program writes it
 void RunCpuProgram(const CpuProgram& p, const float in[16][4], const std::array<std::array<float, 4>, 192>& c, float opos[4]);
+// four vertices at once, the same results (inputs: the ones CpuProgramInputs names)
+void RunCpuProgram4(const CpuProgram& p, const float in[4][16][4], const std::array<std::array<float, 4>, 192>& c, float opos[4][4]);
+// the same, the inputs already a lane a vertex: lanes[r] the x, y, z, w of input r (null: zeros)
+void RunCpuProgram4(const CpuProgram& p, const __m128* const lanes[16], const std::array<std::array<float, 4>, 192>& c, float opos[4][4]);
 // Shadows (shadows.h): a vertex shader as the shadow casters' variant. Its constant buffer b0 runs past the
 // program's 192 constants: the cascades' view to light clip matrices (shc), their atlas tiles (sht: clip xy scale,
 // offset) and shv (1 / the projection's x and y scale, the first cascade drawn). Drawn instanced, one instance a
@@ -99,10 +108,6 @@ std::string ShadowVertexHlsl(std::string vs);
 // the casters' pixel shader where the draw's alpha test cuts the shape out of stage 0's texture (proj: coordinates
 // divided by w)
 std::string ShadowAlphaHlsl(bool proj, bool blended);
-// The motion variant of a draw's vertex shader (d3d12.cpp MotionPass): its main run twice, with this frame's constants
-// and the frame before's (b2 its vertex constants, b3 its draw constants: wvp at the float4 wvp_at), out both clip
-// positions; entry "motion"
-std::string MotionVertexHlsl(const std::string& vs, unsigned wvp_at);
 std::string GuardVertexHlsl(std::string vs);
 // The top view variant (d3d12.cpp WaterInteraction): the draw seen from above onto the wave field's square (b2:
 // view to the square's clip, the world's height from view space, 1 / P00, 1 / P11), out the world's height

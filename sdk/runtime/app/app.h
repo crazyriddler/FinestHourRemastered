@@ -26,7 +26,6 @@ struct Settings {
     uint32_t aniso = 16;             // 0 as the game asks
     bool smaa = true;                // SMAA on the shown frame
     bool fxaa = true;                // Anti-Aliasing: FXAA on the 3D scene (the HUD is drawn over it after)
-    bool motion_blur = false;        // what moves blurs along its motion (retired: off, not offered)
     uint32_t sharpening = 0;         // contrast adaptive sharpening of the shown frame, 0 to 10
     bool hdr = true;                 // the scene in 16 bit float: light added past white keeps its brightness
     bool bloom = true;               // what is brighter than white glows

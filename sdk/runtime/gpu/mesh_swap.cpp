@@ -1,6 +1,8 @@
 #include "gpu/mesh_swap.h"
 #include "gpu/keymap.h"
+#include "gpu/shaders.h"
 
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -34,8 +36,11 @@ struct Header {
 #pragma pack(pop)
 
 std::mutex g_meshes_lock;
+std::atomic<bool> g_meshes_read{false};  // the loader done: the table read without the lock from then on
 KeyMap<uint64_t, Mesh> g_meshes;  // as the loader reads them (a node's address stays: Mesh* kept)
 std::unordered_set<uint64_t> g_draws;  // prim << 32 | count of the originals (from the headers, before the loader)
+// (an open table of g_draws, made once the headers are read: a lookup a draw without the set's buckets)
+std::vector<uint64_t> g_draw_table;
 
 int RegCount(uint16_t regs) {
     int n = 0;
@@ -86,6 +91,17 @@ void Load(const std::filesystem::path& dir) {
         files.push_back(e.path());
     }
     if (files.empty()) return;
+    {
+        size_t size = 16;
+        while (size < g_draws.size() * 4) size *= 2;
+        g_draw_table.assign(size, 0);
+        for (uint64_t key : g_draws)
+            for (size_t i = KeyHash{}(key) & (size - 1);; i = (i + 1) & (size - 1))
+                if (!g_draw_table[i]) {
+                    g_draw_table[i] = key;
+                    break;
+                }
+    }
     LOGR("meshes: %zu remastered meshes in %s, read on a thread", files.size(), dir.string().c_str());
     std::thread([files = std::move(files)] {
         size_t tris = 0, n = 0;
@@ -102,11 +118,18 @@ void Load(const std::filesystem::path& dir) {
             g_meshes[key] = std::move(m);
         }
         LOGR("meshes: %zu remastered meshes read (%zu triangles)", n, tris);
+        g_meshes_read.store(true, std::memory_order_release);
     }).detach();
 }
 
 bool Candidate(uint32_t prim, uint32_t count) {
-    return !g_draws.empty() && g_draws.count(uint64_t(prim) << 32 | count);
+    if (g_draw_table.empty()) return false;
+    const uint64_t key = uint64_t(prim) << 32 | count;
+    const size_t mask = g_draw_table.size() - 1;
+    for (size_t i = KeyHash{}(key) & mask;; i = (i + 1) & mask) {
+        if (g_draw_table[i] == key) return true;
+        if (g_draw_table[i] == 0) return false;
+    }
 }
 
 uint64_t Key(const Assembled& a) {
@@ -123,82 +146,92 @@ uint64_t Key(const Assembled& a) {
 }
 
 namespace {
-uint64_t Fnv(uint64_t h, const void* p, size_t n) {
-    const uint8_t* b = static_cast<const uint8_t*>(p);
-    for (size_t i = 0; i < n; i++) h = (h ^ b[i]) * 0x100000001b3ull;
-    return h;
-}
-
-std::mutex g_keys_lock;
-KeyMap<uint64_t, std::pair<uint64_t, uint64_t>> g_keys;  // where -> (check, key)
+// The keys found, by place (where: check, key) and by content (content: key): tables of a fixed size, two ways a
+// set (an entry over another, the older of the two, when both are taken: a key lost is worked out again), nothing
+// made or freed per draw (a buffer written anew each frame is a new place each frame)
+struct KeyEntry {
+    uint64_t id = 0, check = 0, key = 0;
+    uint32_t age = 0;
+    bool used = false;
+};
+struct KeyTable {
+    std::vector<KeyEntry> e = std::vector<KeyEntry>(size_t(1) << 16);
+    uint32_t clock = 0;
+    KeyEntry* Find(uint64_t id) {
+        size_t i = Set(id);
+        for (size_t k = i; k < i + 2; k++)
+            if (e[k].used && e[k].id == id) return &e[k];
+        return nullptr;
+    }
+    KeyEntry& Place(uint64_t id) {
+        if (KeyEntry* f = Find(id)) return *f;
+        size_t i = Set(id);
+        KeyEntry& t = !e[i].used ? e[i] : !e[i + 1].used ? e[i + 1] : e[i].age <= e[i + 1].age ? e[i] : e[i + 1];
+        t.used = true, t.id = id, t.age = ++clock;
+        return t;
+    }
+    size_t Set(uint64_t id) const { return size_t((id * 0x9E3779B97F4A7C15ull) >> 48) & ~size_t(1); }
+};
+KeyTable g_keys, g_contents;  // (the render thread's alone: its draws look them up, no lock)
 }  // namespace
 
 DrawId IdOf(const State& s, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* indices) {
     using namespace kernel;
     DrawId id;
-    uint64_t h = 0xcbf29ce484222325ull;
+    // (keys of this run alone, never kept: hashed 16 bytes a step, not FNV's byte by byte)
     const uint32_t vb = s.streams[0].vb;
     const uint32_t data = vb ? R32(vb + 4) : 0;  // the buffer's data (physical)
-    const uint32_t fields[] = {data, s.streams[0].stride, prim, start, count, s.base_vertex, s.vs_handle};
-    h = Fnv(h, fields, sizeof(fields));
+    const uint32_t fields[] = {data, s.streams[0].stride, prim, start, count, s.base_vertex, s.vs_handle, 0};
     const uintptr_t ip = reinterpret_cast<uintptr_t>(indices);
-    id.where = Fnv(h, &ip, sizeof(ip));
+    id.where = Hash(&ip, sizeof(ip), Hash(fields, sizeof(fields)));
     // the first vertices' bytes and the first indices'
     uint64_t c = 0xcbf29ce484222325ull;
     if (data) {
         // (where the draw's own vertices start: a buffer may hold many models)
         uint32_t first = indices ? uint32_t(*reinterpret_cast<const uint16_t*>(indices)) + s.base_vertex : start;
         const uint8_t* v = static_cast<const uint8_t*>(HostPtr(mem::VirtualFromPhysical(data)));
-        c = Fnv(c, v + size_t(first) * s.streams[0].stride, 64);
+        c = Hash(v + size_t(first) * s.streams[0].stride, 64, c);
     }
-    if (indices) c = Fnv(c, indices, 32);
+    if (indices) c = Hash(indices, 32, c);
     id.check = c;
     return id;
 }
 
 bool CachedKey(const DrawId& id, uint64_t& key) {
-    std::lock_guard<std::mutex> guard(g_keys_lock);
-    auto it = g_keys.find(id.where);
+    const KeyEntry* e = g_keys.Find(id.where);
     // tests: XBE_MESH_KEY_LOG, the lookups' outcome counted (new place, same place with other bytes, found)
     static const bool klog = std::getenv("XBE_MESH_KEY_LOG") != nullptr;
     if (klog) {
         static uint64_t fresh = 0, changed = 0, hit = 0;
-        (it == g_keys.end() ? fresh : it->second.first != id.check ? changed : hit)++;
+        (!e ? fresh : e->check != id.check ? changed : hit)++;
         if ((fresh + changed + hit) % 20000 == 0)
-            LOGR("meshes: key lookups %llu new places, %llu changed bytes, %llu found (%zu kept)", (unsigned long long)fresh,
-                 (unsigned long long)changed, (unsigned long long)hit, g_keys.size());
+            LOGR("meshes: key lookups %llu new places, %llu changed bytes, %llu found", (unsigned long long)fresh,
+                 (unsigned long long)changed, (unsigned long long)hit);
     }
-    if (it == g_keys.end() || it->second.first != id.check) return false;
-    key = it->second.second;
+    if (!e || e->check != id.check) return false;
+    key = e->key;
     return true;
 }
 
 void StoreKey(const DrawId& id, uint64_t key) {
-    std::lock_guard<std::mutex> guard(g_keys_lock);
-    if (g_keys.size() > 100000) g_keys.clear();
-    g_keys[id.where] = {id.check, key};
+    KeyEntry& e = g_keys.Place(id.where);
+    e.check = id.check, e.key = key;
 }
 
-namespace {
-KeyMap<uint64_t, uint64_t> g_contents;  // content -> key (under g_keys_lock)
-}  // namespace
-
 bool ContentKey(uint64_t content, uint64_t& key) {
-    std::lock_guard<std::mutex> guard(g_keys_lock);
-    auto it = g_contents.find(content);
-    if (it == g_contents.end()) return false;
-    key = it->second;
+    const KeyEntry* e = g_contents.Find(content);
+    if (!e) return false;
+    key = e->key;
     return true;
 }
 
 void StoreContent(uint64_t content, uint64_t key) {
-    std::lock_guard<std::mutex> guard(g_keys_lock);
-    if (g_contents.size() > 200000) g_contents.clear();
-    g_contents[content] = key;
+    g_contents.Place(content).key = key;
 }
 
 const Mesh* Find(uint64_t key, uint16_t regs) {
-    std::lock_guard<std::mutex> guard(g_meshes_lock);
+    std::unique_lock<std::mutex> guard(g_meshes_lock, std::defer_lock);
+    if (!g_meshes_read.load(std::memory_order_acquire)) guard.lock();
     auto it = g_meshes.find(key);
     if (it == g_meshes.end() || it->second.regs != regs) return nullptr;
     static std::unordered_set<uint64_t> told;

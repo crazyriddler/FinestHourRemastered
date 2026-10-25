@@ -55,7 +55,7 @@ def drive(levels, tag, api, secs, views=None, fxs=()):
         # (each level a new run, its log written over: the reports kept)
         os.makedirs(os.path.join(WORK, tag), exist_ok=True)
         with open(os.path.join(WORK, tag, "raw_%s.txt" % api), "a", encoding="utf-8") as f:
-            f.write("".join(l + "\n" for l in read_log().splitlines() if "perf [" in l or "drawtime" in l))
+            f.write("".join(l + "\n" for l in read_log().splitlines() if "perf [" in l or "perf: " in l or "drawtime" in l))
         game.send("quit")
         time.sleep(3)
         d.kill_build_exe()

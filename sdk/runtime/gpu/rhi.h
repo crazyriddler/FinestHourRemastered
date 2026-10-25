@@ -278,6 +278,14 @@ public:
     // the main queue's one list: Submit closes it, runs it and signals the fence with value; Reset opens it again on
     // the allocator of frame slot (the GPU done with its last use)
     virtual List* MainList() = 0;
+    // Recording on other threads (the shadows' casters drawn again): Fork ends the main list's commands so far (the
+    // main list goes on as a list anew: nothing set on it but the main layout) and gives n lists (n <= MaxForks) to
+    // record on other threads meanwhile; Join puts what they recorded after the commands before the Fork, in order,
+    // and before the main list's since. The forked lists start with the main layout and nothing else set (targets,
+    // viewport, scissor, pipeline, arguments); they only draw: no barriers, clears, copies or timestamps.
+    virtual uint32_t MaxForks() const { return 0; }
+    virtual List* const* Fork(uint32_t n) { (void)n; return nullptr; }
+    virtual void Join() {}
     virtual void Submit(uint64_t value) = 0;
     virtual void Reset(uint32_t slot) = 0;
     virtual uint64_t Completed() = 0;

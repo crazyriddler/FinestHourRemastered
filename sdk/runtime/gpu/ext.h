@@ -21,6 +21,7 @@ struct Target {
     D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COMMON;
     uint32_t data = 0, bytes = 0;
     uint64_t epoch = 0, sig = 0;  // last lock seen, guest memory as last matched
+    uint64_t locks_seen = 0;      // DirtyCount when its lock epoch was last looked up
     bool drawn = false;           // the GPU wrote it since the last readback
     std::vector<uint8_t> read;    // what Sync left in guest memory
     uint64_t cpu_at = 0;          // the present of the CPU's last whole frame into it (a movie's)

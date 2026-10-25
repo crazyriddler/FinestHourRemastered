@@ -72,8 +72,8 @@ weapons rounded) or Original.
 - About 10 GB of disk: the game's files, the remastered textures and models.
 - **The game**: Call of Duty: Finest Hour for the original Xbox, **PAL (Europe) release**, title ID `4156002A`,
   version 3 (`default.xbe` SHA-1 `938a7b1e17928de49cb3c5834d61abcd3d9081c8`). Its four languages (English, French,
-  Italian and Spanish, text and speech) are all supported, and Portuguese (text, with the English speech) is added by
-  the port. Other releases are not supported: the port is the code of this one.
+  Italian and Spanish, text and speech) are all supported, and Portuguese and Russian (text, with the English speech)
+  are added by the port. Other releases are not supported: the port is the code of this one.
 
 ## Installation
 1. Download the [1.0 release](https://github.com/crazyriddler/FinestHourRemastered/releases/tag/v1.0):
@@ -190,7 +190,7 @@ game's own look and textures. The render scale is never part of a preset: it sta
 - **Controllers**: Xbox, PlayStation and Switch, hot plugging and rumble, a modern layout or the original's, dead
   zone, sensitivity and look acceleration settings.
 - **Button Prompts** follow the device in hand: keys, Xbox, PlayStation or Switch buttons.
-- **Skip Intros**, **Language** (English, French, Italian, Spanish, Portuguese).
+- **Skip Intros**, **Language** (English, French, Italian, Spanish, Portuguese, Russian).
 - **Sound**: Stereo or **5.1 Surround** (PC Settings > General): the game mixes for Dolby Digital as on a console
   connected to a surround receiver, the battle placed around you on the front, centre, back and subwoofer.
 
@@ -278,8 +278,8 @@ Requirements: `pip install -r tools\remaster\requirements.txt` (PyTorch with CUD
 - [PBRify_Remix](https://github.com/Kim2091/PBRify_Remix) by Kim2091 (CC0), [spandrel](https://github.com/chaiNNer-org/spandrel),
   [OpenCLIP](https://github.com/mlfoundations/open_clip), [DirectXTex](https://github.com/microsoft/DirectXTex).
 - [Input Prompts](https://kenney.nl/assets/input-prompts) by Kenney (CC0).
-- Typefaces: [Jost](https://fonts.google.com/specimen/Jost), [Courier Prime](https://fonts.google.com/specimen/Courier+Prime)
-  (SIL OFL), [DejaVu](https://dejavu-fonts.github.io/).
+- Typefaces: [Jost](https://fonts.google.com/specimen/Jost), [Courier Prime](https://fonts.google.com/specimen/Courier+Prime),
+  [IBM Plex Mono](https://fonts.google.com/specimen/IBM+Plex+Mono) (SIL OFL), [DejaVu](https://dejavu-fonts.github.io/).
 - Television photograph: [Unsplash](https://unsplash.com/photos/NGuLnUBFMbc) (Unsplash License). Icon:
   [SteamGridDB](https://www.steamgriddb.com/game/5252406).
 - [vgmstream](https://github.com/vgmstream/vgmstream) and [FFmpeg](https://ffmpeg.org) for the trailer.

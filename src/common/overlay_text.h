@@ -12,6 +12,9 @@ struct PtRow {
 };
 extern const PtRow kPtRows[];
 extern const size_t kPtRowCount;
+// the Russian (overlay_text_ru.cpp)
+extern const PtRow kRuRows[];
+extern const size_t kRuRowCount;
 std::string Tr(const std::string& en);
 
 }  // namespace cod::overlay

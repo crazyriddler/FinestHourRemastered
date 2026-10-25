@@ -2485,6 +2485,7 @@ const wchar_t* CompilingText() {
         case 5: return L"Compilando shaders";
         case 6: return L"Compilazione degli shader";
         case 9: return L"Compilando shaders";
+        case 10: return L"\x041A\x043E\x043C\x043F\x0438\x043B\x044F\x0446\x0438\x044F \x0448\x0435\x0439\x0434\x0435\x0440\x043E\x0432";
         default: return L"Compiling shaders";
     }
 }

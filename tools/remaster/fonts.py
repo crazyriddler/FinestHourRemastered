@@ -34,6 +34,10 @@ FACES = {
     "lta32": ("CourierPrime-Bold.ttf", None),
     "t12": (os.path.join("dejavu", "dejavu-fonts-ttf-2.37", "ttf", "DejaVuSansCondensed.ttf"), None),
 }
+# a second typeface for the characters the first lacks (Courier Prime has no Cyrillic: lang_fonts.py), sized as it
+FALLBACK = {
+    "lta32": (os.path.join("ibmplexmono", "IBMPlexMono-Bold.ttf"), None),
+}
 
 
 def read_metrics(pak):
@@ -97,8 +101,21 @@ def shadow_style(light, dark):
     return style
 
 
-def load_face(name, size):
-    path, weight = FACES[name]
+def glyph_in(face, ch):
+    """the typeface has the character itself (not its missing glyph's box)"""
+    try:
+        from fontTools.ttLib import TTFont
+    except ImportError:
+        return True
+    path = face.path
+    cmaps = glyph_in.__dict__.setdefault("cmaps", {})
+    if path not in cmaps:
+        cmaps[path] = set(TTFont(path).getBestCmap())
+    return ord(ch) in cmaps[path]
+
+
+def load_face(name, size, faces=None):
+    path, weight = (faces or FACES)[name]
     face = ImageFont.truetype(os.path.join(FONTS, path), size)
     if weight is not None:
         face.set_variation_by_axes([weight])
@@ -125,6 +142,16 @@ def draw_atlas(name, src, boxes):
             break
         size = max(4, int(round(size * cap * SCALE / max(hh, 1))))
     face = load_face(name, size)
+    # the second typeface at its own size with an H as tall
+    fallback = None
+    if name in FALLBACK:
+        fsize = size
+        for _ in range(30):
+            fallback = load_face(name, fsize, FALLBACK)
+            hb = fallback.getbbox("H", anchor="ls")
+            if abs((hb[3] - hb[1]) - cap * SCALE) <= 1:
+                break
+            fsize = max(4, int(round(fsize * cap * SCALE / max(hb[3] - hb[1], 1))))
     # one size for the whole atlas: as large as the cap height asks, less if that leaves glyphs too wide for their
     # boxes (all letters of a text the same size; the few still too wide narrow a little)
     grow = int(MARGIN.get(name, 0.5) * SCALE)
@@ -139,6 +166,9 @@ def draw_atlas(name, src, boxes):
     if fit < 1:
         size = max(4, int(size * fit))
         face = load_face(name, size)
+        if fallback is not None:
+            fallback = load_face(name, max(4, int(fsize * fit)), FALLBACK)
+    primary = face
     W, H = w * SCALE, h * SCALE
     ink = np.zeros((H, W), np.float32)
     up = np.asarray(Image.fromarray((light * 255).astype(np.uint8)).resize((W, H), Image.LANCZOS)) / 255.0
@@ -170,6 +200,9 @@ def draw_atlas(name, src, boxes):
         cols = np.where(orig.max(axis=0) > 0.3)[0]
         ocx = (bx0 + (cols[0] + cols[-1] + 1) / 2) * SCALE
         bw, bh = (bx1 - bx0 + 1) * SCALE, (by1 - by0 + 1) * SCALE
+        face = primary
+        if fallback is not None and ch.isprintable() and not glyph_in(primary, ch) and glyph_in(fallback, ch):
+            face = fallback
         has = face.getmask(ch).getbbox() is not None and ch.isprintable() and ch != "�"
         if not has:
             ink[by0 * SCALE:(by1 + 1) * SCALE, bx0 * SCALE:(bx1 + 1) * SCALE] = up[by0 * SCALE:(by1 + 1) * SCALE,

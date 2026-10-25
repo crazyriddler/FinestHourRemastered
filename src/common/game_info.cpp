@@ -819,6 +819,7 @@ const app::GameInfo app::kGame = {
     .ui = Ui,
     .pad = Pad,
     .rumble = nullptr,
-    // Portuguese: the game in English underneath, its text from lang/pt.txt (game/language.cpp)
-    .console_language = [](uint32_t l) { return l == 9 ? 1u : l; },
+    // Portuguese and Russian: the game in English underneath, its text from lang/pt.txt or lang/ru.txt
+    // (game/language.cpp)
+    .console_language = [](uint32_t l) { return l == 9 || l == 10 ? 1u : l; },
 };

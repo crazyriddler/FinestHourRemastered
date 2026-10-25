@@ -210,6 +210,9 @@ The version installed is in `version.txt` beside the game. Unattended:
 - Not One Step Back: the oil smoke's outline blends softly into the sky, with a finer layer of smoke along it that
   rises with the column's shape (planes and buildings in front no longer disturb it), and looking straight up no
   longer pinches the smoke into a star.
+- New language: Russian (PC Settings, General, Language). All the game's text, subtitles, objectives and menus, the
+  PC Settings too, with Cyrillic letters in the game's own fonts, with or without the remastered textures (the voices
+  stay in English). A first translation: corrections are welcome in issue #34.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

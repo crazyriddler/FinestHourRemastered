@@ -217,6 +217,9 @@ The version installed is in `version.txt` beside the game. Unattended:
   background goes out of focus, the characters in front sharp. Holding aim in a cutscene no longer blurs the view.
 - Operation Little Saturn: the Katyusha rockets' flame no longer has a dark halo around it against the night sky, and
   it lights its surroundings as it flies.
+- The hint for cycling the thrown item (mines, grenades) shows the Switch Grenade key (T by default) instead of the
+  lean key (E), which did nothing there (issue #38). In Russian, the lean hint shows the keys instead of naming the
+  d-pad.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

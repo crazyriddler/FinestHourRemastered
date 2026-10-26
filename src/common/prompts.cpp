@@ -74,7 +74,8 @@ constexpr Picture kPictures[] = {
 };
 
 // In the game (not the menus) the hints show the menus' pictures too: there each one stands for what its button does
-// in the game (B crouches, not back; A strikes, not accept; left and right lean while aiming)
+// in the game (B crouches, not back; A strikes, not accept; left and right alone switch the weapon and the thrown item,
+// "Press $ce$ to cycle equipment": they lean only while aiming, and the leans' hint has both, 1002)
 struct InGame {
     uint64_t id;
     int action;           // -1: label
@@ -83,8 +84,8 @@ struct InGame {
 constexpr InGame kInGame[] = {
     {0x7ff3c37aa2dfa043, pc_input::kHealth, -1},        // 0000 up
     {0xb8a2eda6d5db1e43, pc_input::kCenterTurret, -1},  // 0001 down
-    {0xf522a4076adc53cd, pc_input::kLeanLeft, -1},      // 0002 left
-    {0xc2df373f5900b69b, pc_input::kLeanRight, -1},     // 0003 right
+    {0xf522a4076adc53cd, pc_input::kNextWeapon, -1},    // 0002 left
+    {0xc2df373f5900b69b, pc_input::kNextGrenade, -1},   // 0003 right
     {0xe2c19c648cf52d2a, pc_input::kMelee, -1},         // 0008 A
     {0xcb5c4437250b2de4, pc_input::kCrouch, -1},        // 0009 B
     {0xd98dea4a7c2b90bf, pc_input::kLeanLeft, pc_input::kLeanRight},  // 1002 left and right

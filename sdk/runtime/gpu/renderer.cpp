@@ -1277,6 +1277,19 @@ private:
     void FogPass(Target& rt, Target& ds);
     SceneFx fx_;
     float dof_ = 0;                // aiming's depth of field, 0 to 1
+    // HDR output (UpdateHdr, HdrOutput): the swap chain in scRGB; the frame shown drawn into sdr_bb_ (BGRA, as the
+    // back buffer was) and taken from there into it; the composite's colour before its roll-off (hdr_scene_), the
+    // scene alone after its anti-aliasing (hdr_snap_: where the frame differs, the HUD drew)
+    bool hdr_on_ = false;
+    uint64_t hdr_checked_ = 0;
+    float hdr_peak_ = 1000, hdr_sdr_ = 200;
+    Ref<rhi::Resource> sdr_bb_, hdr_scene_, hdr_snap_;
+    D3D12_RESOURCE_STATES sdr_bb_state_ = D3D12_RESOURCE_STATE_COMMON, hdr_scene_state_ = D3D12_RESOURCE_STATE_COMMON,
+                          hdr_snap_state_ = D3D12_RESOURCE_STATE_COMMON;
+    uint32_t sdr_w_ = 0, sdr_h_ = 0, hdr_w_ = 0, hdr_h_ = 0;
+    DXGI_FORMAT hdr_snap_fmt_ = DXGI_FORMAT_UNKNOWN;
+    rhi::Resource* hdr_snap_of_ = nullptr;  // the target the scene's copy is of (this frame's scene), null: none
+    float blit_rect_[4] = {};               // where BlitFrame put the frame in the back buffer (x, y, w, h)
     bool dof_cine_ = false;        // it is a cutscene's (Cinematic Depth of Field): p[4].w 2 on
     void SceneFinal(Target& rt, const float p[16], bool bloom, bool rays, bool dof);
     // the sky's constants (kSceneCommon's sky[6]), for every scene pass of the frame
@@ -1426,6 +1439,13 @@ private:
     float tv_screen_[4] = {};  // the screen's rectangle in the frame, 0..1 (ui/tv_frame.txt)
     bool tv_tried_ = false;
     bool TvFrame(Target& t, rhi::Resource* src, DXGI_FORMAT fmt);
+    void UpdateHdr();
+    bool EnsureSdrTarget();
+    bool EnsureHdrScene(uint32_t w, uint32_t h, DXGI_FORMAT fmt);
+    void HdrOutput(uint32_t bi, Target* t, rhi::Resource* src, DXGI_FORMAT fmt, bool tv);
+    rhi::Resource* ShownBuffer(uint32_t bi, D3D12_RESOURCE_STATES& st);
+    rhi::View SdrRtv() { return Cpu(rhi::Heap::Rtv, kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 21); }
+    rhi::View HdrSceneRtv() { return Cpu(rhi::Heap::Rtv, kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 22); }
     // the overlay's rows in the picture (g_tv_ui), drawn into their layer before the television shows it
     void TvUi();
     Ref<rhi::Resource> tv_ui_;
@@ -1755,7 +1775,7 @@ void Renderer::CreateHeaps() {
     rhi::HeapSizes hs;
     hs.srv = kSrvCount + kUiDescriptors + 8 + 2 * kSrvPersistHalf + 8;  // (a table at the last of them reads 7 places)
     hs.sampler = kSamplerCount + 4;  // the overlay's at the end
-    hs.rtv = kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 21;
+    hs.rtv = kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 23;
     hs.dsv = kDsvCount;
     dev_->CreateHeaps(hs);
     for (uint32_t i = kRtvCount; i-- > 0;) free_rtv_.push_back(i);
@@ -3129,7 +3149,12 @@ rhi::Pipeline* Renderer::EnsureBlitPipeline(DXGI_FORMAT rtv, bool over) {
 // Pass's pipeline for the shader, kept in blit_psos_; null when it can't be made
 void Renderer::PassDesc(rhi::Blob* vs, rhi::Blob* ps, DXGI_FORMAT rtv, float blend,
                             rhi::PipelineDesc& d) const {
-    d = FullScreenPipelineDesc(vs, ps, rtv);
+    // (a second target's format in the upper 16 bits: the composite's colour before its roll-off, HDR)
+    d = FullScreenPipelineDesc(vs, ps, DXGI_FORMAT(uint32_t(rtv) & 0xFFFF));
+    if (uint32_t(rtv) >> 16) {
+        d.NumRenderTargets = 2;
+        d.RTVFormats[1] = DXGI_FORMAT(uint32_t(rtv) >> 16);
+    }
     if (blend < -1.5f) {
         // -2: premultiplied alpha over what is there
         auto& b = d.BlendState.RenderTarget[0];
@@ -5964,6 +5989,170 @@ void Renderer::ResizeSwap() {
     bb_h_ = h;
 }
 
+// HDR output's last pass (HdrOutput): the frame shown, drawn as ever (t0, sdr_bb_: BGRA, the game's gamma), into the
+// scRGB back buffer (linear, 1.0 = 80 nits). The HUD, the text, the menus, the television and the movies at Windows'
+// SDR content brightness (q1.y nits: as an SDR program shows); the scene at the game's white (q1.x) with what the
+// composite rolled off past it given back (t3, its colour before the roll-off), compressed into the display's peak
+// (q1.z). The scene: where the frame (t1, the game's target as shown, its size) is as the scene alone was after its
+// anti-aliasing (t2) - the HUD drew where they differ. q0: the frame's place in the back buffer (BlitFrame's), q1.w 1
+// when there is a scene this frame
+inline constexpr char kHdrOutHlsl[] = R"(
+cbuffer P : register(b1) { float4 q0; float4 q1; };
+Texture2D sdr : register(t0);
+Texture2D frame : register(t1);
+Texture2D snap : register(t2);
+Texture2D hdr : register(t3);
+SamplerState lin : register(s0);
+struct O { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
+O vs(uint id : SV_VertexID) {
+    O o;
+    float2 t = float2((id << 1) & 2, id & 2);
+    o.pos = float4(t * float2(2, -2) + float2(-1, 1), 0, 1);
+    o.uv = t;
+    return o;
+}
+float3 Linear(float3 c) { return pow(max(c, 0), 2.2); }
+float Lum(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
+float Shoulder(float c) { const float a = 0.8; return c < a ? c : a + (1 - a) * (1 - exp(-(c - a) / (1 - a))); }
+float4 hdrout(O i) : SV_Target {
+    float2 uv = (i.pos.xy - q0.xy) / q0.zw;
+    float scene = 0, gain = 1;
+    if (q1.w > 0 && all(uv >= 0) && all(uv <= 1)) {
+        float3 f = frame.SampleLevel(lin, uv, 0).rgb, n = snap.SampleLevel(lin, uv, 0).rgb;
+        float d = max(max(abs(f.r - n.r), abs(f.g - n.g)), abs(f.b - n.b));
+        scene = 1 - smoothstep(0.03, 0.09, d);
+        float3 h = hdr.SampleLevel(lin, uv, 0).rgb;
+        float3 hs = float3(Shoulder(h.r), Shoulder(h.g), Shoulder(h.b));
+        gain = clamp(Lum(Linear(h)) / max(Lum(Linear(hs)), 1e-4), 1, 64);
+    }
+#ifdef HDR_DEBUG
+    // (tests: red the scene, green its light given back)
+    return float4(scene, saturate((gain - 1) / 3), 0, 1);
+#endif
+    float3 l = Linear(sdr.Load(int3(i.pos.xy, 0)).rgb);
+    // the scene with punch: its mid tones more contrasted (about 18% grey, a power of 1.15), its brighter part
+    // expanded from 35% of white up, smoothly, its white at about two thirds of the display's peak (2 to 5 times the
+    // game's white), and what the composite rolled off past white on top (gain); the HUD and the menus as they are
+    float y0 = max(Lum(l), 1e-5), up = clamp(q1.z / q1.x * 0.65, 2, 5), t0 = 0.35;
+    float yc = 0.18 * pow(y0 / 0.18, 1.15);
+    float yx = (yc + pow(saturate((yc - t0) / (1 - t0)), 2) * (up - 1)) * gain;
+    float3 nits = l * lerp(q1.y, q1.x * yx / y0, scene);
+    // the brightest towards the display's peak (never past it), from 60% of it
+    float y = Lum(nits), knee = min(q1.x * 1.5, q1.z * 0.6), span = max(q1.z - knee, 1);
+    if (scene > 0 && y > knee) {
+        float y2 = knee + span * (1 - exp(-(y - knee) / span));
+        nits *= lerp(1, y2 / y, scene);
+    }
+    return float4(nits / 80, 1);
+}
+)";
+
+// HDR: the display's state about once a second (Windows' HDR switched on or off, its SDR brightness changed), the
+// swap chain in scRGB while the setting and the display both have it (Direct3D 12)
+void Renderer::UpdateHdr() {
+    if (presents_ >= hdr_checked_) {
+        hdr_checked_ = presents_ + 60;
+        float peak = 1000, white = 200;
+        const bool on = dev_->HdrDisplay(static_cast<HWND>(app::Window()), peak, white);
+        if (on) hdr_peak_ = peak, hdr_sdr_ = std::clamp(white, 80.0f, 480.0f);
+        g_hdr_display = on;
+        g_hdr_peak_nits = hdr_peak_, g_hdr_sdr_nits = hdr_sdr_;
+    }
+    const bool want = app::Get().hdr_output && g_hdr_display.load();
+    if (want == hdr_on_) return;
+    Flush();
+    for (auto& f : frames_) {
+        if (f.fence) WaitFence(f.fence);
+    }
+    hdr_on_ = dev_->SetHdr(want) && want;
+    CreateBackBufferViews();
+    g_hdr_shown = hdr_on_;
+    LOGR("hdr: %s (the display's peak %.0f nits, Windows' SDR white %.0f nits)", hdr_on_ ? "on" : "off", hdr_peak_, hdr_sdr_);
+}
+
+bool Renderer::EnsureSdrTarget() {
+    if (sdr_bb_ && sdr_w_ == bb_w_ && sdr_h_ == bb_h_) return true;
+    if (sdr_bb_) Release(std::move(sdr_bb_));
+    D3D12_RESOURCE_DESC td = Texture2DDesc(kBgra, bb_w_, bb_h_);
+    td.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+    D3D12_CLEAR_VALUE cv{};
+    cv.Format = kBgra;
+    sdr_bb_state_ = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    if (!CreateResource(rhi::HeapType::Default, td, sdr_bb_state_, &cv, sdr_bb_)) return false;
+    dev_->CreateRtv(sdr_bb_.Get(), nullptr, SdrRtv());
+    sdr_w_ = bb_w_, sdr_h_ = bb_h_;
+    return true;
+}
+
+bool Renderer::EnsureHdrScene(uint32_t w, uint32_t h, DXGI_FORMAT fmt) {
+    if (hdr_scene_ && hdr_snap_ && hdr_w_ == w && hdr_h_ == h && hdr_snap_fmt_ == fmt) return true;
+    if (hdr_scene_) Release(std::move(hdr_scene_));
+    if (hdr_snap_) Release(std::move(hdr_snap_));
+    constexpr DXGI_FORMAT kF16 = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    D3D12_RESOURCE_DESC td = Texture2DDesc(kF16, w, h);
+    td.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+    D3D12_CLEAR_VALUE cv{};
+    cv.Format = kF16;
+    hdr_scene_state_ = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    if (!CreateResource(rhi::HeapType::Default, td, hdr_scene_state_, &cv, hdr_scene_)) return false;
+    dev_->CreateRtv(hdr_scene_.Get(), nullptr, HdrSceneRtv());
+    D3D12_RESOURCE_DESC sd = Texture2DDesc(fmt, w, h);
+    hdr_snap_state_ = D3D12_RESOURCE_STATE_COPY_DEST;
+    if (!CreateResource(rhi::HeapType::Default, sd, hdr_snap_state_, nullptr, hdr_snap_)) {
+        hdr_scene_.Reset();
+        return false;
+    }
+    hdr_w_ = w, hdr_h_ = h, hdr_snap_fmt_ = fmt;
+    return true;
+}
+
+void Renderer::HdrOutput(uint32_t bi, Target* t, rhi::Resource* src, DXGI_FORMAT fmt, bool tv) {
+    const app::Settings& set = app::Get();
+    rhi::Pipeline* pso = EnsurePassPipeline(kHdrOutHlsl, "hdrout", DXGI_FORMAT_R16G16B16A16_FLOAT, -1);
+    if (!pso) return;
+    // (the scene's light given back: a scene this frame, its copy of the very target shown, shown by BlitFrame, no
+    // settings over it)
+    const bool scene = !tv && t && src && hdr_snap_of_ == t->res.Get() && blit_rect_[2] > 0 && !g_overlay_open.load();
+    if (scene && src == t->res.Get()) Transition(t->res.Get(), t->state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    std::pair<rhi::Resource*, DXGI_FORMAT> in[4] = {{sdr_bb_.Get(), kBgra},
+                                                    {scene ? src : nullptr, fmt},
+                                                    {scene ? hdr_snap_.Get() : nullptr, hdr_snap_fmt_},
+                                                    {scene ? hdr_scene_.Get() : nullptr, DXGI_FORMAT_R16G16B16A16_FLOAT}};
+    uint32_t slot = AllocSrvSlots(4);
+    for (uint32_t i = 0; i < 4; i++) {
+        D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
+        sv.Format = in[i].first ? in[i].second : kBgra;
+        sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        sv.Texture2D.MipLevels = 1;
+        dev_->CreateSrv(in[i].first, &sv, Cpu(rhi::Heap::Srv, slot + i));
+    }
+    const float ui = hdr_sdr_;
+    const float white = set.hdr_white ? float(set.hdr_white) : ui;
+    const float peak = std::max(set.hdr_peak ? float(set.hdr_peak) : hdr_peak_, white);
+    // tests (XBE_HDR_DEBUG): what the pass decides, drawn into the shown frame's BGRA buffer (screenshots)
+    static const bool debug = std::getenv("XBE_HDR_DEBUG") != nullptr;
+    rhi::Pipeline* dbg = debug ? EnsurePassPipeline((std::string("#define HDR_DEBUG\n") + kHdrOutHlsl).c_str(), "hdrout", kBgra, -1) : nullptr;
+    Alloc cb = Upload(256, 256);
+    float q[8] = {blit_rect_[0], blit_rect_[1], std::max(blit_rect_[2], 1.0f), std::max(blit_rect_[3], 1.0f),
+                  white, ui, peak, scene ? 1.0f : 0.0f};
+    std::memcpy(cb.cpu, q, sizeof(q));
+    rhi::View rh = Cpu(rhi::Heap::Rtv, kRtvCount + bi);
+    cl_->SetTargets(1, &rh, nullptr);
+    SetFullViewport(bb_w_, bb_h_);
+    DrawFullScreen(pso, cb.gpu, slot);
+    if (dbg) {
+        // (into the shown frame's own buffer: the debug view reads none of it)
+        Transition(sdr_bb_.Get(), sdr_bb_state_, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        rhi::View sr = SdrRtv();
+        cl_->SetTargets(1, &sr, nullptr);
+        SetFullViewport(bb_w_, bb_h_);
+        DrawFullScreen(dbg, cb.gpu, slot);
+        Transition(sdr_bb_.Get(), sdr_bb_state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    }
+    bound_rt_ = bound_ds_ = nullptr;
+}
+
 void Renderer::FinishCapture(const Surface& front) {
     CapStep(Surface{});
     if (Target* f = FindTarget(front, false)) CapSave(*f, "final");
@@ -6029,8 +6218,19 @@ void Renderer::UploadGammaRamp() {
     cl_->CopyTexture(dl, 0, 0, 0, sl, nullptr);
 }
 
+// the buffer the frame shown is in as BGRA: the back buffer, or with HDR the one drawn before it (its state in st)
+rhi::Resource* Renderer::ShownBuffer(uint32_t bi, D3D12_RESOURCE_STATES& st) {
+    if (hdr_on_ && sdr_bb_) {
+        st = sdr_bb_state_;
+        return sdr_bb_.Get();
+    }
+    st = D3D12_RESOURCE_STATE_PRESENT;
+    return dev_->BackBuffer(bi);
+}
+
 bool Renderer::CopyBackBuffer(uint32_t bi) {
-    rhi::Resource* bb = dev_->BackBuffer(bi);
+    D3D12_RESOURCE_STATES keep;
+    rhi::Resource* bb = ShownBuffer(bi, keep);
     D3D12_RESOURCE_DESC d = bb->GetDesc();
     UINT64 bytes = 0;
     dev_->Footprints(d, 0, 1, 0, &shot_fp_, nullptr, nullptr, &bytes);
@@ -6046,14 +6246,14 @@ bool Renderer::CopyBackBuffer(uint32_t bi) {
         if (!CreateResource(hp, bd, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, shot_rb_))
             return false;
     }
-    D3D12_RESOURCE_STATES st = D3D12_RESOURCE_STATE_PRESENT;
+    D3D12_RESOURCE_STATES st = keep;
     Transition(bb, st, D3D12_RESOURCE_STATE_COPY_SOURCE);
     rhi::CopyLocation dst{shot_rb_.Get(), D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT};
     dst.PlacedFootprint = shot_fp_;
     rhi::CopyLocation src{bb, D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};
     src.SubresourceIndex = 0;
     cl_->CopyTexture(dst, 0, 0, 0, src, nullptr);
-    Transition(bb, st, D3D12_RESOURCE_STATE_PRESENT);
+    Transition(bb, st, keep);
     return true;
 }
 
@@ -6110,7 +6310,8 @@ void Renderer::RecordFrame(uint32_t bi) {
         if (at < rec_due_) return;  // (this frame of the rate taken already)
     }
     rec_last_ = now;
-    rhi::Resource* bb = dev_->BackBuffer(bi);
+    D3D12_RESOURCE_STATES keep;
+    rhi::Resource* bb = ShownBuffer(bi, keep);
     D3D12_RESOURCE_DESC d = bb->GetDesc();
     if (!rec_pipe_) {
         // ffmpeg reads raw BGRA frames from its input
@@ -6187,14 +6388,14 @@ void Renderer::RecordFrame(uint32_t bi) {
         if (!CreateResource(hp, bd, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, s.rb))
             return;
     }
-    D3D12_RESOURCE_STATES st = D3D12_RESOURCE_STATE_PRESENT;
+    D3D12_RESOURCE_STATES st = keep;
     Transition(bb, st, D3D12_RESOURCE_STATE_COPY_SOURCE);
     rhi::CopyLocation dst{s.rb.Get(), D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT};
     dst.PlacedFootprint = s.fp;
     rhi::CopyLocation src{bb, D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};
     src.SubresourceIndex = 0;
     cl_->CopyTexture(dst, 0, 0, 0, src, nullptr);
-    Transition(bb, st, D3D12_RESOURCE_STATE_PRESENT);
+    Transition(bb, st, keep);
     rec_copied_ = true;
 }
 
@@ -9515,6 +9716,14 @@ void Renderer::ScenePost() {
     }
     GpuMark("fxaa");
     world_depth_saved_ = false;
+    // HDR: the scene alone, before the HUD draws over it (HdrOutput: where the frame shown differs from it)
+    if (hdr_on_ && hdr_scene_ && hdr_snap_ && hdr_w_ == rt.w && hdr_h_ == rt.h && hdr_snap_fmt_ == rt.fmt) {
+        Transition(rt.res.Get(), rt.state, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        Transition(hdr_snap_.Get(), hdr_snap_state_, D3D12_RESOURCE_STATE_COPY_DEST);
+        cl_->CopyResource(hdr_snap_.Get(), rt.res.Get());
+        Transition(hdr_snap_.Get(), hdr_snap_state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        hdr_snap_of_ = rt.res.Get();
+    }
 }
 
 // The sky's constants: the camera's rows in the world, the level's light as the sun (or the moon), the time, the
@@ -9822,8 +10031,12 @@ void Renderer::ReflectionPass(Target& rt, const float p[16]) {
 // shafts, t4 the blurred scene, t6 the depth now (the weapon in hand's).
 void Renderer::SceneFinal(Target& rt, const float p[16], bool bloom, bool rays, bool dof) {
     static const bool tile_check = std::getenv("XBE_LIGHTS_TILE_CHECK") != nullptr;  // (tests: kSceneComposite's TILE_CHECK)
-    std::string text = std::string(tile_check ? "#define TILE_CHECK\n" : "") + kSceneCommon + kSceneComposite;
-    rhi::Pipeline* pso = EnsurePassPipeline(text.c_str(), "composite", rt.fmt, -1);
+    // (HDR: the colour before the roll-off into hdr_scene_ too)
+    const bool hdr = hdr_on_ && EnsureHdrScene(rt.w, rt.h, rt.fmt);
+    std::string text = std::string(tile_check ? "#define TILE_CHECK\n" : "") + (hdr ? "#define HDR_OUT\n" : "") + kSceneCommon +
+                       kSceneComposite;
+    const DXGI_FORMAT out_fmt = hdr ? DXGI_FORMAT(uint32_t(rt.fmt) | uint32_t(DXGI_FORMAT_R16G16B16A16_FLOAT) << 16) : rt.fmt;
+    rhi::Pipeline* pso = EnsurePassPipeline(text.c_str(), "composite", out_fmt, -1);
     if (!pso || !scene_ds_) return;
     Target& ds = *scene_ds_;
     Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
@@ -9994,7 +10207,13 @@ void Renderer::SceneFinal(Target& rt, const float p[16], bool bloom, bool rays, 
         cl_->SetTargets(1, &rh, nullptr);
         SetFullViewport(rt.w, rt.h);
     }
+    if (hdr) {
+        Transition(hdr_scene_.Get(), hdr_scene_state_, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        rhi::View two[2] = {rh, HdrSceneRtv()};
+        cl_->SetTargets(2, two, nullptr);
+    }
     DrawFullScreen(pso, cb.gpu, slot);
+    if (hdr) Transition(hdr_scene_.Get(), hdr_scene_state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     if (motes_drawn || dirt) cl_->SetTable(4, sun_table_);
     Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
     bound_rt_ = bound_ds_ = nullptr;
@@ -10578,6 +10797,7 @@ void Renderer::BlitFrame(Target& t, rhi::Resource* src, DXGI_FORMAT fmt) {
     float uv[4] = {0, 0, 1, 1};
     D3D12_VIEWPORT vp{(w - vw) / 2, (h - vh) / 2, vw, vh, 0, 1};
     D3D12_RECT scissor{0, 0, LONG(bb_w_), LONG(bb_h_)};
+    blit_rect_[0] = vp.TopLeftX, blit_rect_[1] = vp.TopLeftY, blit_rect_[2] = vw, blit_rect_[3] = vh;
     SetViewport(vp);
     SetScissor(scissor);
     if (src == t.res.Get()) Transition(t.res.Get(), t.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
@@ -10755,8 +10975,12 @@ void Renderer::DrawFrame(Target* t, uint32_t bi) {
     bool tv = (g_tv_frame || movie || keep) && widen_ > 1.0f;
     if (t && tv) TvUi();
     D3D12_RESOURCE_STATES bs = D3D12_RESOURCE_STATE_PRESENT;
-    Transition(dev_->BackBuffer(bi), bs, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    rhi::View rh = Cpu(rhi::Heap::Rtv, kRtvCount + bi);
+    // (HDR: drawn as ever into sdr_bb_, BGRA, then into the back buffer by HdrOutput)
+    const bool hdr = hdr_on_ && EnsureSdrTarget();
+    blit_rect_[2] = 0;
+    if (hdr) Transition(sdr_bb_.Get(), sdr_bb_state_, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    else Transition(dev_->BackBuffer(bi), bs, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    rhi::View rh = hdr ? SdrRtv() : Cpu(rhi::Heap::Rtv, kRtvCount + bi);
     float black[4] = {0, 0, 0, 1};
     cl_->ClearRtv(rh, black, 0, nullptr);
     cl_->SetTargets(1, &rh, nullptr);
@@ -10765,6 +10989,12 @@ void Renderer::DrawFrame(Target* t, uint32_t bi) {
     if (t && !(tv && TvFrame(*t, src, fmt))) BlitFrame(*t, src, fmt);
     tv_was_on_ = tv_on_;
     RenderUi();
+    if (hdr) {
+        Transition(sdr_bb_.Get(), sdr_bb_state_, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        Transition(dev_->BackBuffer(bi), bs, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        HdrOutput(bi, t, src, fmt, tv_on_ || tv);
+    }
+    hdr_snap_of_ = nullptr;
     Transition(dev_->BackBuffer(bi), bs, D3D12_RESOURCE_STATE_PRESENT);
 }
 
@@ -11071,6 +11301,7 @@ void Renderer::Present(const Surface& front) {
         StartCapture();
     }
     ResizeSwap();
+    UpdateHdr();
     Target* t = EnsureTarget(front, false);
     if (t && LatchCpuWrite(*t)) UploadTarget(*t, front);
     if (t) Resolve(*t);

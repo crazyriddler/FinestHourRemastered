@@ -83,6 +83,13 @@ inline std::atomic<int> g_shadow_debug{-1};
 // the reflections' debug view (XBE_SSR_DEBUG at the start, "ssrdebug N" on the control channel): 0 none
 inline std::atomic<int> g_ssr_debug{-1};
 inline std::atomic<bool> g_aiming{false};  // the player aims down the sights (the game's aim held in play)
+// HDR output: whether the window's display is in HDR in Windows (and the renderer can show it: Direct3D 12), its peak
+// (nits, Windows' own) and Windows' SDR content brightness (nits: the HUD's and the menus' white); the renderer's
+inline std::atomic<bool> g_hdr_display{false};
+inline std::atomic<float> g_hdr_peak_nits{1000.0f};
+inline std::atomic<float> g_hdr_sdr_nits{200.0f};
+inline std::atomic<bool> g_hdr_shown{false};  // the frame shown in HDR now
+inline std::atomic<bool> g_overlay_open{false};  // the settings overlay is up (HDR: the frame at the menus' white)
 // the HUD the game draws: its pieces' content ids (0 ends), and when one was last drawn (steady ms; drawn whether the
 // settings hide it or not). None for a while in play: a cutscene of the game's own (g_cutscene; the game's layer)
 inline std::atomic<uint64_t> g_hud_tex[24]{};

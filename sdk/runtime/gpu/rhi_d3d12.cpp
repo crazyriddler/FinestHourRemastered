@@ -357,11 +357,82 @@ public:
     bool Tearing() const override { return tearing; }
     Resource* BackBuffer(uint32_t i) override { return bb[i].Get(); }
     uint32_t CurrentBackBuffer() override { return swap->GetCurrentBackBufferIndex(); }
+    bool hdr = false;  // the buffers in scRGB (SetHdr)
+    DXGI_FORMAT SwapFormat() const { return hdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_B8G8R8A8_UNORM; }
     bool ResizeSwapChain(uint32_t w, uint32_t h) override {
         for (auto& b : bb) b.Reset();
-        HRESULT hr = swap->ResizeBuffers(UINT(bb.size()), w, h, DXGI_FORMAT_B8G8R8A8_UNORM, tearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0);
+        HRESULT hr = swap->ResizeBuffers(UINT(bb.size()), w, h, SwapFormat(), tearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0);
         GetBuffers();
         return SUCCEEDED(hr);
+    }
+    bool HdrDisplay(HWND hwnd, float& peak, float& sdr_white) override {
+        // (a factory of its own each time: one's outputs keep the colour space they were found with)
+        ComPtr<IDXGIFactory1> f;
+        if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&f)))) return false;
+        HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        bool on = false;
+        ComPtr<IDXGIAdapter1> a;
+        for (UINT ai = 0; !on && SUCCEEDED(f->EnumAdapters1(ai, &a)); ai++) {
+            ComPtr<IDXGIOutput> o;
+            for (UINT oi = 0; SUCCEEDED(a->EnumOutputs(oi, &o)); oi++) {
+                ComPtr<IDXGIOutput6> o6;
+                DXGI_OUTPUT_DESC1 d{};
+                if (SUCCEEDED(o.As(&o6)) && SUCCEEDED(o6->GetDesc1(&d)) && d.Monitor == mon) {
+                    on = d.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
+                    peak = d.MaxLuminance > 100 ? d.MaxLuminance : 1000.0f;
+                    break;
+                }
+            }
+        }
+        if (!on) return false;
+        // Windows' SDR content brightness for that display (its source's path): SDRWhiteLevel 1000 is 80 nits
+        sdr_white = 200.0f;
+        MONITORINFOEXW mi{};
+        mi.cbSize = sizeof(mi);
+        GetMonitorInfoW(mon, &mi);
+        UINT32 np = 0, nm = 0;
+        if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &np, &nm) == ERROR_SUCCESS) {
+            std::vector<DISPLAYCONFIG_PATH_INFO> paths(np);
+            std::vector<DISPLAYCONFIG_MODE_INFO> modes(nm);
+            if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &np, paths.data(), &nm, modes.data(), nullptr) == ERROR_SUCCESS) {
+                for (UINT32 i = 0; i < np; i++) {
+                    DISPLAYCONFIG_SOURCE_DEVICE_NAME src{};
+                    src.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+                    src.header.size = sizeof(src);
+                    src.header.adapterId = paths[i].sourceInfo.adapterId;
+                    src.header.id = paths[i].sourceInfo.id;
+                    if (DisplayConfigGetDeviceInfo(&src.header) != ERROR_SUCCESS || wcscmp(src.viewGdiDeviceName, mi.szDevice) != 0)
+                        continue;
+                    DISPLAYCONFIG_SDR_WHITE_LEVEL wl{};
+                    wl.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL;
+                    wl.header.size = sizeof(wl);
+                    wl.header.adapterId = paths[i].targetInfo.adapterId;
+                    wl.header.id = paths[i].targetInfo.id;
+                    if (DisplayConfigGetDeviceInfo(&wl.header) == ERROR_SUCCESS && wl.SDRWhiteLevel > 0)
+                        sdr_white = float(wl.SDRWhiteLevel) / 1000.0f * 80.0f;
+                    break;
+                }
+            }
+        }
+        return true;
+    }
+    bool SetHdr(bool on) override {
+        for (auto& b : bb) b.Reset();
+        const bool was = hdr;
+        hdr = on;
+        HRESULT hr = swap->ResizeBuffers(UINT(bb.size()), 0, 0, SwapFormat(), tearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0);
+        if (FAILED(hr)) {
+            hdr = was;
+            swap->ResizeBuffers(UINT(bb.size()), 0, 0, SwapFormat(), tearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0);
+            GetBuffers();
+            return false;
+        }
+        const DXGI_COLOR_SPACE_TYPE cs = on ? DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709 : DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+        UINT support = 0;
+        if (SUCCEEDED(swap->CheckColorSpaceSupport(cs, &support)) && (support & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT))
+            swap->SetColorSpace1(cs);
+        GetBuffers();
+        return true;
     }
     void Present(bool vsync) override { swap->Present(vsync ? 1 : 0, !vsync && tearing ? DXGI_PRESENT_ALLOW_TEARING : 0); }
 

@@ -136,6 +136,9 @@ void Load() {
     s.sharpening = std::min<uint32_t>(t["sharpening"].value_or(s.sharpening), 10);
     s.shadow_quality = std::min<uint32_t>(t["shadow_quality"].value_or(s.shadow_quality), 3);
     s.brightness = std::clamp<uint32_t>(t["brightness"].value_or(s.brightness), 50, 200);
+    s.hdr_output = t["hdr_output"].value_or(s.hdr_output);
+    s.hdr_peak = std::min<uint32_t>(t["hdr_peak_nits"].value_or(s.hdr_peak), 10000);
+    s.hdr_white = std::min<uint32_t>(t["hdr_white_nits"].value_or(s.hdr_white), 1000);
     s.join_ip = t["join_ip"].value_or(s.join_ip);
     for (const Option& o : kGame.options) {
         if (o.flag) *o.flag = t[o.key].value_or(*o.flag);
@@ -207,6 +210,9 @@ toml::table Table() {
                   {"sun_moon", s.sun_moon},
                   {"clouds", s.clouds},
                   {"brightness", int64_t(s.brightness)},
+                  {"hdr_output", s.hdr_output},
+                  {"hdr_peak_nits", int64_t(s.hdr_peak)},
+                  {"hdr_white_nits", int64_t(s.hdr_white)},
                   {"join_ip", s.join_ip}};
     for (const Option& o : kGame.options) {
         if (o.hidden && !(o.flag && *o.flag)) continue;

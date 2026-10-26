@@ -250,6 +250,12 @@ public:
     // after the GPU is idle; the back buffers' views are made again after
     virtual bool ResizeSwapChain(uint32_t w, uint32_t h) = 0;
     virtual void Present(bool vsync) = 0;
+    // HDR output: the swap chain's buffers in scRGB (16 bit float, linear, 1.0 = 80 nits) or back in BGRA, after the
+    // GPU is idle (the back buffers' views made again after). False where the backend has none (Vulkan) or it failed
+    virtual bool SetHdr(bool) { return false; }
+    // the window's display in HDR in Windows: its peak and Windows' SDR content brightness, in nits; false when it is
+    // not (or not known: Vulkan)
+    virtual bool HdrDisplay(HWND, float& peak, float& sdr_white) { return false; }
 
     virtual void CreateHeaps(const HeapSizes& s) = 0;
     virtual bool CreateResource(HeapType heap, const D3D12_RESOURCE_DESC& d, D3D12_RESOURCE_STATES initial,

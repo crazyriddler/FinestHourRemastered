@@ -739,6 +739,7 @@ void Cutscene() {
 void Ui(double fps) {
     g_fps = fps;
     Cutscene();
+    gpu::g_overlay_open = cod::OverlayOpen();
     cod::ragdoll::NewFrame();
     cod::wide::Update();
     cod::wide::UpdateMaterialFrame();

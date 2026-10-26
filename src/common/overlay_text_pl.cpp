@@ -247,6 +247,11 @@ const PtRow kPlRows[] = {
     {"Look Up", "Patrz w górę"},
     {"Cinematic Depth of Field", "Głębia ostrości w scenkach"},
     {"In the game's own cutscenes the background goes softly out of focus.", "W przerywnikach filmowych gry tło delikatnie traci ostrość."},
+    {"Brighter lights, fire and skies on an HDR display, the HUD and text at Windows' SDR brightness. Needs HDR on in Windows' display settings (Direct3D 12).", "Jaśniejsze światła, ogień i niebo na ekranie HDR, a HUD i tekst z jasnością SDR systemu Windows. Wymaga włączonego HDR w ustawieniach ekranu Windows (Direct3D 12)."},
+    {"HDR Peak Brightness", "Szczytowa jasność HDR"},
+    {"The brightest the lights get: the display's own by default (Windows').", "Najwyższa jasność świateł: domyślnie jasność ekranu (według Windows)."},
+    {"HDR Game Brightness", "Jasność gry HDR"},
+    {"The game's white: Windows' SDR content brightness by default. The HUD and text always stay at Windows'.", "Biel gry: domyślnie jasność treści SDR w Windows. HUD i tekst zawsze pozostają na poziomie Windows."},
 };
 const size_t kPlRowCount = sizeof(kPlRows) / sizeof(kPlRows[0]);
 

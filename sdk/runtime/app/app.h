@@ -80,6 +80,9 @@ struct Settings {
     bool height_blend = true;        // blended surfaces fade in along their height maps
     uint32_t specular = 100;         // percent
     uint32_t brightness = 100;       // percent: the frame's gamma (the game was tuned on CRT televisions)
+    bool hdr_output = true;          // HDR on an HDR display (Windows' HDR on): lights past white brighter
+    uint32_t hdr_peak = 0;           // nits: the brightest it shows (0: the display's, Windows')
+    uint32_t hdr_white = 0;          // nits: the game's white (0: Windows' SDR content brightness, the HUD's always)
     float normal_green = 1;          // the normal maps' green: 1 up, -1 down
     uint32_t language = 1;           // the console's (XC_LANGUAGE): 1 English, 3 German, 4 French, 5 Spanish, 6 Italian,
                                      // 9 Portuguese; without a setting, Windows' own (Load). The title sees

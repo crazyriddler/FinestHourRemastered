@@ -1390,7 +1390,10 @@ float4 lensdirt(O i) : SV_Target {
 }
 // d3d12.cpp SceneFinal: t1 the world's depth, t2 the bloom, t3 the sun's shafts (b1), t4 the blurred scene (b2),
 // t6 the depth now; p[4] pain, time, flash, aiming's blur; lcount: lights, heat sources, shafts
-float4 composite(O i) : SV_Target {
+// (HDR_OUT, the frame shown in HDR: the colour before the highlights' roll-off as well, SV_Target1, the light past
+// white the final pass gives back)
+float4 CompositeColor(O i, out float3 pre) {
+    pre = 0;
     float4 s;
     float2 uv = i.uv;
     float h = p[4].x, t = p[4].y;
@@ -1562,6 +1565,7 @@ float4 composite(O i) : SV_Target {
         c = c * grade[1].rgb + grade[2].rgb * saturate(l * 8) * (1 - saturate(l * 2));
     }
     // highlights over 0.8 roll off towards 1, everything below stays as the game drew it
+    pre = c;
     const float a = 0.8;
     c = c < a ? c : a + (1 - a) * (1 - exp(-(c - a) / (1 - a)));
     // a faint grain, finest in the mid tones, none in black or white
@@ -1573,6 +1577,24 @@ float4 composite(O i) : SV_Target {
     }
     return float4(c, s.a);
 }
+#ifdef HDR_OUT
+struct CompositeOut {
+    float4 c : SV_Target0;
+    float4 hdr : SV_Target1;
+};
+CompositeOut composite(O i) {
+    CompositeOut o;
+    float3 pre;
+    o.c = CompositeColor(i, pre);
+    o.hdr = float4(pre, 1);
+    return o;
+}
+#else
+float4 composite(O i) : SV_Target {
+    float3 pre;
+    return CompositeColor(i, pre);
+}
+#endif
 float4 composite_debug(O i) : SV_Target { return float4(occ.SampleLevel(lin, i.uv, 0).xxx, 1); }
 )";
 

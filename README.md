@@ -129,6 +129,8 @@ A native Linux build may come later: the renderer now runs on Vulkan too, which 
 - **Television Frame**: on a wide screen the 4:3 menus, briefings and movies play inside a 1940s television, through
   a curved CRT tube with scan lines (the PC settings too, wherever they open).
 - **Brightness**, **FPS Counter**, **Anisotropic Filtering** up to 16x, **Sharpening**.
+- **HDR** (Direct3D 12, on when HDR is on in Windows): brighter lights and skies, the HUD and text at Windows' SDR
+  brightness; **HDR Peak Brightness** (the display's peak by default) and **HDR Game Brightness**.
 - **HUD**: its **Size** (Original, Small, Smaller: each element in its place), and the **Hit Markers**, the
   **Compass**, the **Stance** and the **Crosshair** can each be hidden.
 

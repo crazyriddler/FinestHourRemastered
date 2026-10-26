@@ -162,8 +162,6 @@ const PtRow kRuRows[] = {
     {"Beams of sunlight past columns and ruins.", "Лучи солнца между колоннами и руинами."},
     {"Aim Depth of Field", "ГРИП при прицеливании"},
     {"Aiming down the sights blurs the edges and the background.", "Прицеливание размывает края и фон."},
-    {"Cinematic Depth of Field", "Кинематографичная ГРИП"},
-    {"In the game's own cutscenes the background goes softly out of focus.", "В сюжетных сценах игры фон мягко размывается."},
     {"Eye Adaptation", "Адаптация глаз"},
     {"The view adapts a little between dark rooms and bright streets.", "Обзор немного подстраивается при переходе между тёмными комнатами и светлыми улицами."},
     {"Color Grading", "Цветокоррекция"},
@@ -247,6 +245,13 @@ const PtRow kRuRows[] = {
     {"Look Left", "Обзор влево"},
     {"Look Right", "Обзор вправо"},
     {"Look Up", "Обзор вверх"},
+    {"Cinematic Depth of Field", "Кинематографичная ГРИП"},
+    {"In the game's own cutscenes the background goes softly out of focus.", "В сюжетных сценах игры фон мягко размывается."},
+    {"Brighter lights, fire and skies on an HDR display, the HUD and text at Windows' SDR brightness. Needs HDR on in Windows' display settings (Direct3D 12).", "Более яркие огни, огонь и небо на HDR-экране, интерфейс и текст — с яркостью SDR из Windows. Нужно включить HDR в параметрах дисплея Windows (Direct3D 12)."},
+    {"HDR Peak Brightness", "Пиковая яркость HDR"},
+    {"The brightest the lights get: the display's own by default (Windows').", "Максимальная яркость огней: по умолчанию — яркость экрана (из Windows)."},
+    {"HDR Game Brightness", "Яркость игры HDR"},
+    {"The game's white: Windows' SDR content brightness by default. The HUD and text always stay at Windows'.", "Белый цвет игры: по умолчанию — яркость SDR-контента в Windows. Интерфейс и текст всегда остаются на уровне Windows."},
 };
 const size_t kRuRowCount = sizeof(kRuRows) / sizeof(kRuRows[0]);
 

@@ -307,6 +307,36 @@ std::vector<Page> BuildPages() {
         Saved();
     };
     display.items.push_back(Slider("Brightness", &s.brightness, 50, 200, 5, "%d%%", "100% is the original picture."));
+    // HDR: on an HDR display alone (Windows' HDR on, the renderer's g_hdr_display); off, and kept off, otherwise
+    {
+        auto flip = [&s] {
+            if (!gpu::g_hdr_display.load()) return;
+            s.hdr_output = !s.hdr_output;
+            Saved();
+        };
+        Item hdr{"HDR", [&s] { return std::string(gpu::g_hdr_display.load() && s.hdr_output ? "On" : "Off"); },
+                 [flip](int) { flip(); }, nullptr,
+                 "Brighter lights, fire and skies on an HDR display, the HUD and text at Windows' SDR brightness. Needs HDR on in Windows' display settings (Direct3D 12)."};
+        hdr.activate = flip;
+        display.items.push_back(std::move(hdr));
+        // (the display's peak and Windows' SDR white until set: 0 in the settings)
+        display.items.push_back(Item{"HDR Peak Brightness",
+                                     [&s] { return Fmt("%d nits", int(s.hdr_peak ? s.hdr_peak : uint32_t(gpu::g_hdr_peak_nits.load()))); },
+                                     [&s](int d) {
+                                         int v = int(s.hdr_peak ? s.hdr_peak : uint32_t(gpu::g_hdr_peak_nits.load()));
+                                         s.hdr_peak = uint32_t(std::clamp(v / 50 * 50 + d * 50, 400, 4000));
+                                         Saved();
+                                     },
+                                     nullptr, "The brightest the lights get: the display's own by default (Windows')."});
+        display.items.push_back(Item{"HDR Game Brightness",
+                                     [&s] { return Fmt("%d nits", int(s.hdr_white ? s.hdr_white : uint32_t(gpu::g_hdr_sdr_nits.load()))); },
+                                     [&s](int d) {
+                                         int v = int(s.hdr_white ? s.hdr_white : uint32_t(gpu::g_hdr_sdr_nits.load()));
+                                         s.hdr_white = uint32_t(std::clamp(v / 10 * 10 + d * 10, 80, 500));
+                                         Saved();
+                                     },
+                                     nullptr, "The game's white: Windows' SDR content brightness by default. The HUD and text always stay at Windows'."});
+    }
     display.items.push_back(Toggle("FPS Counter", &c.fps_counter));
     display.items.push_back(Choice("HUD Size", {"Original", "Small", "Smaller"},
                                    [&c] { return int(std::min<uint32_t>(c.hud_size, 2)); },

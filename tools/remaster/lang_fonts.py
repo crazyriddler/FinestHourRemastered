@@ -1,6 +1,8 @@
-"""Cyrillic for the game's fonts (Russian, src/game/language.cpp): the text in Windows-1251 bytes, its letters
-(А-я at 0xC0-0xFF, Ё 0xA8, ё 0xB8) drawn in the atlases where the Latin-1 accented letters were (0xC0 on) and
-the free rows below; the rest of each atlas as it is.
+"""A language's own letters in the game's fonts (src/game/language.cpp), the rest of each atlas as it is:
+- Russian (ru): the text in Windows-1251 bytes, its Cyrillic (А-я at 0xC0-0xFF, Ё 0xA8, ё 0xB8) drawn where the
+  Latin-1 accented letters were (0xC0 on) and in the free rows below;
+- Polish (pl): the text in Windows-1250 bytes, its letters (ą ć ę ł ń ś ź ż and capitals: ó is Latin-1's) at their
+  Windows-1250 codes, drawn after the atlas's last box and in the free rows below (the Latin-1 letters stay).
 
 For each atlas the game draws text with (fbld24, fblds24, lta32, t12):
 - the new boxes of those codes, in its METRICS1 file's lines (the same length: each number three wide);
@@ -8,12 +10,12 @@ For each atlas the game draws text with (fbld24, fblds24, lta32, t12):
   Prime's missing Cyrillic), the whole atlas, as the remastered one under the new atlas's id (the pack);
 - that drawn back at the atlas's own size in its 16 colours, for the pixels of those rows alone (the original
   atlas's game: Original preset, remastered textures off).
-Written: <out>/ru_fonts.bin for the game (the bytes to put in COD.PAK's reads: the METRICS1 lines, and the atlases'
+Written: <out>/<lang>_fonts.bin for the game (the bytes to put in COD.PAK's reads: the METRICS1 lines, and the atlases'
 pixels in those rows, 0xFF where the game's own stay), the pack's new textures and their materials.
 
-    python -I lang_fonts.py <COD.PAK> <pack folder> <out folder>
+    python -I lang_fonts.py <COD.PAK> <pack folder> <out folder> [ru|pl]
 
-ru_fonts.bin: "FHRFONT1", u64 COD.PAK's size, u32 count; then each: u64 offset in COD.PAK, u32 length, u32 kind (0 the
+<lang>_fonts.bin: "FHRFONT1", u64 COD.PAK's size, u32 count; then each: u64 offset in COD.PAK, u32 length, u32 kind (0 the
 bytes, 1 the bytes but 0xFF: the game's kept), the bytes.
 """
 import json
@@ -33,8 +35,15 @@ import txd  # noqa: E402
 
 NAMES = ["fbld24", "fblds24", "lta32", "t12"]
 S = fonts.SCALE
-# the codes Russian draws its own way: Ё ё and А-я (№ written N: not in Jost)
-CODES = [(0xA8, "Ё"), (0xB8, "ё")] + [(0xC0 + i, chr(0x410 + i)) for i in range(64)]
+# the codes each language draws its own way, and where they go: Russian's Ё ё and А-я (№ written N: not in Jost)
+# from the Latin-1 accented letters' place; Polish's letters (Windows-1250) after the atlas's last box
+LANGS = {
+    "ru": ([(0xA8, "Ё"), (0xB8, "ё")] + [(0xC0 + i, chr(0x410 + i)) for i in range(64)], "accents"),
+    "pl": ([(0xA5, "Ą"), (0xB9, "ą"), (0xC6, "Ć"), (0xE6, "ć"), (0xCA, "Ę"), (0xEA, "ę"), (0xA3, "Ł"), (0xB3, "ł"),
+            (0xD1, "Ń"), (0xF1, "ń"), (0x8C, "Ś"), (0x9C, "ś"), (0x8F, "Ź"), (0x9F, "ź"), (0xAF, "Ż"), (0xBF, "ż")],
+           "after"),
+}
+CODES, WHERE = LANGS["ru"]
 
 
 def metrics_lines(m):
@@ -59,12 +68,18 @@ def metrics_lines(m):
 
 
 def layout(name, src, boxes, face_of):
-    """the new boxes of CODES: in the place of the first of them (0xC0's) on, row after row to the atlas's end"""
+    """the new boxes of CODES: from the place of the Latin-1 accented letters (0xC0's) or after the last box, row
+    after row to the atlas's end"""
     h, w = src.shape[:2]
     by = {ch: b for ch, *b in boxes}
-    x0, y0, _, y1 = by["À"]
+    ys = sorted({b[1] for b in by.values()})
+    if WHERE == "accents":
+        x0, y0, _, y1 = by["À"]
+    else:
+        last = max(by.values(), key=lambda b: (b[1], b[2]))
+        x0, y0, y1 = last[2] + 1, last[1], last[3]
     rowh = y1 - y0 + 1
-    step = sorted({b[1] for b in by.values() if b[1] > y0})[0] - y0 if any(b[1] > y0 for b in by.values()) else rowh
+    step = min((b - a for a, b in zip(ys, ys[1:]) if b > a), default=rowh)
     light, _ = fonts.masks(src)
     # the room the original's letters leave beside them (their boxes less their ink), each side
     sides = []
@@ -145,9 +160,12 @@ def quantize(rgba, palette):
 
 
 def main():
+    global CODES, WHERE
     pak, pack, out = sys.argv[1:4]
+    lang = sys.argv[4] if len(sys.argv) > 4 else "ru"
+    CODES, WHERE = LANGS[lang]
     os.makedirs(out, exist_ok=True)
-    work = os.path.join(pack, "work_fonts_ru")
+    work = os.path.join(pack, "work_fonts_" + lang)
     os.makedirs(work, exist_ok=True)
     f = open(pak, "rb")
     m = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
@@ -249,7 +267,7 @@ def main():
             Image.fromarray(pal[linear], "RGBA").save(os.path.join(work, rid + "_1x.png"))
     generate.texconv(pngs, "BC7_UNORM", os.path.join(pack, "textures"))
     json.dump(mats, open(os.path.join(pack, "materials.json"), "w"), indent=1, sort_keys=True)
-    with open(os.path.join(out, "ru_fonts.bin"), "wb") as o:
+    with open(os.path.join(out, lang + "_fonts.bin"), "wb") as o:
         o.write(b"FHRFONT1" + struct.pack("<QI", pak_size, len(entries)))
         for at, kind, data in entries:
             o.write(struct.pack("<QII", at, len(data), kind) + data)

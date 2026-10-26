@@ -465,14 +465,14 @@ std::vector<Page> BuildPages() {
     Page general{"GENERAL", {}};
     general.items.push_back(Toggle("Skip Intros", &c.skip_intros, "Straight to the title screen."));
     {
-        static const uint32_t codes[] = {1, 4, 6, 5, 9, 10};
+        static const uint32_t codes[] = {1, 4, 6, 5, 9, 10, 11};
         BootLanguage();
         // UTF-8, as ImGui takes text
         general.items.push_back(Choice("Language", {"English", "Fran\xC3\xA7" "ais", "Italiano", "Espa\xC3\xB1ol",
                                                     "Portugu\xC3\xAA" "s",
-                                                    "\xD0\xA0\xD1\x83\xD1\x81\xD1\x81\xD0\xBA\xD0\xB8\xD0\xB9"},
+                                                    "\xD0\xA0\xD1\x83\xD1\x81\xD1\x81\xD0\xBA\xD0\xB8\xD0\xB9", "Polski"},
                                        [&s] {
-                                           for (int i = 0; i < 6; i++)
+                                           for (int i = 0; i < 7; i++)
                                                if (codes[i] == s.language) return i;
                                            return 0;
                                        },
@@ -614,10 +614,10 @@ void Init() {
     GetWindowsDirectoryA(path, MAX_PATH);
     std::string segoe = std::string(path) + "/Fonts/segoeui.ttf";
     if (GetFileAttributesA(segoe.c_str()) != INVALID_FILE_ATTRIBUTES) g_ui = io.Fonts->AddFontFromFileTTF(segoe.c_str(), 36.0f);
-    // the pack's typefaces, large enough for a 4K screen and filtered down below that; Latin-1 and Cyrillic for the
-    // languages (Courier Prime has no Cyrillic: IBM Plex Mono's merged into it)
+    // the pack's typefaces, large enough for a 4K screen and filtered down below that; Latin-1, Latin Extended-A
+    // (Polish) and Cyrillic for the languages (Courier Prime has no Cyrillic: IBM Plex Mono's merged into it)
     std::wstring dir = gpu::remaster::Dir() + L"\\ui\\";
-    static const ImWchar ranges[] = {0x0020, 0x00FF, 0x0400, 0x045F, 0x2010, 0x2026, 0};
+    static const ImWchar ranges[] = {0x0020, 0x00FF, 0x0100, 0x017F, 0x0400, 0x045F, 0x2010, 0x2026, 0};
     auto load = [&](const wchar_t* file, float px, bool merge = false) -> ImFont* {
         std::wstring w = dir + file;
         char utf8[MAX_PATH * 3];

@@ -38,7 +38,8 @@ void SetModels(Settings& s, uint32_t models) {
     s.remastered_models = s.models == 2;
 }
 
-// Windows' display language as the console's: English, French, Spanish, Italian, Portuguese or Russian, else English
+// Windows' display language as the console's: English, French, Spanish, Italian, Portuguese, Russian or Polish,
+// else English
 uint32_t SystemLanguage() {
     switch (PRIMARYLANGID(GetUserDefaultUILanguage())) {
         case LANG_FRENCH: return 4;
@@ -46,6 +47,7 @@ uint32_t SystemLanguage() {
         case LANG_ITALIAN: return 6;
         case LANG_PORTUGUESE: return 9;
         case LANG_RUSSIAN: return 10;
+        case LANG_POLISH: return 11;
         default: return 1;
     }
 }

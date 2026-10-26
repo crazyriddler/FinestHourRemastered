@@ -17,11 +17,21 @@ K1252 = {0x20AC: 0x80, 0x2026: 0x85, 0x2018: 0x91, 0x2019: 0x92, 0x201C: 0x93, 0
          0x2013: 0x96, 0x2014: 0x97, 0x2122: 0x99, 0x201E: 0x84, 0x201A: 0x82}
 
 
-def game_bytes(text, russian):
+# Polish's letters at their Windows-1250 codes (language.cpp GameChar); the Latin-1 letters of those codes are lost
+K1250 = {0x104: 0xA5, 0x105: 0xB9, 0x106: 0xC6, 0x107: 0xE6, 0x118: 0xCA, 0x119: 0xEA, 0x141: 0xA3, 0x142: 0xB3,
+         0x143: 0xD1, 0x144: 0xF1, 0x15A: 0x8C, 0x15B: 0x9C, 0x179: 0x8F, 0x17A: 0x9F, 0x17B: 0xAF, 0x17C: 0xBF}
+
+
+def game_bytes(text, russian, polish=False):
     out, bad = bytearray(), []
     for ch in text:
         cp = ord(ch)
-        if russian and 0x410 <= cp <= 0x44F:
+        if polish and cp in K1250:
+            out.append(K1250[cp])
+        elif polish and cp in K1250.values():
+            bad.append(ch)
+            out.append(0x3F)
+        elif russian and 0x410 <= cp <= 0x44F:
             out.append(0xC0 + cp - 0x410)
         elif russian and cp == 0x401:
             out.append(0xA8)
@@ -76,6 +86,7 @@ def main():
     game, folder, out, language = sys.argv[1:5]
     write = "--write" in sys.argv
     russian = language.lower() == "russian"
+    polish = language.lower() == "polish"
     rows = rows_of(os.path.join(game, "COD.PAK"))
     problems = 0
     lines = []
@@ -91,7 +102,7 @@ def main():
             if sorted(TOKENS.findall(e)) != sorted(TOKENS.findall(t)):
                 print("%s: tokens %s -> %s" % (key, TOKENS.findall(e), TOKENS.findall(t)))
                 problems += 1
-            b, bad = game_bytes(t.replace("\\n", "\n"), russian)
+            b, bad = game_bytes(t.replace("\\n", "\n"), russian, polish)
             if bad:
                 print("%s: characters the fonts lack: %r" % (key, "".join(bad)))
                 problems += 1

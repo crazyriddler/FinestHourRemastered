@@ -1,7 +1,7 @@
-// Portuguese and Russian (languages 9 and 10 in the settings): the game has English, German, French, Italian and
-// Spanish, not these. It runs in English (its speech, kGame.console_language) and its text is put in the English
-// text's place as the game reads it, from lang/pt.txt or lang/ru.txt beside the exe (the port's own translations;
-// nothing of the game's is written):
+// Portuguese, Russian and Polish (languages 9, 10 and 11 in the settings): the game has English, German, French,
+// Italian and Spanish, not these. It runs in English (its speech, kGame.console_language) and its text is put in the
+// English text's place as the game reads it, from lang/pt.txt, lang/ru.txt or lang/pl.txt beside the exe (the port's
+// own translations; nothing of the game's is written):
 // - the string tables in COD.PAK ($key,English,German,French,Italian,Spanish, Latin-1): a row the translation has
 //   becomes $key,Portuguese with the other columns empty, in the row's own length (spaces after the last column do
 //   not show);
@@ -13,6 +13,8 @@
 // rest Windows-1252 as the game's: its fonts get those letters in those codes (lang/ru_fonts.bin, made by
 // tools/remaster/lang_fonts.py: the atlases' pixels where the Latin-1 accented letters were and their boxes in the
 // METRICS1 files, put in COD.PAK's reads; the remastered atlases are the pack's, under the new atlases' ids).
+// Polish in Windows-1250's codes for its own letters (ą 0xB9, ł 0xB3, ś 0x9C...; ó Latin-1's), the rest as the game's:
+// lang/pl_fonts.bin draws them at those codes after the atlases' last boxes.
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
@@ -36,9 +38,10 @@ namespace {
 
 constexpr uint32_t kPortuguese = 9;
 constexpr uint32_t kRussian = 10;
+constexpr uint32_t kPolish = 11;
 
 bool g_on = false;
-uint32_t g_lang = 0;  // kPortuguese or kRussian while on
+uint32_t g_lang = 0;  // kPortuguese, kRussian or kPolish while on
 std::unordered_map<std::string, std::string> g_keys;  // a string table's key -> its text (Latin-1)
 std::unordered_map<uint64_t, std::string> g_lines;    // a subtitle's English line (its hash) -> its text (Latin-1)
 
@@ -48,9 +51,21 @@ uint64_t Fnv(const uint8_t* p, size_t n) {
     return h;
 }
 
-// a code point as the game's text has it: Russian's letters in Windows-1251's codes, the punctuation Windows-1252
-// has past Latin-1 in its codes, the rest Latin-1 (with Russian, Latin-1's 0xC0 on are its letters: '?'); else '?'
-char GameChar(uint32_t cp, bool russian) {
+// a code point as the game's text has it: Russian's letters in Windows-1251's codes, Polish's in Windows-1250's, the
+// punctuation Windows-1252 has past Latin-1 in its codes, the rest Latin-1 (with Russian, Latin-1's 0xC0 on are its
+// letters: '?'; with Polish, the Latin-1 letters whose codes are its letters'); else '?'
+char GameChar(uint32_t cp, uint32_t lang) {
+    if (lang == kPolish) {
+        static const std::pair<uint32_t, uint8_t> k1250[] = {
+            {0x104, 0xA5}, {0x105, 0xB9}, {0x106, 0xC6}, {0x107, 0xE6}, {0x118, 0xCA}, {0x119, 0xEA},
+            {0x141, 0xA3}, {0x142, 0xB3}, {0x143, 0xD1}, {0x144, 0xF1}, {0x15A, 0x8C}, {0x15B, 0x9C},
+            {0x179, 0x8F}, {0x17A, 0x9F}, {0x17B, 0xAF}, {0x17C, 0xBF}};
+        for (const auto& [u, b] : k1250)
+            if (u == cp) return char(b);
+        for (const auto& [u, b] : k1250)
+            if (b == cp) return '?';  // (a Latin-1 letter in a Polish letter's code)
+    }
+    const bool russian = lang == kRussian;
     if (russian) {
         if (cp >= 0x410 && cp <= 0x44F) return char(0xC0 + (cp - 0x410));
         if (cp == 0x401) return char(0xA8);
@@ -67,8 +82,8 @@ char GameChar(uint32_t cp, bool russian) {
     return '?';
 }
 
-// UTF-8 to the game's text (Latin-1, or Russian's codes: GameChar)
-std::string GameText(std::string_view s, bool russian) {
+// UTF-8 to the game's text (Latin-1, or a language's own codes: GameChar)
+std::string GameText(std::string_view s, uint32_t lang) {
     std::string out;
     for (size_t i = 0; i < s.size();) {
         uint8_t c = uint8_t(s[i]);
@@ -78,14 +93,14 @@ std::string GameText(std::string_view s, bool russian) {
         else if (c >= 0xC0) cp = c & 0x1F, len = 2;
         for (uint32_t k = 1; k < len && i + k < s.size(); k++) cp = cp << 6 | (uint8_t(s[i + k]) & 0x3F);
         i += len;
-        out += GameChar(cp, russian);
+        out += GameChar(cp, lang);
     }
     return out;
 }
-std::string Latin1(std::string_view s) { return GameText(s, false); }
-std::string Text(std::string_view s) { return GameText(s, g_lang == kRussian); }
+std::string Latin1(std::string_view s) { return GameText(s, 0); }
+std::string Text(std::string_view s) { return GameText(s, g_lang); }
 
-// --- Russian's fonts ---------------------------------------------------------------------------------------------
+// --- Russian's and Polish's fonts ----------------------------------------------------------------------------------
 
 struct FontPatch {
     uint64_t at;
@@ -95,13 +110,14 @@ struct FontPatch {
 std::vector<FontPatch> g_fonts;
 
 void LoadFonts() {
-    std::ifstream in(app::ExeDir() / "lang" / "ru_fonts.bin", std::ios::binary);
+    const char* file = g_lang == kPolish ? "pl_fonts.bin" : "ru_fonts.bin";
+    std::ifstream in(app::ExeDir() / "lang" / file, std::ios::binary);
     char magic[8] = {};
     uint64_t pak = 0;
     uint32_t count = 0;
     if (!in.read(magic, 8) || std::memcmp(magic, "FHRFONT1", 8) != 0 || !in.read(reinterpret_cast<char*>(&pak), 8) ||
         !in.read(reinterpret_cast<char*>(&count), 4)) {
-        LOGE("language: lang/ru_fonts.bin missing or not one: Russian's letters will not show");
+        LOGE("language: lang/%s missing or not one: the language's own letters will not show", file);
         return;
     }
     for (uint32_t i = 0; i < count; i++) {
@@ -115,7 +131,7 @@ void LoadFonts() {
         g_fonts.push_back(std::move(f));
     }
     std::sort(g_fonts.begin(), g_fonts.end(), [](const FontPatch& a, const FontPatch& b) { return a.at < b.at; });
-    LOGR("language: Russian's fonts, %zu patches", g_fonts.size());
+    LOGR("language: %s, %zu patches", file, g_fonts.size());
 }
 
 void PatchFonts(uint64_t pos, uint8_t* data, uint32_t n) {
@@ -132,7 +148,7 @@ void PatchFonts(uint64_t pos, uint8_t* data, uint32_t n) {
 }
 
 void Load() {
-    const char* file = g_lang == kRussian ? "ru.txt" : "pt.txt";
+    const char* file = g_lang == kRussian ? "ru.txt" : g_lang == kPolish ? "pl.txt" : "pt.txt";
     std::ifstream in(app::ExeDir() / "lang" / file, std::ios::binary);
     if (!in) {
         LOGE("language: lang/%s not found: the game's English text stays", file);
@@ -148,7 +164,7 @@ void Load() {
         if (key[0] == '@') g_lines[std::strtoull(key.c_str() + 1, nullptr, 16)] = std::move(text);
         else g_keys[key] = std::move(text);
     }
-    LOGR("language: %s, %zu rows and %zu subtitles", g_lang == kRussian ? "Russian" : "Portuguese", g_keys.size(),
+    LOGR("language: %s, %zu rows and %zu subtitles", g_lang == kRussian ? "Russian" : g_lang == kPolish ? "Polish" : "Portuguese", g_keys.size(),
          g_lines.size());
 }
 
@@ -181,15 +197,16 @@ void PatchTables(char* data, size_t n) {
                 auto it = g_keys.find(key);
                 std::string text = it != g_keys.end() ? it->second : std::string();
                 // the main menu's PC Settings (offline.cpp's row) and the keyboard's title prompt (UTF-8)
-                const bool ru = g_lang == kRussian;
+                const bool ru = g_lang == kRussian, pl = g_lang == kPolish;
                 if (key == "$multiplayer")
                     text = Text(ru ? "\xD0\x9D\xD0\xB0\xD1\x81\xD1\x82\xD1\x80\xD0\xBE\xD0\xB9\xD0\xBA\xD0\xB8 \xD0\x9F\xD0\x9A"
-                                   : "Op\xC3\xA7\xC3\xB5" "es do PC");
+                                : pl ? "Opcje PC" : "Op\xC3\xA7\xC3\xB5" "es do PC");
                 if (key == "$multiplayerCaps")
                     text = Text(ru ? "\xD0\x9D\xD0\x90\xD0\xA1\xD0\xA2\xD0\xA0\xD0\x9E\xD0\x99\xD0\x9A\xD0\x98 \xD0\x9F\xD0\x9A"
-                                   : "OP\xC3\x87\xC3\x95" "ES DO PC");
+                                : pl ? "OPCJE PC" : "OP\xC3\x87\xC3\x95" "ES DO PC");
                 if (key == "$pressStartXbox" && row.find("ENTER") != std::string_view::npos)
-                    text = Text(ru ? "\xD0\x9D\xD0\xB0\xD0\xB6\xD0\xBC\xD0\xB8\xD1\x82\xD0\xB5 ENTER" : "Pressione ENTER");
+                    text = Text(ru ? "\xD0\x9D\xD0\xB0\xD0\xB6\xD0\xBC\xD0\xB8\xD1\x82\xD0\xB5 ENTER"
+                                : pl ? "Naci\xC5\x9Bnij ENTER" : "Pressione ENTER");
                 if (!text.empty()) {
                     std::string out = key + "," + Field(text) + ",,,,";
                     if (out.size() <= row.size()) {
@@ -328,10 +345,10 @@ bool Portuguese() { return g_on && g_lang == kPortuguese; }
 
 void Init() {
     const uint32_t l = app::Get().language;
-    g_on = l == kPortuguese || l == kRussian;
+    g_on = l == kPortuguese || l == kRussian || l == kPolish;
     g_lang = g_on ? l : 0;
     if (g_on) Load();
-    if (g_lang == kRussian) LoadFonts();
+    if (g_lang == kRussian || g_lang == kPolish) LoadFonts();
 }
 
 // a read of the game's files (offline.cpp's read hook)

@@ -220,6 +220,9 @@ The version installed is in `version.txt` beside the game. Unattended:
 - The hint for cycling the thrown item (mines, grenades) shows the Switch Grenade key (T by default) instead of the
   lean key (E), which did nothing there (issue #38). In Russian, the lean hint shows the keys instead of naming the
   d-pad.
+- New language: Polish (PC Settings, General, Language), like Russian: all the game's text and the PC Settings, with
+  Polish letters added to the game's own fonts, with or without the remastered textures (the voices stay in English).
+  A first translation: corrections are welcome in issue #34.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

@@ -244,8 +244,9 @@ const char* Text(int which) {
     static const char* ru[] = {"\xD0\x92\xD1\x8B\xD0\xB9\xD1\x82\xD0\xB8 \xD0\xB8\xD0\xB7 \xD0\xB8\xD0\xB3\xD1\x80\xD1\x8B",
                                "\xD0\x92\xD1\x8B\xD0\xB9\xD1\x82\xD0\xB8 \xD0\xB2 Windows?", "\xD0\x9D\xD0\xB5\xD1\x82",
                                "\xD0\x94\xD0\xB0"};
+    static const char* pl[] = {"Wyjd\xC5\xBA z gry", "Wyj\xC5\x9B\xC4\x87 do Windows?", "Nie", "Tak"};
     uint32_t l = Language();
-    const char** t = l == 4 ? fr : l == 6 ? it : l == 5 ? es : l == 9 ? pt : l == 10 ? ru : en;
+    const char** t = l == 4 ? fr : l == 6 ? it : l == 5 ? es : l == 9 ? pt : l == 10 ? ru : l == 11 ? pl : en;
     return t[which];
 }
 

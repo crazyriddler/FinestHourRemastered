@@ -367,10 +367,11 @@ int SystemLanguage() {
     }
 }
 
-// the game's language codes (XC_LANGUAGE): 1 English, 4 French, 6 Italian, 5 Spanish, 9 Portuguese, 10 Russian (the
-// port's; the installer itself in English on a Russian Windows)
+// the game's language codes (XC_LANGUAGE): 1 English, 4 French, 6 Italian, 5 Spanish, 9 Portuguese, 10 Russian, 11
+// Polish (the port's; the installer itself in English on a Russian or Polish Windows)
 uint32_t GameLanguage() {
     if (PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_RUSSIAN) return 10;
+    if (PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_POLISH) return 11;
     const uint32_t codes[] = {1, 4, 6, 5, 9};
     return codes[g_lang];
 }

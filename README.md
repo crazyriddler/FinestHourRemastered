@@ -72,8 +72,8 @@ weapons rounded) or Original.
 - About 10 GB of disk: the game's files, the remastered textures and models.
 - **The game**: Call of Duty: Finest Hour for the original Xbox, **PAL (Europe) release**, title ID `4156002A`,
   version 3 (`default.xbe` SHA-1 `938a7b1e17928de49cb3c5834d61abcd3d9081c8`). Its four languages (English, French,
-  Italian and Spanish, text and speech) are all supported, and Portuguese and Russian (text, with the English speech)
-  are added by the port. Other releases are not supported: the port is the code of this one.
+  Italian and Spanish, text and speech) are all supported, and Portuguese, Russian and Polish (text, with the English
+  speech) are added by the port. Other releases are not supported: the port is the code of this one.
 
 ## Installation
 1. Download the [1.0 release](https://github.com/crazyriddler/FinestHourRemastered/releases/tag/v1.0):
@@ -191,7 +191,7 @@ game's own look and textures. The render scale is never part of a preset: it sta
 - **Controllers**: Xbox, PlayStation and Switch, hot plugging and rumble, a modern layout or the original's, dead
   zone, sensitivity and look acceleration settings.
 - **Button Prompts** follow the device in hand: keys, Xbox, PlayStation or Switch buttons.
-- **Skip Intros**, **Language** (English, French, Italian, Spanish, Portuguese, Russian).
+- **Skip Intros**, **Language** (English, French, Italian, Spanish, Portuguese, Russian, Polish).
 - **Sound**: Stereo or **5.1 Surround** (PC Settings > General): the game mixes for Dolby Digital as on a console
   connected to a surround receiver, the battle placed around you on the front, centre, back and subwoofer.
 

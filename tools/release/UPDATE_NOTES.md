@@ -226,6 +226,8 @@ The version installed is in `version.txt` beside the game. Unattended:
 - HDR output (PC Settings, Display; Direct3D 12): on by default when HDR is on in Windows (off and locked otherwise),
   with the display's peak from Windows. Brighter lights, fire and skies and brighter lit mid tones, the HUD, the text
   and the menus at Windows' SDR content brightness. HDR Peak Brightness and HDR Game Brightness to adjust it.
+- The installer and the updater show a small window while they unpack (it can take a minute), and if they cannot
+  start they now say why, with an error number (and a log in the Temp folder) instead of closing silently (issue #40).
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

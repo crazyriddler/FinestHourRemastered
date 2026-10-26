@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -403,35 +404,111 @@ bool g_update_mode = false;  // the updater (its exe named ...Update.exe, or --u
 std::wstring g_installed;    // the update's: the installation's version as found
 size_t g_differ = 0;         // files of the installation not as the release's and not in the update
 
-bool ReadPatch(Patch& p) {
+// --- start-up: what failed, said in a message and a log (issue #40: nothing showed) --------------------------------
+// The codes: 1 its own file unreadable, 2 no update inside it, 3 the file cut short, 4 no memory to unpack it, 5 the
+// update damaged, 6 its list of files unreadable, 7 no window, 8 no Direct3D 11, 9 a crash
+enum StartError { kErrSelf = 1, kErrPackage, kErrTruncated, kErrMemory, kErrUnpack, kErrContents, kErrWindow, kErrD3d11, kErrCrash };
+
+std::wstring StartLogPath() {
+    wchar_t t[MAX_PATH] = {};
+    GetTempPathW(MAX_PATH, t);
+    return std::wstring(t) + (g_update_mode ? L"FinestHourRemasteredUpdate.log" : L"FinestHourRemasteredSetup.log");
+}
+
+void StartLog(const char* fmt, ...) {
+    static std::mutex lock;
+    std::lock_guard l(lock);
+    static bool fresh = true;
+    FILE* f = _wfopen(StartLogPath().c_str(), fresh ? L"w" : L"a");
+    fresh = false;
+    if (!f) return;
+    std::fprintf(f, "[%8.3f] ", double(GetTickCount64() % 100000000) / 1000.0);
+    va_list a;
+    va_start(a, fmt);
+    std::vfprintf(f, fmt, a);
+    va_end(a);
+    std::fprintf(f, "\n");
+    std::fclose(f);
+}
+
+int StartFail(int code, DWORD win = 0, const std::wstring& extra = L"") {
+    static const wchar_t* const why[] = {
+        L"",
+        L"It cannot read its own file. Move it to a usual folder (Downloads, the Desktop) and run it from there, and check that your antivirus has not blocked or quarantined it.",
+        L"The file does not hold the game's update inside it: the download is incomplete or damaged. Download it again from the release page.",
+        L"The file is shorter than it should be: the download did not finish. Download it again from the release page.",
+        L"There is not enough free memory to unpack it (about 1 GB is needed). Close other programs and try again.",
+        L"The update inside the file is damaged. Download it again from the release page.",
+        L"The update's list of files cannot be read. Download it again from the release page.",
+        L"Its window could not be created.",
+        L"Direct3D 11 is not available. Update your graphics driver and Windows.",
+        L"It stopped unexpectedly.",
+    };
+    wchar_t msg[2048];
+    swprintf(msg, 2048, L"%s could not start.\n\nError %d: %s%s%s%s\n\nPlease report the error number in the project's issues on GitHub. Details: %s",
+             g_update_mode ? L"Finest Hour Remastered Update" : L"Finest Hour Remastered Setup", code,
+             code > 0 && code <= kErrCrash ? why[code] : L"", extra.empty() ? L"" : L"\n", extra.c_str(),
+             win ? (L"\n(Windows error " + std::to_wstring(win) + L")").c_str() : L"", StartLogPath().c_str());
+    char narrow[2048];
+    WideCharToMultiByte(CP_UTF8, 0, msg, -1, narrow, sizeof(narrow), nullptr, nullptr);
+    StartLog("error %d (windows %lu): %s", code, win, narrow);
+    MessageBoxW(nullptr, msg, g_update_mode ? L"Finest Hour Remastered Update" : L"Finest Hour Remastered Setup",
+                MB_ICONERROR | MB_SETFOREGROUND);
+    return code;
+}
+
+// an unexpected crash: said, not a silent exit (its exception and where, from the exe's start)
+LONG WINAPI Crashed(EXCEPTION_POINTERS* e) {
+    const auto at = uint64_t(reinterpret_cast<uintptr_t>(e->ExceptionRecord->ExceptionAddress) -
+                             reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr)));
+    wchar_t extra[128];
+    swprintf(extra, 128, L"(exception 0x%08lX at +0x%llX)", e->ExceptionRecord->ExceptionCode, (unsigned long long)at);
+    StartFail(kErrCrash, 0, extra);
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+// 0, or a start-up error's code (StartError)
+int ReadPatch(Patch& p) {
     wchar_t self[MAX_PATH];
     GetModuleFileNameW(nullptr, self, MAX_PATH);
     FILE* f = _wfopen(self, L"rb");
-    if (!f) return false;
+    if (!f) return kErrSelf;
     uint8_t tail[24];
     _fseeki64(f, -24, SEEK_END);
     int64_t end = _ftelli64(f);
     bool ok = std::fread(tail, 1, 24, f) == 24 && std::memcmp(tail + 16, "FHRLZMA1", 8) == 0;
+    if (!ok) {
+        std::fclose(f);
+        return kErrPackage;
+    }
     uint64_t packed = 0, raw = 0;
-    if (ok) std::memcpy(&packed, tail, 8), std::memcpy(&raw, tail + 8, 8);
-    ok = ok && packed > 0 && packed <= uint64_t(end) && raw < (uint64_t(1) << 33);
+    std::memcpy(&packed, tail, 8), std::memcpy(&raw, tail + 8, 8);
+    ok = packed > 0 && packed <= uint64_t(end) && raw < (uint64_t(1) << 33);
     std::vector<uint8_t> blob;
     if (ok) {
-        blob.resize(size_t(packed));
+        try {
+            blob.resize(size_t(packed));
+        } catch (...) {
+            std::fclose(f);
+            return kErrMemory;
+        }
         _fseeki64(f, end - int64_t(packed), SEEK_SET);
         ok = std::fread(blob.data(), 1, blob.size(), f) == blob.size();
     }
     std::fclose(f);
-    if (!ok) return false;
-    if (blob.size() <= LZMA_PROPS_SIZE + 8) return false;
-    p.data.resize(size_t(raw));
+    if (!ok || blob.size() <= LZMA_PROPS_SIZE + 8) return kErrTruncated;
+    try {
+        p.data.resize(size_t(raw));
+    } catch (...) {
+        return kErrMemory;
+    }
     const ISzAlloc alloc = {[](ISzAllocPtr, size_t n) { return std::malloc(n); }, [](ISzAllocPtr, void* q) { std::free(q); }};
     SizeT got = SizeT(raw), in = SizeT(blob.size() - LZMA_PROPS_SIZE - 8);
     ELzmaStatus status;
-    ok = LzmaDecode(p.data.data(), &got, blob.data() + LZMA_PROPS_SIZE + 8, &in, blob.data(), LZMA_PROPS_SIZE, LZMA_FINISH_END,
-                    &status, &alloc) == SZ_OK &&
-         got == raw;
-    if (!ok) return false;
+    const SRes res = LzmaDecode(p.data.data(), &got, blob.data() + LZMA_PROPS_SIZE + 8, &in, blob.data(), LZMA_PROPS_SIZE,
+                                LZMA_FINISH_END, &status, &alloc);
+    if (res == SZ_ERROR_MEM) return kErrMemory;
+    if (res != SZ_OK || got != raw) return kErrUnpack;
     // the head: lines up to "end"
     size_t at = 0;
     auto line = [&](std::string& out) {
@@ -442,7 +519,7 @@ bool ReadPatch(Patch& p) {
         return true;
     };
     std::string l;
-    if (!line(l) || l != "FHRU 1") return false;
+    if (!line(l) || l != "FHRU 1") return kErrContents;
     std::vector<PatchFile> files;
     while (line(l) && l != "end") {
         std::istringstream s(l);
@@ -463,15 +540,67 @@ bool ReadPatch(Patch& p) {
             p.checks.push_back({size, rest});
         }
     }
-    if (l != "end") return false;
+    if (l != "end") return kErrContents;
     for (PatchFile& pf : files) {
         pf.at = at;
         at += pf.size;
     }
-    if (at > p.data.size()) return false;
+    if (at > p.data.size()) return kErrContents;
     p.files = std::move(files);
     p.ok = true;
-    return true;
+    return 0;
+}
+
+// a small window while the update is unpacked (it can take a while: nothing showed, issue #40)
+LRESULT CALLBACK PreparingProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
+    if (msg == WM_PAINT) {
+        PAINTSTRUCT ps;
+        HDC dc = BeginPaint(h, &ps);
+        RECT rc;
+        GetClientRect(h, &rc);
+        FillRect(dc, &rc, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        SetBkMode(dc, TRANSPARENT);
+        SetTextColor(dc, RGB(230, 225, 210));
+        HFONT font = CreateFontW(-MulDiv(11, GetDeviceCaps(dc, LOGPIXELSY), 72), 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0,
+                                 CLEARTYPE_QUALITY, 0, L"Segoe UI");
+        HGDIOBJ old = SelectObject(dc, font);
+        DrawTextW(dc, g_update_mode ? L"Preparing Finest Hour Remastered Update...\nThis can take a minute."
+                                    : L"Preparing Finest Hour Remastered Setup...\nThis can take a minute.",
+                  -1, &rc, DT_CENTER | DT_VCENTER | DT_WORDBREAK);
+        SelectObject(dc, old);
+        DeleteObject(font);
+        EndPaint(h, &ps);
+        return 0;
+    }
+    return DefWindowProcW(h, msg, w, l);
+}
+
+// ReadPatch on a thread, a window up meanwhile (none when unattended): its result
+int ReadPatchShown(Patch& p, HINSTANCE inst, bool shown) {
+    if (!shown) return ReadPatch(p);
+    WNDCLASSEXW wc{sizeof(wc), 0, PreparingProc, 0, 0, inst};
+    wc.hCursor = LoadCursorW(nullptr, IDC_WAIT);
+    wc.lpszClassName = L"FinestHourPreparing";
+    RegisterClassExW(&wc);
+    const float dpi = GetDpiForSystem() / 96.0f;
+    const int ww = int(460 * dpi), wh = int(110 * dpi);
+    HWND h = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, wc.lpszClassName, L"Finest Hour Remastered", WS_POPUP | WS_BORDER,
+                             (GetSystemMetrics(SM_CXSCREEN) - ww) / 2, (GetSystemMetrics(SM_CYSCREEN) - wh) / 2, ww, wh, nullptr,
+                             nullptr, inst, nullptr);
+    if (h) ShowWindow(h, SW_SHOW), UpdateWindow(h);
+    std::atomic<int> result{-1};
+    std::thread t([&] { result = ReadPatch(p); });
+    while (result.load() < 0) {
+        MSG m;
+        while (PeekMessageW(&m, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&m);
+            DispatchMessageW(&m);
+        }
+        MsgWaitForMultipleObjects(0, nullptr, FALSE, 50, QS_ALLINPUT);
+    }
+    t.join();
+    if (h) DestroyWindow(h);
+    return result.load();
 }
 
 ComPtr<ID3D11Device> g_dev;
@@ -1288,6 +1417,18 @@ LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
 }  // namespace
 
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
+    {
+        // the updater: this exe under the update's name
+        wchar_t self[MAX_PATH];
+        GetModuleFileNameW(nullptr, self, MAX_PATH);
+        std::wstring name = fs::path(self).filename().wstring();
+        std::transform(name.begin(), name.end(), name.begin(), ::towlower);
+        g_update_mode = name.find(L"update") != std::wstring::npos;
+        char narrow[MAX_PATH * 3];
+        WideCharToMultiByte(CP_UTF8, 0, self, -1, narrow, sizeof(narrow), nullptr, nullptr);
+        StartLog("start: %s", narrow);
+    }
+    SetUnhandledExceptionFilter(Crashed);
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     PWSTR pf = nullptr;
@@ -1296,14 +1437,16 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
     CoTaskMemFree(pf);
     if (g_target.empty()) g_target = L"C:\\Games\\Finest Hour Remastered";
     g_lang = SystemLanguage();
-    ReadPatch(g_patch);
     {
-        // the updater: this exe under the update's name
-        wchar_t self[MAX_PATH];
-        GetModuleFileNameW(nullptr, self, MAX_PATH);
-        std::wstring name = fs::path(self).filename().wstring();
-        std::transform(name.begin(), name.end(), name.begin(), ::towlower);
-        g_update_mode = name.find(L"update") != std::wstring::npos;
+        int argc0 = 0;
+        LPWSTR* argv0 = CommandLineToArgvW(GetCommandLineW(), &argc0);
+        if (argv0) LocalFree(argv0);
+        const bool unattended = argc0 > 2;
+        const ULONGLONG t0 = GetTickCount64();
+        const int err = ReadPatchShown(g_patch, inst, !unattended);
+        StartLog("the update inside: %s in %.1f s (%zu files, version %s)", err ? "failed" : "read", (GetTickCount64() - t0) / 1000.0,
+                 g_patch.files.size(), g_patch.version.c_str());
+        if (err) return unattended ? 1 : StartFail(err);
     }
     CheckDownloads();
 
@@ -1369,6 +1512,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
     int sx = (GetSystemMetrics(SM_CXSCREEN) - ww) / 2, sy = (GetSystemMetrics(SM_CYSCREEN) - wh) / 2;
     g_hwnd = CreateWindowExW(WS_EX_APPWINDOW, wc.lpszClassName, g_update_mode ? L"Finest Hour Remastered Update" : L"Finest Hour Remastered Setup", WS_POPUP | WS_MINIMIZEBOX,
                              sx, sy, ww, wh, nullptr, nullptr, inst, nullptr);
+    if (!g_hwnd) return StartFail(kErrWindow, GetLastError());
 
     DXGI_SWAP_CHAIN_DESC sd{};
     sd.BufferCount = 2;
@@ -1382,9 +1526,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
                                              &sd, &g_swap, &g_dev, nullptr, &g_ctx)) &&
         FAILED(D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION, &sd,
                                              &g_swap, &g_dev, nullptr, &g_ctx))) {
-        MessageBoxW(nullptr, L"Direct3D 11 is not available.", kProduct, MB_ICONERROR);
-        return 1;
+        return StartFail(kErrD3d11);
     }
+    StartLog("window and Direct3D 11 up");
     MakeTarget();
     ShowWindow(g_hwnd, show);
 

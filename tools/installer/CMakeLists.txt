@@ -19,3 +19,8 @@ if(MSVC)
     target_compile_options(FinestHourRemasteredSetup PRIVATE /utf-8)
     set_property(TARGET FinestHourRemasteredSetup PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
 endif()
+# any 64-bit processor (the game's x86-64-v2, SSE4.2, is not asked of the installer: issue #40, a processor without
+# SSE4.1 stopped in it)
+if(NOT MSVC)
+    target_compile_options(FinestHourRemasteredSetup PRIVATE -march=x86-64)
+endif()

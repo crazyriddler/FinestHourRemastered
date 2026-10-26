@@ -11,6 +11,7 @@
 #include "common/overlay.h"
 #include "common/pc_input.h"
 #include "common/prompts.h"
+#include "common/updates.h"
 #include "common/widescreen.h"
 #include "core/control.h"
 #include "core/input.h"
@@ -842,6 +843,7 @@ const app::GameInfo app::kGame = {
     .window =
         [](void* hwnd) {
             cod::overlay::Init();
+            cod::updates::Start();
             pc_input::Window(hwnd);
         },
     .message = Message,

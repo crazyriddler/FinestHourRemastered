@@ -67,6 +67,8 @@ weapons rounded) or Original.
 
 ## Requirements
 - Windows 10 or 11, 64-bit. On Linux and Steam Deck, through Proton (see [Linux and Steam Deck](#linux-and-steam-deck)).
+- A processor with SSE4.2 (x86-64-v2): Intel Core i3/i5/i7 and later (2008 on), AMD FX, Ryzen and later
+  (2011 on). Older ones (Core 2, Phenom II, Athlon II) cannot run the game.
 - A Direct3D 12 GPU with 4 GB of video memory or more (or a Vulkan 1.3 one, PC Settings > Display > Renderer). With
   every effect on at 1440p a recent mid-range GPU holds its 60 FPS.
 - About 10 GB of disk: the game's files, the remastered textures and models.
@@ -97,6 +99,13 @@ cumulative: run it, choose the installation's folder and **Update**, whatever ve
 and saved games are kept. The installed version is in `version.txt` beside the game. Unattended:
 `FinestHourRemasteredUpdate.exe --update "C:\Games\Finest Hour Remastered" --log update.log` (exit code 0 updated,
 1 failed).
+
+The game looks for a newer update itself at the start, in the background (a slow or missing connection never delays
+it): when there is one, the main menu shows what it brings and offers **Update**, **Not Now** or **Don't Ask
+Again**. Update downloads the updater to the Temp folder (its size and SHA-256 checked), the game closes, the updater
+installs the update and starts the game again, and the game deletes the downloaded updater at its next start. Don't
+Ask Again turns the check off; **Check for Updates** (PC Settings, General) turns it back on. Nothing is downloaded
+unless you choose Update.
 
 Settings are kept in `codfh.toml` beside the exe, saved games in `hdd`, the prepared shaders in `shadercache`.
 Choose **PC Settings** in the main menu (or press **F10** at any time) for every option below.
@@ -248,7 +257,8 @@ out byte for byte the release's, wherever the repository is.
 5. To play from the build, put the rest of your game's files in `assets\` too (or its disc image).
 6. `python tools\release\make_release.py --only github` makes the latest update (every file that differs from the
    1.0 payload, `tools\release\base_manifest.txt`) and puts it inside the installer (`..\release\github`) and the
-   updater (`..\release\update`); `--rebase` assembles a new payload too (index and parts).
+   updater (`..\release\update`), with `update.json` for the game's check (what the update brings, from
+   `tools\release\LATEST.txt`, written anew for each update); `--rebase` assembles a new payload too (index and parts).
 
 For development, `cmake --preset release -DXBE_SYMBOLS=ON` adds a PDB beside the exe, with which crash dumps, the
 stall watchdog and the sampling profiler name functions (the exe is then no longer the release's, byte for byte).

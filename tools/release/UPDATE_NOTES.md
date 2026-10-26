@@ -228,6 +228,13 @@ The version installed is in `version.txt` beside the game. Unattended:
   and the menus at Windows' SDR content brightness. HDR Peak Brightness and HDR Game Brightness to adjust it.
 - The installer and the updater show a small window while they unpack (it can take a minute), and if they cannot
   start they now say why, with an error number (and a log in the Temp folder) instead of closing silently (issue #40).
+- The game looks for updates at its start, in the background (it never delays the start, whatever the connection):
+  when there is a newer one, the main menu shows what it brings, in the game's language, and offers to install it:
+  Update (downloaded, checked, installed by the updater, the game started again, nothing left in the Temp folder),
+  Not Now, or Don't Ask Again, which turns the check off; Check for Updates (PC Settings, General) turns it back on.
+  From this update on, the next ones are offered in the game.
+- The installer and the updater run on any 64-bit processor: they stopped at once (error 9) on processors without
+  SSE4.1 (issue #40). The game itself needs SSE4.2 (README, Requirements).
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

@@ -81,6 +81,7 @@ struct Settings {
     uint32_t specular = 100;         // percent
     uint32_t brightness = 100;       // percent: the frame's gamma (the game was tuned on CRT televisions)
     bool hdr_output = true;          // HDR on an HDR display (Windows' HDR on): lights past white brighter
+    bool check_updates = true;       // at the start, a newer update looked for on GitHub (cod::updates)
     uint32_t hdr_peak = 0;           // nits: the brightest it shows (0: the display's, Windows')
     uint32_t hdr_white = 0;          // nits: the game's white (0: Windows' SDR content brightness, the HUD's always)
     float normal_green = 1;          // the normal maps' green: 1 up, -1 down

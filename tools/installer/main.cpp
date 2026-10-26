@@ -26,7 +26,9 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <chrono>
 #include <cstring>
+#include <cwchar>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -186,6 +188,9 @@ constexpr Row kStrings[] = {
      "Actualizando Finest Hour Remastered..."},
     {"Finest Hour Remastered is up to date.", "Finest Hour Remastered est à jour.", "Finest Hour Remastered è aggiornato.",
      "Finest Hour Remastered está actualizado."},
+    {"Waiting for the game to close...", "En attente de la fermeture du jeu...", "In attesa della chiusura del gioco...",
+     "Esperando a que se cierre el juego..."},
+    {"Starting the game...", "Lancement du jeu...", "Avvio del gioco...", "Iniciando el juego..."},
     {"The update did not finish.", "La mise à jour n'a pas abouti.", "L'aggiornamento non è terminato.",
      "La actualización no ha terminado."},
     {"Some installed files differ from the release and are not in this update. If the game misbehaves, install it "
@@ -324,6 +329,10 @@ constexpr struct {
      "Atualizando o Finest Hour Remastered..."},
     {"Finest Hour Remastered is up to date.",
      "O Finest Hour Remastered está atualizado."},
+    {"Waiting for the game to close...",
+     "Esperando o jogo fechar..."},
+    {"Starting the game...",
+     "Iniciando o jogo..."},
     {"The update did not finish.",
      "A atualização não foi concluída."},
     {"Some installed files differ from the release and are not in this update. If the game "
@@ -401,6 +410,10 @@ struct Patch {
 };
 Patch g_patch;
 bool g_update_mode = false;  // the updater (its exe named ...Update.exe, or --update)
+// --from-game <the installation> [--wait <the game's process>]: run by the game (src/common/updates.cpp) from the Temp
+// folder: the update applied at once (no folder to choose) once the game has closed, then the game started again
+bool g_from_game = false;
+DWORD g_wait_pid = 0;
 std::wstring g_installed;    // the update's: the installation's version as found
 size_t g_differ = 0;         // files of the installation not as the release's and not in the update
 
@@ -983,6 +996,17 @@ bool IsInstallation(const fs::path& dir) {
     return fs::exists(dir / kExe, ec) || fs::exists(dir / L"FinestHourRemastered.exe", ec);
 }
 
+// this process elevated (the updater run by the game for a folder its account cannot write)
+bool Elevated() {
+    HANDLE t = nullptr;
+    TOKEN_ELEVATION e{};
+    DWORD n = 0;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &t)) return false;
+    const bool ok = GetTokenInformation(t, TokenElevation, &e, sizeof(e), &n);
+    CloseHandle(t);
+    return ok && e.TokenIsElevated;
+}
+
 void Update() {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     auto fail = [](const std::string& e) {
@@ -994,6 +1018,15 @@ void Update() {
     if (!g_patch.ok) return fail(T("This program has no update inside: download it again."));
     fs::path target = g_target;
     if (!IsInstallation(target)) return fail(T("This folder has no Finest Hour Remastered installation."));
+    if (g_wait_pid) {
+        // the game closing (its files free to be written)
+        if (HANDLE p = OpenProcess(SYNCHRONIZE, FALSE, g_wait_pid)) {
+            Log(T("Waiting for the game to close..."));
+            WaitForSingleObject(p, 60000);
+            CloseHandle(p);
+        }
+        g_wait_pid = 0;
+    }
     Log(T("Updating Finest Hour Remastered..."));
     uint64_t total = 0, done = 0;
     for (const PatchFile& pf : g_patch.files) total += pf.size;
@@ -1007,6 +1040,20 @@ void Update() {
     RepairShortcuts(target / kExe);
     g_progress = 1;
     Log(T("Done."));
+    if (g_from_game) {
+        // the game again, as the player (not elevated when this ran so for Program Files: through Explorer), and this
+        // closed (the game deletes this file, from the Temp folder, at its next start)
+        Log(T("Starting the game..."));
+        const fs::path exe = target / kExe;
+        if (Elevated()) ShellExecuteW(nullptr, L"open", L"explorer.exe", (L"\"" + exe.wstring() + L"\"").c_str(), nullptr, SW_SHOWNORMAL);
+        else ShellExecuteW(nullptr, L"open", exe.c_str(), nullptr, target.c_str(), SW_SHOWNORMAL);
+        std::this_thread::sleep_for(std::chrono::milliseconds(800));
+        DeleteFileW(StartLogPath().c_str());  // (nothing left behind: its log only when it failed)
+        g_working = false;
+        g_page = Page::Done;
+        if (g_hwnd) PostMessageW(g_hwnd, WM_CLOSE, 0, 0);
+        return;
+    }
     g_working = false;
     g_page = Page::Done;
 }
@@ -1439,9 +1486,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
     g_lang = SystemLanguage();
     {
         int argc0 = 0;
-        LPWSTR* argv0 = CommandLineToArgvW(GetCommandLineW(), &argc0);
-        if (argv0) LocalFree(argv0);
-        const bool unattended = argc0 > 2;
+        bool unattended = false;
+        if (LPWSTR* argv0 = CommandLineToArgvW(GetCommandLineW(), &argc0)) {
+            for (int i = 1; i < argc0; i++)
+                if (!std::wcscmp(argv0[i], L"--update") || !std::wcscmp(argv0[i], L"--source")) unattended = true;
+            LocalFree(argv0);
+        }
         const ULONGLONG t0 = GetTickCount64();
         const int err = ReadPatchShown(g_patch, inst, !unattended);
         StartLog("the update inside: %s in %.1f s (%zu files, version %s)", err ? "failed" : "read", (GetTickCount64() - t0) / 1000.0,
@@ -1466,6 +1516,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
             else if (a == L"--target" && i + 1 < argc) g_target = argv[++i];
             else if (a == L"--log" && i + 1 < argc) log = argv[++i];
             else if (a == L"--shortcuts") g_shortcut_desktop = g_shortcut_menu = true;
+            else if (a == L"--from-game" && i + 1 < argc) g_target = argv[++i], g_from_game = g_update_mode = true;
+            else if (a == L"--wait" && i + 1 < argc) g_wait_pid = DWORD(_wtoi(argv[++i]));
         }
         LocalFree(argv);
         // unattended update: --update <the installation's folder> [--log <file>] (0 updated, 1 failed)
@@ -1557,6 +1609,13 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
         g_page = Page(std::clamp(_wtoi(pg), 0, 5));
         if (g_page == Page::Source) g_source = L"D:\\Games\\COD", g_source_ok = true, g_source_note = "Your copy is the right release.";
         if (g_page == Page::Install) Log("Installing Finest Hour Remastered..."), g_progress = 0.42;
+    }
+    if (g_from_game) {
+        // straight to the update's progress (the folder is the game's)
+        g_page = Page::Install;
+        g_working = true;
+        g_cancel = false;
+        std::thread(Update).detach();
     }
 
     MSG msg{};

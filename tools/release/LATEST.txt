@@ -1,0 +1,24 @@
+# What the latest update brings, shown by the game when it offers the update (make_release.py writes it into the
+# update release's update.json). Only this update's changes: written anew for each update. One section a language
+# ([en] needed; the others fall back to it), its lines as the game shows them. UTF-8.
+[en]
+- The game now looks for updates when it starts, in the background (it never delays the start): when there is one, the main menu shows what it brings and offers to install it. Don't Ask Again turns it off; Check for Updates (PC Settings, General) turns it back on.
+- The installer and the updater show a window while they unpack, and an error number with its reason if they cannot start.
+[fr]
+- Le jeu cherche désormais les mises à jour au lancement, en arrière-plan (sans jamais retarder le lancement) : s'il y en a une, le menu principal montre son contenu et propose de l'installer. Ne plus demander le désactive ; Rechercher les mises à jour (Options PC, Général) le réactive.
+- L'installateur et la mise à jour affichent une fenêtre pendant la décompression, et un numéro d'erreur avec sa raison s'ils ne peuvent pas démarrer.
+[it]
+- Il gioco ora cerca gli aggiornamenti all'avvio, in background (senza mai ritardare l'avvio): se ce n'è uno, il menu principale mostra cosa contiene e propone di installarlo. Non chiedere più lo disattiva; Cerca aggiornamenti (Opzioni PC, Generale) lo riattiva.
+- Il programma di installazione e l'aggiornamento mostrano una finestra durante l'estrazione, e un numero di errore con il motivo se non riescono ad avviarsi.
+[es]
+- El juego ahora busca actualizaciones al iniciarse, en segundo plano (nunca retrasa el inicio): si hay una, el menú principal muestra lo que trae y ofrece instalarla. No volver a avisar lo desactiva; Buscar actualizaciones (Ajustes de PC, General) lo vuelve a activar.
+- El instalador y el actualizador muestran una ventana mientras descomprimen, y un número de error con su motivo si no pueden iniciarse.
+[pt]
+- O jogo agora procura atualizações ao iniciar, em segundo plano (nunca atrasa o início): se houver uma, o menu principal mostra o que ela traz e oferece instalá-la. Não perguntar de novo desativa; Procurar atualizações (Opções do PC, Geral) reativa.
+- O instalador e o atualizador mostram uma janela enquanto descompactam, e um número de erro com o motivo se não conseguirem iniciar.
+[ru]
+- Игра теперь ищет обновления при запуске, в фоне (запуск не задерживается): если обновление есть, главное меню покажет, что в нём, и предложит установить. «Больше не спрашивать» отключает проверку; «Проверять обновления» (Настройки ПК, Общие) включает её снова.
+- Установщик и программа обновления показывают окно во время распаковки, а если не могут запуститься, выводят номер ошибки и её причину.
+[pl]
+- Gra szuka teraz aktualizacji przy uruchomieniu, w tle (nigdy nie opóźnia startu): jeśli jest nowa, menu główne pokazuje, co zawiera, i proponuje instalację. Nie pytaj ponownie wyłącza sprawdzanie; Sprawdzaj aktualizacje (Opcje PC, Ogólne) włącza je z powrotem.
+- Instalator i aktualizator pokazują okno podczas rozpakowywania, a jeśli nie mogą się uruchomić, numer błędu z przyczyną.

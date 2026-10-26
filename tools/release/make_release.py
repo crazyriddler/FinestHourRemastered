@@ -10,7 +10,9 @@
                                              base_manifest.txt) and the installer, which carries the latest update
                                              inside it (every file changed since the base) and applies it after
   release/update/                            the latest update release: the same exe as FinestHourRemasteredUpdate.exe,
-                                             the updater of an installation of any earlier version
+                                             the updater of an installation of any earlier version, and update.json,
+                                             what the game reads at its start (src/common/updates.cpp: the version, the
+                                             updater's size and SHA-256, what this update brings from LATEST.txt)
 
     python tools/release/make_release.py [--game ../COD] [--only portable|github|source] [--version text]
     python tools/release/make_release.py --only github --rebase   (a new base payload: the parts written again)
@@ -20,6 +22,7 @@ import ctypes
 import datetime
 import hashlib
 import io
+import json
 import lzma
 import os
 import shutil
@@ -289,6 +292,35 @@ def write_installer(setup, packed, raw_size, to):
         o.write(struct.pack("<QQ", len(packed), raw_size) + MARK)
 
 
+def latest_notes():
+    """tools/release/LATEST.txt: what this update brings, by language ([en] [fr] ... sections)."""
+    notes, lang = {}, None
+    for line in open(os.path.join(ROOT, "tools", "release", "LATEST.txt"), encoding="utf-8"):
+        line = line.rstrip("\r\n")
+        if line.startswith("#") or not line.strip():
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            lang = line[1:-1]
+            notes[lang] = []
+        elif lang:
+            notes[lang].append(line)
+    if not notes.get("en"):
+        sys.exit("LATEST.txt: no [en] section")
+    return {k: "\n".join(v) for k, v in notes.items()}
+
+
+def update_json(version, exe, to):
+    h = hashlib.sha256()
+    with open(exe, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    doc = {"version": version, "file": os.path.basename(exe), "size": os.path.getsize(exe), "sha256": h.hexdigest()}
+    for lang, text in latest_notes().items():
+        doc["notes_" + lang] = text
+    with open(to, "w", encoding="ascii") as f:
+        json.dump(doc, f, indent=1, ensure_ascii=True)
+
+
 def github(version, rebase=False, undo=None):
     if not rebase:
         # the base stays as published: the installer and the updater, each with the latest update inside
@@ -307,6 +339,7 @@ def github(version, rebase=False, undo=None):
             remove_tree(upd)
         os.makedirs(upd)
         write_installer(setup, packed, raw_size, os.path.join(upd, "FinestHourRemasteredUpdate.exe"))
+        update_json(version, os.path.join(upd, "FinestHourRemasteredUpdate.exe"), os.path.join(upd, "update.json"))
         shutil.copy2(os.path.join(ROOT, "tools", "release", "RELEASE_NOTES.md"), base)
         shutil.copy2(os.path.join(ROOT, "tools", "release", "UPDATE_NOTES.md"), upd)
         print("github: update %s: %d files (%.1f MB unpacked, %.1f MB packed) in the installer and the updater" % (

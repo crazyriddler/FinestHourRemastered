@@ -31,6 +31,7 @@
 #include "common/overlay_text.h"
 #include "common/pc_input.h"
 #include "common/prompts.h"
+#include "common/updates.h"
 #include "core/input.h"
 #include "gpu/backend.h"
 #include "gpu/remaster.h"
@@ -261,10 +262,34 @@ namespace {
 using cod::overlay::ApplyPreset;
 using cod::overlay::CurrentPreset;
 
+bool g_update_page = false;  // the overlay opened on the update's page alone (cod::updates)
+
 std::vector<Page> BuildPages() {
     app::Settings& s = app::Get();
     cod::Settings& c = cod::Get();
     std::vector<Page> pages;
+    if (g_update_page) {
+        using cod::updates::State;
+        Page up{"UPDATE AVAILABLE", {}};
+        Item go{"Update",
+                [] {
+                    switch (cod::updates::Current()) {
+                        case State::Downloading: return Fmt("%d%%", int(cod::updates::Progress() * 100));
+                        case State::Starting: return std::string("...");
+                        case State::Failed: return std::string("Failed");
+                        default: return std::string();
+                    }
+                },
+                nullptr, [] { cod::updates::Accept(); },
+                cod::updates::Current() == State::Failed ? cod::updates::Error()
+                                                         : std::string("Downloads the update and installs it: the game closes and starts again by itself.")};
+        up.items.push_back(std::move(go));
+        up.items.push_back(Item{"Not Now", nullptr, nullptr, [] { cod::updates::Later(); }, "Asks again at the next start."});
+        up.items.push_back(Item{"Don't Ask Again", nullptr, nullptr, [] { cod::updates::Never(); },
+                                "No more checks at the start. Check for Updates, on the General page, turns them back on."});
+        pages.push_back(std::move(up));
+        return pages;
+    }
 
     Page display{"DISPLAY", {}};
     display.items.push_back(Choice("Display Mode", {"Fullscreen", "Borderless", "Windowed"},
@@ -494,6 +519,8 @@ std::vector<Page> BuildPages() {
 
     Page general{"GENERAL", {}};
     general.items.push_back(Toggle("Skip Intros", &c.skip_intros, "Straight to the title screen."));
+    general.items.push_back(Toggle("Check for Updates", &s.check_updates,
+                                   "At the start, looks on GitHub for a newer update and offers it in the main menu (never delays the start)."));
     {
         static const uint32_t codes[] = {1, 4, 6, 5, 9, 10, 11};
         BootLanguage();
@@ -689,6 +716,14 @@ void Draw(double fps) {
         fg->AddText(g_ui, size, ImVec2(11, 9), IM_COL32(0, 0, 0, 200), text);
         fg->AddText(g_ui, size, ImVec2(10, 8), IM_COL32(255, 230, 80, 255), text);
     }
+    // an update found: its page, once, in the main menu (not in a movie)
+    if (!g_open && cod::updates::ShouldShow() && cod::wide::FrontEnd() && !cod::InMovie()) {
+        cod::updates::Shown();
+        g_update_page = true;
+        g_open = true, g_page = 0, g_sel = 0, g_scroll = 0, g_fresh = true, g_held = true;
+    }
+    // (put away: the page closes)
+    if (g_update_page && g_open && cod::updates::Current() == cod::updates::State::None) g_open = false, g_update_page = false;
     if (!g_open) return;
     ImGuiIO& io = ImGui::GetIO();
     ImDrawList* dl = ImGui::GetBackgroundDrawList();
@@ -760,7 +795,46 @@ void Draw(double fps) {
 
     // rows
     constexpr int kRows = 9;
-    constexpr float kTop = 104, kStep = 23.5f, kLabelX = 127, kValueX = 309, kAltX = 425;
+    // (the update's page: its rows below what the update brings)
+    const float kTop = g_update_page ? 232 : 104;
+    constexpr float kStep = 23.5f, kLabelX = 127, kValueX = 309, kAltX = 425;
+    if (g_update_page) {
+        // the update's version, then what it brings (broken into lines within the paper, smaller to fit)
+        std::string head = std::string(Tr("Version")) + " " + cod::updates::Version();
+        Text(dl, g_type, 15 * sc.s, sc.P(127, 96), kInk, head);
+        std::vector<std::string> lines;
+        const std::string notes = cod::updates::Notes();
+        float ns = 12.5f * sc.s;
+        auto wrap = [&](float size) {
+            std::vector<std::string> out;
+            const float wmax = 390 * sc.s;
+            size_t from = 0;
+            while (from <= notes.size()) {
+                size_t nl = notes.find('\n', from);
+                std::string rest = notes.substr(from, nl == std::string::npos ? std::string::npos : nl - from);
+                from = nl == std::string::npos ? notes.size() + 1 : nl + 1;
+                do {
+                    if (Width(g_type, size, rest) <= wmax) {
+                        out.push_back(rest);
+                        break;
+                    }
+                    size_t cut = rest.size();
+                    while (cut > 0 && (rest[cut - 1] != ' ' || Width(g_type, size, rest.substr(0, cut - 1)) > wmax)) cut--;
+                    if (cut == 0) {
+                        out.push_back(rest);
+                        break;
+                    }
+                    out.push_back(rest.substr(0, cut - 1));
+                    rest = "  " + rest.substr(cut);
+                } while (!rest.empty());
+            }
+            return out;
+        };
+        lines = wrap(ns);
+        while (lines.size() * (ns / sc.s + 2) > 106 && ns > 8.5f * sc.s) ns *= 0.94f, lines = wrap(ns);
+        for (size_t i = 0; i < lines.size(); i++)
+            if (114 + i * (ns / sc.s + 2) < 220) Text(dl, g_type, ns, sc.P(127, 114 + float(i) * (ns / sc.s + 2)), kInkSoft, lines[i]);
+    }
     g_sel = std::clamp(g_sel + n.move, 0, count - 1);
     if (n.move) {
         if (g_sel < g_scroll) g_scroll = g_sel;
@@ -825,6 +899,7 @@ void Draw(double fps) {
     // closed by back: this frame still drawn whole, the settings let go after it (returning here, half drawn, the
     // paper and its title showed alone for a frame as the menu came back)
     const bool closing = !rebinding && n.back;
+    if (closing && g_update_page) cod::updates::Later(), g_update_page = false;
     static int last_rebind = -1;
     if (last_rebind >= 0 && !rebinding) Saved();
     last_rebind = pc_input::Rebinding();

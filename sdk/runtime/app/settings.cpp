@@ -137,6 +137,7 @@ void Load() {
     s.shadow_quality = std::min<uint32_t>(t["shadow_quality"].value_or(s.shadow_quality), 3);
     s.brightness = std::clamp<uint32_t>(t["brightness"].value_or(s.brightness), 50, 200);
     s.hdr_output = t["hdr_output"].value_or(s.hdr_output);
+    s.check_updates = t["check_updates"].value_or(s.check_updates);
     s.hdr_peak = std::min<uint32_t>(t["hdr_peak_nits"].value_or(s.hdr_peak), 10000);
     s.hdr_white = std::min<uint32_t>(t["hdr_white_nits"].value_or(s.hdr_white), 1000);
     s.join_ip = t["join_ip"].value_or(s.join_ip);
@@ -211,6 +212,7 @@ toml::table Table() {
                   {"clouds", s.clouds},
                   {"brightness", int64_t(s.brightness)},
                   {"hdr_output", s.hdr_output},
+                  {"check_updates", s.check_updates},
                   {"hdr_peak_nits", int64_t(s.hdr_peak)},
                   {"hdr_white_nits", int64_t(s.hdr_white)},
                   {"join_ip", s.join_ip}};

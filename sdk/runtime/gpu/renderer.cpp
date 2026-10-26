@@ -6030,11 +6030,12 @@ float4 hdrout(O i) : SV_Target {
     return float4(scene, saturate((gain - 1) / 3), 0, 1);
 #endif
     float3 l = Linear(sdr.Load(int3(i.pos.xy, 0)).rgb);
-    // the scene with punch: its mid tones more contrasted (about 18% grey, a power of 1.15), its brighter part
-    // expanded from 35% of white up, smoothly, its white at about two thirds of the display's peak (2 to 5 times the
-    // game's white), and what the composite rolled off past white on top (gain); the HUD and the menus as they are
+    // the scene with punch: its lit mid tones lifted (the light falling on them brighter, as by the highlights near:
+    // none in the shadows, up to 30% more from about a quarter of white on; nothing darker), its brighter part expanded
+    // from 35% of white up, smoothly, its white at about two thirds of the display's peak (2 to 5 times the game's
+    // white), and what the composite rolled off past white on top (gain); the HUD and the menus as they are
     float y0 = max(Lum(l), 1e-5), up = clamp(q1.z / q1.x * 0.65, 2, 5), t0 = 0.35;
-    float yc = 0.18 * pow(y0 / 0.18, 1.15);
+    float yc = y0 * (1 + 0.3 * smoothstep(0.04, 0.25, y0));
     float yx = (yc + pow(saturate((yc - t0) / (1 - t0)), 2) * (up - 1)) * gain;
     float3 nits = l * lerp(q1.y, q1.x * yx / y0, scene);
     // the brightest towards the display's peak (never past it), from 60% of it

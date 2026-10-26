@@ -224,7 +224,7 @@ The version installed is in `version.txt` beside the game. Unattended:
   Polish letters added to the game's own fonts, with or without the remastered textures (the voices stay in English).
   A first translation: corrections are welcome in issue #34.
 - HDR output (PC Settings, Display; Direct3D 12): on by default when HDR is on in Windows (off and locked otherwise),
-  with the display's peak from Windows. Brighter lights, fire and skies and more contrasted mid tones, the HUD, the text
+  with the display's peak from Windows. Brighter lights, fire and skies and brighter lit mid tones, the HUD, the text
   and the menus at Windows' SDR content brightness. HDR Peak Brightness and HDR Game Brightness to adjust it.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by

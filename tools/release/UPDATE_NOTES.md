@@ -98,11 +98,11 @@ The version installed is in `version.txt` beside the game. Unattended:
 - The lean hint shows the lean keys (Q and E) on the keyboard, or the d-pad on a controller, instead of naming the
   directional buttons.
 - PC Settings: the options' descriptions stay inside the page in every language.
-- The main menu: its text is sharper inside the 1940s television, with the letters' original black outline and no
+- The main menu: its text is sharper inside the old television, with the letters' original black outline and no
   light halo around them.
 - Tanks: inside the tank, the sight's black band at the bottom now reaches the corners of a wide screen.
 - HUD Size: Smaller by default, and the graphics presets set it too (Original keeps the original HUD).
-- The menus' 1940s television: a slightly stronger picture tube (scan lines, a faint phosphor mask and glow) that
+- The menus' old television: a slightly stronger picture tube (scan lines, a faint phosphor mask and glow) that
   hides the low resolution of the menus' backgrounds, with the menus' text as sharp as before. A new Models setting (PC Settings, Graphics)
   chooses them: Remastered (the default), Smooth (the game's own characters and weapons rounded, the old Smooth
   Models) or Original; the Original preset sets Original. Your settings move over by themselves: Remastered if you
@@ -235,6 +235,11 @@ The version installed is in `version.txt` beside the game. Unattended:
   From this update on, the next ones are offered in the game.
 - The installer and the updater run on any 64-bit processor: they stopped at once (error 9) on processors without
   SSE4.1 (issue #40). The game itself needs SSE4.2 (README, Requirements).
+- Movies: the credits (at the end of the game and in Extras) no longer leave pieces of the names before behind the
+  new ones, like a badly encoded video (issue #42). The game copies each frame of a movie straight onto the screen;
+  only the pixels that changed were taken, and those that went back to black (text fading out) kept the frame
+  before's.
+- PC Settings: the Television Frame's description says an old television, not a 1940s one.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

@@ -438,6 +438,9 @@ void Command(const std::string& line_in) {
             else LOGR("fx: no effect %s", name);
         }
         if (line == "fps") LOGR("fps: %.1f", g_fps);
+        // tests: poke <address> <value>, a word of the game's memory set (hex)
+        if (unsigned pa = 0, pv = 0; std::sscanf(line.c_str(), "poke %x %x", &pa, &pv) == 2)
+            kernel::W32(pa, pv), LOGR("poke: %08X = %08X", pa, pv);
         if (line == "capture") gpu::g_capture = true;  // a frame to XBE_CAPTURE_DIR (as F3)
         // tests: where the camera is; warp x y z: every place in memory that holds the player's position (three
         // floats by the camera: the same across, at most 200 below) moved by the camera's way to x y z

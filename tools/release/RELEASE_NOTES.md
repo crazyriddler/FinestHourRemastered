@@ -30,7 +30,7 @@ settings and saved games.
   fog, sun shafts, clouds, lens flare, ambient occlusion, bounce light, HDR with bloom and eye adaptation.
 - Every texture remastered 4x with normal, roughness and height maps; surface materials, parallax occlusion, detail
   textures, character detail, screen-space reflections, rippling water, snow tracks.
-- Redrawn high-resolution fonts and HUD; the menus inside a 1940s television.
+- Redrawn high-resolution fonts and HUD; the menus inside an old television.
 
 See the README for the full list, the controls and how to build from source.
 

@@ -321,7 +321,7 @@ std::vector<Page> BuildPages() {
                                    [&s](int i) { s.renderer = uint32_t(i); },
                                    "The graphics API (Vulkan is experimental). Takes effect at the next start."));
     display.items.push_back(Toggle("Television Frame", &c.tv_frame,
-                                   "On a wide screen, the menus and movies play in a 1940s television."));
+                                   "On a wide screen, the menus and movies play in an old television."));
     // the field of view in play (cutscenes and the weapon in hand keep the game's: common/widescreen.cpp FovScale)
     display.items.push_back(Slider("Field of View", &c.fov, 0, 120, 5, "%d", "Horizontal at 4:3, widened further on wider screens.",
                                    [](int v) { return v ? Fmt("%d°", v) : std::string("Default"); }));

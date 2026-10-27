@@ -25,6 +25,7 @@ struct Target {
     bool drawn = false;           // the GPU wrote it since the last readback
     std::vector<uint8_t> read;    // what Sync left in guest memory
     uint64_t cpu_at = 0;          // the present of the CPU's last whole frame into it (a movie's)
+    bool cpu_last = false;        // what it holds came from the CPU (UploadTarget), not from a draw read back
     rhi::Ref<rhi::Resource> fb;  // copy read by draws that sample the target they render to
     D3D12_RESOURCE_STATES fb_state = D3D12_RESOURCE_STATE_COPY_DEST;
     DXGI_FORMAT fmt = DXGI_FORMAT_B8G8R8A8_UNORM;

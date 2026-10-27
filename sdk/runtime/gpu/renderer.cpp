@@ -2226,8 +2226,10 @@ void Renderer::UploadTarget(Target& t, const Surface& s) {
     if (!Describe(s.header, d) || Format(d.format).depth) return;
     std::vector<uint8_t> px;
     uint32_t pitch;
-    // after a Sync only the pixels the CPU changed go over the picture, which stays at render scale
-    bool over = !t.drawn && d.width == t.gw && d.height == t.gh && t.read.size() == size_t(t.gw) * t.gh * 4;
+    // after a Sync only the pixels the CPU changed go over the picture, which stays at render scale; over the CPU's
+    // own last frame (a movie's next) the whole frame: its pixels that went back to what the Sync left (text faded
+    // to black) left the frame before's showing, the credits' names over each other
+    bool over = !t.drawn && !t.cpu_last && d.width == t.gw && d.height == t.gh && t.read.size() == size_t(t.gw) * t.gh * 4;
     if (over) {
         LOG_FIRST(4, "d3d12: CPU pixels drawn over target %08X", t.data);
         pitch = t.gw * 4;
@@ -2258,6 +2260,7 @@ void Renderer::UploadTarget(Target& t, const Surface& s) {
     CurrentFrame().garbage.push_back(tex);
     t.epoch = DirtyEpoch(t.data);
     t.sig = MemSig(t.data, t.bytes);
+    t.cpu_last = true;
 }
 
 // samplers_ key of the full screen passes' samplers, apart from the stage samplers' hashed keys
@@ -11425,6 +11428,7 @@ void Renderer::Sync(uint32_t data, uint32_t) {
     for (uint32_t y = 0; y < t.gh; y++) std::memcpy(guest + size_t(y) * pitch, &px[size_t(y) * t.gw * 4], t.gw * 4);
     t.read = std::move(px);
     t.drawn = false;
+    t.cpu_last = false;
     t.sig = MemSig(t.data, t.bytes);
 }
 

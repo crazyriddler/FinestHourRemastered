@@ -44,7 +44,7 @@ const PtRow kPlRows[] = {
     {"Widescreen", "Szeroki ekran"},
     {"The game at your screen's shape with more to the sides; menus stay in the middle.", "Gra w proporcjach twojego ekranu, z szerszym widokiem na boki; menu zostają na środku."},
     {"Television Frame", "Ramka telewizora"},
-    {"On a wide screen, the menus and movies play in a 1940s television.", "Na szerokim ekranie menu i filmy są wyświetlane w telewizorze z lat 40."},
+    {"On a wide screen, the menus and movies play in an old television.", "Na szerokim ekranie menu i filmy są wyświetlane w starym telewizorze."},
     {"Field of View", "Pole widzenia"},
     {"Horizontal at 4:3, widened further on wider screens.", "W poziomie przy 4:3, poszerzane na szerszych ekranach."},
     {"Brightness", "Jasność"},

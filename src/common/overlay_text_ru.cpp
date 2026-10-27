@@ -44,7 +44,7 @@ const PtRow kRuRows[] = {
     {"Widescreen", "Широкий экран"},
     {"The game at your screen's shape with more to the sides; menus stay in the middle.", "Игра в пропорциях вашего экрана, с большим обзором по бокам; меню остаются в центре."},
     {"Television Frame", "Рамка ТВ"},
-    {"On a wide screen, the menus and movies play in a 1940s television.", "На широком экране меню и ролики показываются в телевизоре 1940-х годов."},
+    {"On a wide screen, the menus and movies play in an old television.", "На широком экране меню и ролики показываются в старом телевизоре."},
     {"Field of View", "Угол обзора"},
     {"Horizontal at 4:3, widened further on wider screens.", "По горизонтали при 4:3, шире на более широких экранах."},
     {"Brightness", "Яркость"},

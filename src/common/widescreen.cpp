@@ -203,8 +203,8 @@ void FlyUpdate(input::Pad& pad) {
     float yr = g_fly_yaw * kRad, pr = g_fly_pitch * kRad;
     float fwd[3] = {std::sin(yr) * std::cos(pr), std::sin(pr), std::cos(yr) * std::cos(pr)};
     float right[3] = {-std::cos(yr), 0, std::sin(yr)};  // the screen's right (measured)
-    // about 6 m a second, four times that with fire held; jump up, crouch down (Y, B)
-    float speed = 240.0f * (pad.analog[7] > 64 ? 4.0f : 1.0f) * dt;
+    // about 18 m a second (three times the 6 it was), four times that with fire held; jump up, crouch down (Y, B)
+    float speed = 720.0f * (pad.analog[7] > 64 ? 4.0f : 1.0f) * dt;
     float f = axis(pad.ly), r = axis(pad.lx), u = (pad.analog[3] > 64 ? 1.0f : 0.0f) - (pad.analog[1] > 64 ? 1.0f : 0.0f);
     for (int i = 0; i < 3; i++) g_fly_pos[i] += (fwd[i] * f + right[i] * r) * speed + (i == 1 ? u * speed : 0.0f);
     SetFreeCameraAt(true, g_fly_pos, g_fly_yaw, g_fly_pitch);

@@ -83,7 +83,9 @@ def write_index(mats, pack):
                                                          m["detail"], m["tiles"]))
 
 
-KEEP_ORIGINAL = {"5a176b81e5887757"}
+# drawn as the game has them: 9a6b1c34d6195fe6 xPattern (the lattice towers' crossed beams, cut out: their edges broke
+# into dots, level 14)
+KEEP_ORIGINAL = {"5a176b81e5887757", "9a6b1c34d6195fe6"}
 
 
 def main():

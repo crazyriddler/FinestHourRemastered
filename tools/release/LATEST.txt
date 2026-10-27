@@ -2,16 +2,23 @@
 # update release's update.json). Only this update's changes: written anew for each update. One section a language
 # ([en] needed; the others fall back to it), its lines as the game shows them. UTF-8.
 [en]
-- Remastered models: the buildings of the Tunisian towns (Matmata by night and by day) are back to their original models, which keep their shape.
+- Cheats: the Free Camera moves three times as fast.
+- The lattice towers' crossed beams use their original texture again (the remastered one broke into dots at the edges).
 [fr]
-- Modèles remasterisés : les bâtiments des villes tunisiennes (Matmata de nuit et de jour) reviennent à leurs modèles d'origine, qui gardent leur forme.
+- Codes : la caméra libre se déplace trois fois plus vite.
+- Les poutres croisées des tours en treillis retrouvent leur texture d'origine (la version remasterisée se fragmentait en points sur les bords).
 [it]
-- Modelli rimasterizzati: gli edifici delle città tunisine (Matmata di notte e di giorno) tornano ai modelli originali, che mantengono la loro forma.
+- Trucchi: la telecamera libera si muove tre volte più veloce.
+- Le travi incrociate delle torri a traliccio usano di nuovo la texture originale (quella rimasterizzata si sgranava in puntini sui bordi).
 [es]
-- Modelos remasterizados: los edificios de los pueblos tunecinos (Matmata de noche y de día) vuelven a sus modelos originales, que conservan su forma.
+- Trucos: la cámara libre se mueve tres veces más rápido.
+- Las vigas cruzadas de las torres de celosía vuelven a su textura original (la remasterizada se deshacía en puntos en los bordes).
 [pt]
-- Modelos remasterizados: os edifícios das cidades tunisianas (Matmata à noite e de dia) voltam aos modelos originais, que mantêm a sua forma.
+- Códigos: a câmera livre se move três vezes mais rápido.
+- As vigas cruzadas das torres de treliça voltam à textura original (a remasterizada se desfazia em pontos nas bordas).
 [ru]
-- Ремастированные модели: здания тунисских городов (Матмата ночью и днём) снова используют оригинальные модели, которые сохраняют свою форму.
+- Читы: свободная камера движется в три раза быстрее.
+- Перекрещенные балки решётчатых башен снова используют оригинальную текстуру (ремастированная рассыпалась на точки по краям).
 [pl]
-- Zremasterowane modele: budynki tunezyjskich miast (Matmata nocą i za dnia) wracają do oryginalnych modeli, które zachowują swój kształt.
+- Kody: wolna kamera porusza się trzy razy szybciej.
+- Skrzyżowane belki wież kratownicowych znów mają oryginalną teksturę (zremasterowana rozpadała się na kropki na krawędziach).

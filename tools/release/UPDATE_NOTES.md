@@ -252,6 +252,9 @@ The version installed is in `version.txt` beside the game. Unattended:
 - Remastered models: the Tunisian towns' buildings (Matmata by night and by day, and the desert's) are drawn as the
   original again, all of them by their textures, wherever they load: remastered they lost their shape, rounded and
   bent (as the walls of Matmata by day did before).
+- Cheats: the Free Camera moves three times as fast (about 18 m a second, four times that with fire held).
+- Remastered textures: the lattice towers' crossed beams use the original texture again: the remastered one's cut-out
+  edges broke into dots.
 - The HUD: the thrown items' remastered icons (the grenades, the Teller and sticky mines, the bears) all sit in one
   place at one size, clear of how many you carry: the Teller mine's disc covered the count and the grenades touched it.
 

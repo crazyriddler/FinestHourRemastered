@@ -255,6 +255,9 @@ The version installed is in `version.txt` beside the game. Unattended:
 - Cheats: the Free Camera moves three times as fast (about 18 m a second, four times that with fire held).
 - Remastered textures: the lattice towers' crossed beams use the original texture again: the remastered one's cut-out
   edges broke into dots.
+- Remastered textures: the Matmata headquarters (Matmata by night) lit right: its plaster walls and roof keep their
+  remastered colour without the surface maps that showed lighter patches where the faces met and a diagonal across
+  the roof, and its flag is lit as cloth, not skin (light polygons over it).
 - The HUD: the thrown items' remastered icons (the grenades, the Teller and sticky mines, the bears) all sit in one
   place at one size, clear of how many you carry: the Teller mine's disc covered the count and the grenades touched it.
 

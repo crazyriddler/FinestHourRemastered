@@ -4,21 +4,28 @@
 [en]
 - Cheats: the Free Camera moves three times as fast.
 - The lattice towers' crossed beams use their original texture again (the remastered one broke into dots at the edges).
+- The Matmata headquarters' walls, roof and flag are lit right (no more lighter patches, a line across the roof or light polygons on the flag).
 [fr]
 - Codes : la caméra libre se déplace trois fois plus vite.
 - Les poutres croisées des tours en treillis retrouvent leur texture d'origine (la version remasterisée se fragmentait en points sur les bords).
+- Les murs, le toit et le drapeau du QG de Matmata sont éclairés correctement (plus de taches claires, de ligne sur le toit ni de polygones clairs sur le drapeau).
 [it]
 - Trucchi: la telecamera libera si muove tre volte più veloce.
 - Le travi incrociate delle torri a traliccio usano di nuovo la texture originale (quella rimasterizzata si sgranava in puntini sui bordi).
+- Muri, tetto e bandiera del quartier generale di Matmata sono illuminati correttamente (niente più macchie chiare, linee sul tetto o poligoni chiari sulla bandiera).
 [es]
 - Trucos: la cámara libre se mueve tres veces más rápido.
 - Las vigas cruzadas de las torres de celosía vuelven a su textura original (la remasterizada se deshacía en puntos en los bordes).
+- Las paredes, el techo y la bandera del cuartel de Matmata se iluminan bien (sin parches claros, la línea del techo ni los polígonos claros de la bandera).
 [pt]
 - Códigos: a câmera livre se move três vezes mais rápido.
 - As vigas cruzadas das torres de treliça voltam à textura original (a remasterizada se desfazia em pontos nas bordas).
+- As paredes, o telhado e a bandeira do quartel de Matmata são iluminados corretamente (sem manchas claras, a linha no telhado ou polígonos claros na bandeira).
 [ru]
 - Читы: свободная камера движется в три раза быстрее.
 - Перекрещенные балки решётчатых башен снова используют оригинальную текстуру (ремастированная рассыпалась на точки по краям).
+- Стены, крыша и флаг штаба в Матмате освещаются правильно (без светлых пятен, линии на крыше и светлых многоугольников на флаге).
 [pl]
 - Kody: wolna kamera porusza się trzy razy szybciej.
 - Skrzyżowane belki wież kratownicowych znów mają oryginalną teksturę (zremasterowana rozpadała się na kropki na krawędziach).
+- Ściany, dach i flaga kwatery w Matmacie są poprawnie oświetlone (bez jasnych plam, linii na dachu i jasnych wielokątów na fladze).

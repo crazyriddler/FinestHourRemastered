@@ -2,23 +2,30 @@
 # update release's update.json). Only this update's changes: written anew for each update. One section a language
 # ([en] needed; the others fall back to it), its lines as the game shows them. UTF-8.
 [en]
-- Movies: the credits (at the end of the game and in Extras) no longer leave pieces of the previous names behind the new ones.
-- PC Settings: the Television Frame's description now says an old television.
+- Russian: the translation reviewed by a native speaker, and Russian subtitles in the movies (the briefings, the acts' and the ending's).
+- Russian and Polish: Quit Game is back in the main menu, the mouse works in the menus again and empty profiles are translated.
+- Russian, Polish and Portuguese: Press ENTER is centred on the title screen.
 [fr]
-- Vidéos : le générique (à la fin du jeu et dans les Bonus) ne laisse plus de morceaux des noms précédents derrière les nouveaux.
-- Options PC : la description du Cadre de téléviseur parle maintenant d'un vieux téléviseur.
+- Russe : la traduction relue par un locuteur natif, et des sous-titres russes dans les vidéos (les briefings, les actes et la fin).
+- Russe et polonais : Quitter le jeu revient dans le menu principal, la souris fonctionne de nouveau dans les menus et les profils vides sont traduits.
+- Russe, polonais et portugais : « Appuyez sur ENTRÉE » est centré sur l'écran titre.
 [it]
-- Filmati: i titoli di coda (alla fine del gioco e negli Extra) non lasciano più pezzi dei nomi precedenti dietro i nuovi.
-- Opzioni PC: la descrizione della Cornice TV ora parla di un vecchio televisore.
+- Russo: la traduzione rivista da un madrelingua, e sottotitoli russi nei filmati (i briefing, gli atti e il finale).
+- Russo e polacco: Esci dal gioco torna nel menu principale, il mouse funziona di nuovo nei menu e i profili vuoti sono tradotti.
+- Russo, polacco e portoghese: «Premi INVIO» è centrato nella schermata del titolo.
 [es]
-- Vídeos: los créditos (al final del juego y en Extras) ya no dejan trozos de los nombres anteriores detrás de los nuevos.
-- Ajustes de PC: la descripción del Marco de televisor ahora habla de un televisor antiguo.
+- Ruso: la traducción revisada por un hablante nativo, y subtítulos en ruso en los vídeos (las sesiones informativas, los actos y el final).
+- Ruso y polaco: vuelve Salir del juego al menú principal, el ratón funciona de nuevo en los menús y los perfiles vacíos están traducidos.
+- Ruso, polaco y portugués: «Pulsa INTRO» aparece centrado en la pantalla de título.
 [pt]
-- Vídeos: os créditos (no fim do jogo e nos Extras) não deixam mais pedaços dos nomes anteriores atrás dos novos.
-- Opções do PC: a descrição da Moldura de TV agora fala de uma televisão antiga.
+- Russo: a tradução revisada por um falante nativo, e legendas em russo nos vídeos (os briefings, os atos e o final).
+- Russo e polonês: Sair do jogo voltou ao menu principal, o mouse funciona de novo nos menus e os perfis vazios estão traduzidos.
+- Russo, polonês e português: "Pressione ENTER" aparece centralizado na tela de título.
 [ru]
-- Ролики: титры (в конце игры и в разделе «Дополнительно») больше не оставляют обрывки прежних имён за новыми.
-- Настройки ПК: описание «Рамки ТВ» теперь говорит о старом телевизоре.
+- Русский язык: перевод проверен носителем языка, а в роликах (брифингах, роликах актов и финале) появились русские субтитры.
+- Русский и польский: в главное меню вернулся пункт «Выйти из игры», мышь снова работает в меню, пустые профили переведены.
+- Русский, польский и португальский: надпись «Нажмите ENTER» на титульном экране теперь по центру.
 [pl]
-- Filmy: napisy końcowe (na końcu gry i w Dodatkach) nie zostawiają już fragmentów poprzednich nazwisk za nowymi.
-- Opcje PC: opis ramki telewizora mówi teraz o starym telewizorze.
+- Rosyjski: tłumaczenie sprawdzone przez rodzimego użytkownika języka i rosyjskie napisy w filmach (odprawy, akty i zakończenie).
+- Rosyjski i polski: opcja Wyjdź z gry wróciła do menu głównego, mysz znów działa w menu, a puste profile są przetłumaczone.
+- Rosyjski, polski i portugalski: napis „Naciśnij ENTER” na ekranie tytułowym jest wyśrodkowany.

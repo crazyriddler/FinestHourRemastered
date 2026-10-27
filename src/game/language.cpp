@@ -207,6 +207,15 @@ void PatchTables(char* data, size_t n) {
                 if (key == "$pressStartXbox" && row.find("ENTER") != std::string_view::npos)
                     text = Text(ru ? "\xD0\x9D\xD0\xB0\xD0\xB6\xD0\xBC\xD0\xB8\xD1\x82\xD0\xB5 ENTER"
                                 : pl ? "Naci\xC5\x9Bnij ENTER" : "Pressione ENTER");
+                if (key == "$pressStartXbox" && row.find("ENTER") != std::string_view::npos) {
+                    // centred as the English: the table pads it with spaces (the typewriter's letters all one width)
+                    std::string_view en = row.substr(comma + 1, row.find(',', comma + 1) - comma - 1);
+                    size_t lead = en.find_first_not_of(' '), last = en.find_last_not_of(" \r");
+                    if (lead != std::string_view::npos && last != std::string_view::npos) {
+                        int pad = int(lead) + (int(last + 1 - lead) - int(text.size())) / 2;
+                        text.insert(0, size_t(std::max(0, pad)), ' ');
+                    }
+                }
                 if (!text.empty()) {
                     std::string out = key + "," + Field(text) + ",,,,";
                     if (out.size() <= row.size()) {
@@ -349,6 +358,8 @@ void Init() {
     g_lang = g_on ? l : 0;
     if (g_on) Load();
     if (g_lang == kRussian || g_lang == kPolish) LoadFonts();
+    // the movies' subtitles (game/movie_subs.cpp): lang/<code>_movies.bin where there is one
+    if (g_on) cod::movie_subs::Load(g_lang == kRussian ? "ru" : g_lang == kPolish ? "pl" : "pt");
 }
 
 // a read of the game's files (offline.cpp's read hook)

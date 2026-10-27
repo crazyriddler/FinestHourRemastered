@@ -48,7 +48,7 @@ $MCDataRequired	Brak zapisu gry Finest Hour.
 $MCDelete	Usuń
 $MCDupProfileNameEntered	Profil o nazwie \"%name%\" już istnieje. Wpisz inną nazwę profilu.
 $MCDupProfilesNotAllowed	Profil o nazwie \"%name%\" już istnieje. Czy chcesz nadpisać istniejący profil o tej nazwie?
-$MCEmptySlot	<Empty>
+$MCEmptySlot	<Puste>
 $MCFormat	Formatuj
 $MCFormatCancel	N/A
 $MCFormatFailed	N/A

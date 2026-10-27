@@ -59,6 +59,14 @@ bool Portuguese();
 void Patch(const std::string& xbox_path, uint64_t pos, uint8_t* data, uint32_t n);
 }  // namespace lang
 
+// the movies' subtitles in a language the game's own movies lack (game/movie_subs.cpp): lang/<code>_movies.bin
+namespace movie_subs {
+void Load(const char* code);
+void Start(const std::string& movie);  // the movie PlayMovie plays (its file's name), "" when it ends
+// drawn into the movie's frame BinkCopyToBuffer has just written (32 bit pixels)
+void Draw(uint32_t bink, uint32_t dest, uint32_t pitch, uint32_t height);
+}  // namespace movie_subs
+
 // tests: the level scripts' checkpoint register read as n the next time (game/checkpoint.cpp)
 void ForceCheckpoint(int n);
 void ForceSections(const int s[4]);  // tests: the next starting sections, in place of the script's

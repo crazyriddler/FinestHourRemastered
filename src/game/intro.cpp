@@ -38,15 +38,14 @@ X86_FUNC(sub_000B2000) {
                 return;
             }
     }
+    // (the subtitles of a language whose movies the game lacks: game/movie_subs.cpp)
+    cod::movie_subs::Start(ReadCString(R32(ctx.esp + 4)));
     PlayMovie(ctx, base);
+    cod::movie_subs::Start("");
 }
 
-// tests (XBE_BINK_DUMP=<folder>,<first>,<last>): each movie frame BinkCopyToBuffer copies out, raw (its pitch and
-// height in the name), from frame first to last
-X86_EXTERN_FUNC(__imp__sub_002539B0);
-X86_FUNC(sub_002539B0) {  // BinkCopyToBuffer(bink, dest, pitch, height, x, y, flags), stdcall
-    uint32_t bink = R32(ctx.esp + 4), dest = R32(ctx.esp + 8), pitch = R32(ctx.esp + 12), height = R32(ctx.esp + 16);
-    __imp__sub_002539B0(ctx, base);
+// (tests) XBE_BINK_DUMP's frames
+static void Dump(uint32_t bink, uint32_t dest, uint32_t pitch, uint32_t height) {
     static const char* spec = std::getenv("XBE_BINK_DUMP");
     if (!spec || !bink || !dest) return;
     static char dir[260] = {};
@@ -57,4 +56,15 @@ X86_FUNC(sub_002539B0) {  // BinkCopyToBuffer(bink, dest, pitch, height, x, y, f
     char path[400];
     std::snprintf(path, sizeof(path), "%s/f%05d_%ux%u.raw", dir, frame, pitch, height);
     if (FILE* f = std::fopen(path, "wb")) std::fwrite(HostPtr(dest), 1, size_t(pitch) * height, f), std::fclose(f);
+}
+
+// BinkCopyToBuffer: the frame on the screen, the subtitles of a language whose movies the game lacks drawn into it
+// (game/movie_subs.cpp). Tests (XBE_BINK_DUMP=<folder>,<first>,<last>): each frame as copied out, raw (its pitch and
+// height in the name), from frame first to last
+X86_EXTERN_FUNC(__imp__sub_002539B0);
+X86_FUNC(sub_002539B0) {  // BinkCopyToBuffer(bink, dest, pitch, height, x, y, flags), stdcall
+    uint32_t bink = R32(ctx.esp + 4), dest = R32(ctx.esp + 8), pitch = R32(ctx.esp + 12), height = R32(ctx.esp + 16);
+    __imp__sub_002539B0(ctx, base);
+    Dump(bink, dest, pitch, height);
+    cod::movie_subs::Draw(bink, dest, pitch, height);
 }

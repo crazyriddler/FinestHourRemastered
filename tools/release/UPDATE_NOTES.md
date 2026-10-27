@@ -240,6 +240,13 @@ The version installed is in `version.txt` beside the game. Unattended:
   only the pixels that changed were taken, and those that went back to black (text fading out) kept the frame
   before's.
 - PC Settings: the Television Frame's description says an old television, not a 1940s one.
+- Russian: the translation reviewed by a native speaker (YaroslavValerySablin, issue #34), and the movies subtitled in
+  Russian from his subtitled versions: the briefings, the acts' and the ending's, drawn into the movie's own picture
+  as if burned in (the game's movies are not changed or shipped).
+- Russian and Polish: Quit Game is back under the main menu, and the mouse points and clicks in the menus again: their
+  letters are drawn into the game's fonts, which changed the fonts the menus were recognised by. Empty profile slots
+  are translated.
+- Russian, Polish and Portuguese: Press ENTER is centred on the title screen, as in the other languages.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

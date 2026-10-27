@@ -37,10 +37,18 @@
 namespace cod::menu_mouse {
 namespace {
 
-constexpr uint64_t kItemFont = 0x291c6e09acfaebb9;  // fbld24: the menus' items
 constexpr uint64_t kStrip = 0xcb8517244f0b8da6;     // fend_394: the options' selection strip
-constexpr uint64_t kPauseFont = 0x8222729448b2f5f1;  // the HUD's font: the pause screen's list
-constexpr uint64_t kTypeFont = 0xece9a6f491a366bc;   // the typewriter: the mission lists, the prompts
+// the fonts by their atlas's id: the game's, then Russian's and Polish's (their letters drawn in: game/language.cpp,
+// tools/remaster/lang_fonts.py), another id each
+bool ItemFont(uint64_t t) {  // fbld24: the menus' items
+    return t == 0x291c6e09acfaebb9 || t == 0x0df5878027cc322a || t == 0x07702a5e6c17b2f8;
+}
+bool PauseFont(uint64_t t) {  // t12, the HUD's font: the pause screen's list
+    return t == 0x8222729448b2f5f1 || t == 0xc7a9ba56f1e4ba59 || t == 0xa593ecc3048d766d;
+}
+bool TypeFont(uint64_t t) {  // lta32, the typewriter: the mission lists, the prompts
+    return t == 0xece9a6f491a366bc || t == 0x94e50b7df281fdbd || t == 0x8e44fc0c6f9f5aa6;
+}
 
 // tests: a pointer at console coordinates until a time, and a click
 float g_test_x = 0, g_test_y = 0;
@@ -85,7 +93,7 @@ Menu ReadPause(const std::vector<gpu::Draw2DSeen>& f) {
     float widen = std::max(1.0f, gpu::g_screen_widen.load());
     std::vector<gpu::Draw2DSeen> grey, white;
     for (gpu::Draw2DSeen d : f) {
-        if (d.tex != kPauseFont || (d.tag & 0xFF) != 2) continue;
+        if (!PauseFont(d.tex) || (d.tag & 0xFF) != 2) continue;
         d.x0 *= widen, d.x1 *= widen;
         if (std::fabs((d.x0 + d.x1) * 0.5f - 320) > 40) continue;  // the prompts' row, the objectives
         auto& list = (d.color & 0xFFFFFF) == 0xFFFFFF ? white : grey;
@@ -114,7 +122,7 @@ Menu ReadNotebook(const std::vector<gpu::Draw2DSeen>& f) {
     Menu m;
     std::vector<gpu::Draw2DSeen> lines;
     for (const auto& d : f)
-        if (d.tex == kTypeFont && (d.tag & 0xFF) == 2 && d.y0 > 85 && d.y1 < 390 &&
+        if (TypeFont(d.tex) && (d.tag & 0xFF) == 2 && d.y0 > 85 && d.y1 < 390 &&
             std::none_of(lines.begin(), lines.end(), [&](auto& o) { return Same(o, d); }))
             lines.push_back(d);
     if (lines.size() < 1) return m;
@@ -131,7 +139,7 @@ Menu ReadNotebook(const std::vector<gpu::Draw2DSeen>& f) {
         m.right = std::max(m.right, d.x1);
     }
     for (const auto& d : f) {
-        if (d.tex == kTypeFont || !d.tex || (d.tag & 0xFF) != 2 || d.x1 - d.x0 > 40 || d.y1 - d.y0 > 40) continue;
+        if (TypeFont(d.tex) || !d.tex || (d.tag & 0xFF) != 2 || d.x1 - d.x0 > 40 || d.y1 - d.y0 > 40) continue;
         float cy = (d.y0 + d.y1) * 0.5f;
         for (size_t i = 0; i < m.items.size(); i++)
             if (d.x1 <= m.items[i].x0 + 6 && d.x1 > m.items[i].x0 - 80 && cy > m.items[i].y0 - 2 && cy < m.items[i].y1 + 2)
@@ -151,13 +159,13 @@ Menu Read() {
     Menu m;
     std::map<uint32_t, int> colours;
     for (const auto& d : f)
-        if (d.tex == kItemFont) colours[d.color]++;
+        if (ItemFont(d.tex)) colours[d.color]++;
     if (colours.empty()) return ReadNotebook(f);
     uint32_t common = std::max_element(colours.begin(), colours.end(), [](auto& a, auto& b) { return a.second < b.second; })->first;
     if (colours[common] < 2) return m;  // a screen of text, not a list
     std::vector<gpu::Draw2DSeen> items;
     for (const auto& d : f)
-        if (d.tex == kItemFont && d.color == common && std::none_of(items.begin(), items.end(), [&](auto& o) { return Same(o, d); }))
+        if (ItemFont(d.tex) && d.color == common && std::none_of(items.begin(), items.end(), [&](auto& o) { return Same(o, d); }))
             items.push_back(d);
     std::sort(items.begin(), items.end(), [](auto& a, auto& b) { return a.y0 < b.y0; });
     for (const auto& d : items) {
@@ -166,7 +174,7 @@ Menu Read() {
     }
     for (const auto& d : f) {
         if (d.tex == kStrip) m.right = std::max(m.right, d.x1);
-        if (d.tex != kItemFont || d.color == common) continue;
+        if (!ItemFont(d.tex) || d.color == common) continue;
         for (size_t i = 0; i < items.size(); i++)
             if (Same(items[i], d)) m.selected = int(i);
     }
@@ -286,11 +294,11 @@ std::mutex g_pc_lock;
 
 // the game's highlight hidden while the row or the question has the selection
 bool Recolor(const gpu::Draw2DSeen& d, uint32_t& argb) {
-    if (g_popts && g_pc_focus && d.tex == kPauseFont && (d.color & 0xFFFFFF) == 0xFFFFFF && d.y0 > 130 && d.y1 < 350) {
+    if (g_popts && g_pc_focus && PauseFont(d.tex) && (d.color & 0xFFFFFF) == 0xFFFFFF && d.y0 > 130 && d.y1 < 350) {
         argb = 0xFFC8C8C8;
         return true;
     }
-    if (!g_main || !(g_quit_focus || g_dialog) || d.tex != kItemFont || (d.color & 0xFFFFFF) != 0xCCCCCC) return false;
+    if (!g_main || !(g_quit_focus || g_dialog) || !ItemFont(d.tex) || (d.color & 0xFFFFFF) != 0xCCCCCC) return false;
     argb = 0xFF999999;
     return true;
 }

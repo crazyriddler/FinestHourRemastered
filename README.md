@@ -75,7 +75,7 @@ weapons rounded) or Original.
 - **The game**: Call of Duty: Finest Hour for the original Xbox, **PAL (Europe) release**, title ID `4156002A`,
   version 3 (`default.xbe` SHA-1 `938a7b1e17928de49cb3c5834d61abcd3d9081c8`). Its four languages (English, French,
   Italian and Spanish, text and speech) are all supported, and Portuguese, Russian and Polish (text, with the English
-  speech) are added by the port. Other releases are not supported: the port is the code of this one.
+  speech; Russian subtitles the movies too) are added by the port. Other releases are not supported: the port is the code of this one.
 
 ## Installation
 1. Download the [1.0 release](https://github.com/crazyriddler/FinestHourRemastered/releases/tag/v1.0):
@@ -296,6 +296,8 @@ Requirements: `pip install -r tools\remaster\requirements.txt` (PyTorch with CUD
 - Television photograph: [Unsplash](https://unsplash.com/photos/NGuLnUBFMbc) (Unsplash License). Icon:
   [SteamGridDB](https://www.steamgriddb.com/game/5252406).
 - [vgmstream](https://github.com/vgmstream/vgmstream) and [FFmpeg](https://ffmpeg.org) for the trailer.
+- Russian: the translation reviewed, and the movies' subtitles, by
+  [YaroslavValerySablin](https://github.com/YaroslavValerySablin).
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision. You need your own copy of the game.

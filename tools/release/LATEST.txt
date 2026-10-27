@@ -2,37 +2,16 @@
 # update release's update.json). Only this update's changes: written anew for each update. One section a language
 # ([en] needed; the others fall back to it), its lines as the game shows them. UTF-8.
 [en]
-- Russian: the translation reviewed by a native speaker, and Russian subtitles in the movies (the briefings, the acts' and the ending's).
-- Russian and Polish: Quit Game is back in the main menu, the mouse works in the menus again and empty profiles are translated.
-- Russian, Polish and Portuguese: the menus and Press ENTER are centred, as in English.
-- HUD: the grenades', mines' and other throwables' icons no longer cover how many you carry.
+- Remastered models: the buildings of the Tunisian towns (Matmata by night and by day) are back to their original models, which keep their shape.
 [fr]
-- Russe : la traduction relue par un locuteur natif, et des sous-titres russes dans les vidéos (les briefings, les actes et la fin).
-- Russe et polonais : Quitter le jeu revient dans le menu principal, la souris fonctionne de nouveau dans les menus et les profils vides sont traduits.
-- Russe, polonais et portugais : les menus et « Appuyez sur ENTRÉE » sont centrés, comme en anglais.
-- HUD : les icônes des grenades, des mines et des autres objets à lancer ne cachent plus leur nombre.
+- Modèles remasterisés : les bâtiments des villes tunisiennes (Matmata de nuit et de jour) reviennent à leurs modèles d'origine, qui gardent leur forme.
 [it]
-- Russo: la traduzione rivista da un madrelingua, e sottotitoli russi nei filmati (i briefing, gli atti e il finale).
-- Russo e polacco: Esci dal gioco torna nel menu principale, il mouse funziona di nuovo nei menu e i profili vuoti sono tradotti.
-- Russo, polacco e portoghese: i menu e «Premi INVIO» sono centrati, come in inglese.
-- HUD: le icone di granate, mine e altri oggetti da lanciare non coprono più il loro numero.
+- Modelli rimasterizzati: gli edifici delle città tunisine (Matmata di notte e di giorno) tornano ai modelli originali, che mantengono la loro forma.
 [es]
-- Ruso: la traducción revisada por un hablante nativo, y subtítulos en ruso en los vídeos (las sesiones informativas, los actos y el final).
-- Ruso y polaco: vuelve Salir del juego al menú principal, el ratón funciona de nuevo en los menús y los perfiles vacíos están traducidos.
-- Ruso, polaco y portugués: los menús y «Pulsa INTRO» aparecen centrados, como en inglés.
-- HUD: los iconos de las granadas, las minas y demás lanzables ya no tapan cuántos llevas.
+- Modelos remasterizados: los edificios de los pueblos tunecinos (Matmata de noche y de día) vuelven a sus modelos originales, que conservan su forma.
 [pt]
-- Russo: a tradução revisada por um falante nativo, e legendas em russo nos vídeos (os briefings, os atos e o final).
-- Russo e polonês: Sair do jogo voltou ao menu principal, o mouse funciona de novo nos menus e os perfis vazios estão traduzidos.
-- Russo, polonês e português: os menus e "Pressione ENTER" aparecem centralizados, como em inglês.
-- HUD: os ícones das granadas, minas e outros arremessáveis não cobrem mais quantos você tem.
+- Modelos remasterizados: os edifícios das cidades tunisianas (Matmata à noite e de dia) voltam aos modelos originais, que mantêm a sua forma.
 [ru]
-- Русский язык: перевод проверен носителем языка, а в роликах (брифингах, роликах актов и финале) появились русские субтитры.
-- Русский и польский: в главное меню вернулся пункт «Выйти из игры», мышь снова работает в меню, пустые профили переведены.
-- Русский, польский и португальский: меню и надпись «Нажмите ENTER» теперь по центру, как в английской версии.
-- Интерфейс: значки гранат, мин и другого метательного оружия больше не закрывают их количество.
+- Ремастированные модели: здания тунисских городов (Матмата ночью и днём) снова используют оригинальные модели, которые сохраняют свою форму.
 [pl]
-- Rosyjski: tłumaczenie sprawdzone przez rodzimego użytkownika języka i rosyjskie napisy w filmach (odprawy, akty i zakończenie).
-- Rosyjski i polski: opcja Wyjdź z gry wróciła do menu głównego, mysz znów działa w menu, a puste profile są przetłumaczone.
-- Rosyjski, polski i portugalski: menu i napis „Naciśnij ENTER” są wyśrodkowane, jak w wersji angielskiej.
-- HUD: ikony granatów, min i innych przedmiotów do rzucania nie zasłaniają już ich liczby.
+- Zremasterowane modele: budynki tunezyjskich miast (Matmata nocą i za dnia) wracają do oryginalnych modeli, które zachowują swój kształt.

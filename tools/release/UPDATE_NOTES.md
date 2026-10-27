@@ -249,6 +249,9 @@ The version installed is in `version.txt` beside the game. Unattended:
 - Russian, Polish and Portuguese: Press ENTER is centred on the title screen, as in the other languages, and the
   menus' rows are centred too (the main menu, the campaigns, Extras and the rest): the translations kept the English
   rows' spaces, which centred the English words, not theirs.
+- Remastered models: the Tunisian towns' buildings (Matmata by night and by day, and the desert's) are drawn as the
+  original again, all of them by their textures, wherever they load: remastered they lost their shape, rounded and
+  bent (as the walls of Matmata by day did before).
 - The HUD: the thrown items' remastered icons (the grenades, the Teller and sticky mines, the bears) all sit in one
   place at one size, clear of how many you carry: the Teller mine's disc covered the count and the grenades touched it.
 

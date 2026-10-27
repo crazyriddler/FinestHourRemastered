@@ -135,7 +135,7 @@ A native Linux build may come later: the renderer now runs on Vulkan too, which 
 - **V-Sync**. The game runs at 60 FPS, as on the console.
 - **Widescreen** follows the resolution: wider than 4:3 is Hor+ (the HUD keeps its proportions at the screen's
   edges), 4:3 plays the game's own 4:3 screen.
-- **Television Frame**: on a wide screen the 4:3 menus, briefings and movies play inside a 1940s television, through
+- **Television Frame**: on a wide screen the 4:3 menus, briefings and movies play inside an old television, through
   a curved CRT tube with scan lines (the PC settings too, wherever they open).
 - **Brightness**, **FPS Counter**, **Anisotropic Filtering** up to 16x, **Sharpening**.
 - **HDR** (Direct3D 12, on when HDR is on in Windows): brighter lights and skies, the HUD and text at Windows' SDR

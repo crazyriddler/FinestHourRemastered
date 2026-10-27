@@ -305,8 +305,8 @@ $aimAssist	Автоприцел
 $alliesLost	Потери союзников:
 $altFire	Доп. огонь
 $altFireTank	Доп. огонь (танк)
-$animation	   Аниматика
-$artwork	   Арт
+$animation	      Аниматика
+$artwork	      Арт
 $back	Назад
 $behindTheScenes	За кадром
 $behindTheScenesCaps	ЗА КАДРОМ
@@ -314,7 +314,7 @@ $buildingSpark	Строим Spark
 $calibration1	Настройте экран телевизора так,
 $calibration2	чтобы цветные полосы под красной линией
 $calibration3	были едва видны.
-$calibrationCaps	   КАЛИБРОВКА
+$calibrationCaps	  КАЛИБРОВКА
 $centerView	Башню по центру
 $change	Изменить
 $changeAct	Сменить акт
@@ -327,8 +327,8 @@ $cheat4	Рикошет (все)
 $cheat5	Уменьшение
 $cheat6	Меткий глаз
 $cheat7	Большие и малые
-$cheats	     Читы
-$cheatsCaps	      ЧИТЫ
+$cheats	      Читы
+$cheatsCaps	        ЧИТЫ
 $commando	Коммандос
 $commandoCaps	КОММАНДОС
 $continueGame	Продолжить игру
@@ -351,7 +351,7 @@ $dossier	Досье
 $dossiers	Досье
 $dossiersCaps	ДОСЬЕ
 $down	Вниз
-$easternFront	   Восточный  фронт
+$easternFront	Восточный  фронт
 $easy	Легко
 $empty	Пусто
 $enemiesEliminated	Убито врагов:
@@ -371,7 +371,7 @@ $hintMessages	Подсказки
 $hitAccuracy	Точность:
 $hitsTaken	Получено попаданий:
 $hybrid	Гибрид
-$hybridCaps	   ГИБРИД
+$hybridCaps	  ГИБРИД
 $iconOff	Значок выкл.
 $iconOn	Значок вкл.
 $invertYaxis	Инверсия прицела
@@ -382,7 +382,7 @@ $lean	(Нажать) Выглянуть
 $leanLeft	Выгл. влево (прицел)
 $leanRight	Выгл. вправо (прицел)
 $lefty	Левша
-$leftyCaps	       ЛЕВША
+$leftyCaps	      ЛЕВША
 $levelCompleteCaps	УРОВЕНЬ ПРОЙДЕН
 $lifeAtSpark	Жизнь в Spark
 $load	Загрузить
@@ -390,12 +390,12 @@ $loadGame	Загрузить игру
 $loadMission	Загрузить миссию
 $loadProfile	Загрузить профиль
 $loadProfileCaps	ЗАГРУЗИТЬ ПРОФИЛЬ
-$locked	   Закрыто
+$locked	  Закрыто
 $lookStrafe	Обзор / Шаг вбок
 $lookTurn	Обзор / Поворот
-$makingOf1	    О создании 1
-$makingOf2	    О создании 2
-$makingOf3	    О создании 3
+$makingOf1	  О создании 1
+$makingOf2	  О создании 2
+$makingOf3	  О создании 3
 $medium	Средне
 $melee	Ближний бой
 $missionDuration	Время миссии:
@@ -403,18 +403,20 @@ $more	Ещё
 $moveStrafe	Ход / Шаг вбок
 $moveTurn	Ход / Поворот
 $movies	Видео
-$multiplayer	   Сетевая игра
+$multiplayer	  Сетевая игра
 $multiplayerCaps	СЕТЕВАЯ ИГРА
+$pcSettings	Настройки ПК
+$pcSettingsCaps	НАСТРОЙКИ ПК
 $music	Музыка
 $navigate	Выбор
 $newGame	Новая игра
 $newGameCaps	НОВАЯ ИГРА
 $nextPrevious	След. / Пред.
 $no	Нет
-$northAfrica	     Северная  Африка
+$northAfrica	 Северная  Африка
 $off	Выкл.
 $on	Вкл.
-$options	 Настройки
+$options	Настройки
 $optionsCaps	НАСТРОЙКИ
 $page	Страница
 $pause	Пауза
@@ -429,14 +431,14 @@ $posture	Стойка
 $postureDown	Стойка ниже
 $postureUp	Стойка выше
 $preferredWeapon	Любимое оружие:
-$pressStart	       Нажмите START
-$pressStartNGC	           Нажмите START
-$pressStartXbox	           Нажмите START
+$pressStart	         Нажмите START
+$pressStartNGC	          Нажмите START
+$pressStartXbox	          Нажмите START
 $profile2	Эсмеральда
 $profiles	Профили
 $profilesCaps	ПРОФИЛИ
 $quickshooter	Скорострел
-$quickshooterCaps	   СКОРОСТРЕЛ
+$quickshooterCaps	     СКОРОСТРЕЛ
 $quit	Выход
 $recruit	Новобранец
 $reload	Перезарядка
@@ -444,7 +446,7 @@ $reset	Сброс
 $save	Сохранить
 $saveProfile	Сохранить профиль
 $screenCalibration	Калибровка экрана
-$screenCalibrationCaps	  КАЛИБРОВКА ЭКРАНА
+$screenCalibrationCaps	 КАЛИБРОВКА ЭКРАНА
 $seasonedVet	Ветеран
 $select	Выбрать
 $selectProfileCaps	ВЫБОР ПРОФИЛЯ
@@ -453,7 +455,7 @@ $shotsFired	Выстрелов:
 $showHUD	Показать HUD
 $showHelp	Показать справку
 $showObjectives	Показать задачи
-$singlePlayer	    Одиночная игра
+$singlePlayer	 Одиночная игра
 $slower	Медленнее
 $sound	Звук
 $space	Пробел
@@ -477,7 +479,7 @@ $useItem	Применить предмет
 $vibration	Вибрация
 $view	Вид
 $weapon	Оружие
-$westernFront	   Западный  фронт
+$westernFront	 Западный  фронт
 $yes	Да
 _Appear_Offline	Невидимка
 _Appear_Online	В сети
@@ -1253,7 +1255,7 @@ _Yes_No	$ms$ Да  $mc$ Нет
 @31aeddc5de00643a	Серж. Боб Старки: Придётся разделиться. Я пойду налево, ты держись правее.
 $cheat8	Cheat 1 (don't translate)
 $cheat9	Cheat 1 (don't translate)
-$extras	 Доп. материалы
+$extras	Доп. материалы
 $extrasCaps	ДОП. МАТЕРИАЛЫ
 $mono	Моно
 $normal	Обычный

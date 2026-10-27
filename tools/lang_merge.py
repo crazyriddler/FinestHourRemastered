@@ -123,6 +123,10 @@ def main():
         with open(out, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(head + lines) + "\n")
         print("written", out)
+        # the menus' rows centred as the English (tools/lang_center.py)
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from lang_center import center
+        center(game, out, language)
 
 
 if __name__ == "__main__":

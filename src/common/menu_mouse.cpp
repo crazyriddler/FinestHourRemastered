@@ -49,6 +49,11 @@ bool PauseFont(uint64_t t) {  // t12, the HUD's font: the pause screen's list
 bool TypeFont(uint64_t t) {  // lta32, the typewriter: the mission lists, the prompts
     return t == 0xece9a6f491a366bc || t == 0x94e50b7df281fdbd || t == 0x8e44fc0c6f9f5aa6;
 }
+bool EdgeFont(uint64_t t) {  // fblds24: the items' dark edge, drawn under them
+    return t == 0x2c3a4c59a9f9fe2d || t == 0x33c164af4fe0978f || t == 0x856a3e4d3a0c99e4;
+}
+constexpr float kMainRows[4] = {201, 238, 276, 314};  // the main menu's rows' tops
+std::atomic<bool> g_main{false};                      // the main menu is up (its four rows where they are)
 
 // tests: a pointer at console coordinates until a time, and a click
 float g_test_x = 0, g_test_y = 0;
@@ -169,8 +174,10 @@ Menu Read() {
             items.push_back(d);
     std::sort(items.begin(), items.end(), [](auto& a, auto& b) { return a.y0 < b.y0; });
     for (const auto& d : items) {
-        m.items.push_back({d.x0, d.y0, d.x1, d.y1});
-        m.right = std::max(m.right, d.x1);
+        float dx = 0;
+        cod::menu_mouse::RowShift(d.tex, d.x0, d.y0, d.x1, dx);  // (where the row is drawn)
+        m.items.push_back({d.x0 + dx, d.y0, d.x1 + dx, d.y1});
+        m.right = std::max(m.right, d.x1 + dx);
     }
     for (const auto& d : f) {
         if (d.tex == kStrip) m.right = std::max(m.right, d.x1);
@@ -228,7 +235,6 @@ bool MousePos(float& x, float& y, float& scale, float& left, float& top) {
 // it in the menu's typeface, colours and spacing. Down from the last row (or up from the first) moves onto it (the
 // game's input held back meanwhile, and its own highlight drawn in the plain colour: one selection), up, down or back
 // leaves it; accepting it asks to quit in the pause screen's style, Yes closes the game. The mouse points and clicks at it like at the others.
-std::atomic<bool> g_main{false};       // the main menu is up (its four rows where they are)
 std::atomic<int> g_main_sel{-1};       // the game's selected row
 std::atomic<bool> g_quit_focus{false}; // the row has the selection
 std::atomic<bool> g_dialog{false};     // asking
@@ -261,9 +267,8 @@ const char* Text(int which) {
 // the main menu: the front end's list of four rows at the title screen's places
 bool MainMenu(const Menu& m) {
     if (!cod::wide::FrontEnd() || cod::InMovie() || m.items.size() != 4) return false;
-    const float ys[4] = {201, 238, 276, 314};
     for (int i = 0; i < 4; i++)
-        if (std::fabs(m.items[size_t(i)].y0 - ys[i]) > 4) return false;
+        if (std::fabs(m.items[size_t(i)].y0 - kMainRows[i]) > 4) return false;
     return true;
 }
 
@@ -754,6 +759,18 @@ void TestMouse(float x, float y, bool click) {
     g_test_x = x, g_test_y = y;
     g_test_until = ImGui::GetTime() + 3;
     g_test_click = click;
+}
+
+bool RowShift(uint64_t tex, float x0, float y0, float x1, float& dx) {
+    if (!g_main || !(ItemFont(tex) || EdgeFont(tex))) return false;
+    for (int i = 0; i < 4; i++) {
+        if (std::fabs(y0 - kMainRows[i]) > 4) continue;
+        // a row with its spaces all taken away (its box starts at the row's place, spaces and all) right of the middle
+        if (cod::lang::MainRowLead(i) != 0 || (x0 + x1) * 0.5f <= 322) return false;
+        dx = 320 - (x0 + x1) * 0.5f;
+        return true;
+    }
+    return false;
 }
 
 void Dump() {

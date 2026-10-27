@@ -246,7 +246,11 @@ The version installed is in `version.txt` beside the game. Unattended:
 - Russian and Polish: Quit Game is back under the main menu, and the mouse points and clicks in the menus again: their
   letters are drawn into the game's fonts, which changed the fonts the menus were recognised by. Empty profile slots
   are translated.
-- Russian, Polish and Portuguese: Press ENTER is centred on the title screen, as in the other languages.
+- Russian, Polish and Portuguese: Press ENTER is centred on the title screen, as in the other languages, and the
+  menus' rows are centred too (the main menu, the campaigns, Extras and the rest): the translations kept the English
+  rows' spaces, which centred the English words, not theirs.
+- The HUD: the thrown items' remastered icons (the grenades, the Teller and sticky mines, the bears) all sit in one
+  place at one size, clear of how many you carry: the Teller mine's disc covered the count and the grenades touched it.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

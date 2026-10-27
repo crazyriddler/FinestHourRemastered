@@ -305,8 +305,8 @@ $aimAssist	Mira assistida
 $alliesLost	Aliados perdidos:
 $altFire	Disparo alt.
 $altFireTank	Disparo alt. (Tanque)
-$animation	   Rolo de animação
-$artwork	   Ilustrações
+$animation	 Rolo de animação
+$artwork	Ilustrações
 $back	Voltar
 $behindTheScenes	Bastidores
 $behindTheScenesCaps	BASTIDORES
@@ -314,7 +314,7 @@ $buildingSpark	O prédio da Spark
 $calibration1	Ajuste a tela da sua televisão até que
 $calibration2	as barras de cor abaixo da linha vermelha
 $calibration3	fiquem quase invisíveis.
-$calibrationCaps	   CALIBRAÇÃO
+$calibrationCaps	    CALIBRAÇÃO
 $centerView	Centralizar torre
 $change	Alterar
 $changeAct	Alterar ato
@@ -327,15 +327,15 @@ $cheat4	Ricochete (todos)
 $cheat5	Tiro encolhedor
 $cheat6	Tiro certeiro
 $cheat7	Grande e pequeno
-$cheats	     Códigos
-$cheatsCaps	      CÓDIGOS
+$cheats	    Códigos
+$cheatsCaps	     CÓDIGOS
 $commando	Comando
 $commandoCaps	COMANDO
 $continueGame	Continuar jogo
 $controls	Controles
 $createNew	Novo
 $createProfileCaps	CRIAR PERFIL
-$credits	    Créditos
+$credits	   Créditos
 $cycle	Trocar
 $cycleGrenade	Trocar granada
 $cycleItem	Trocar item
@@ -351,7 +351,7 @@ $dossier	Dossiê
 $dossiers	Dossiês
 $dossiersCaps	DOSSIÊS
 $down	Baixo
-$easternFront	   Frente   Oriental
+$easternFront	  Frente   Oriental
 $easy	Fácil
 $empty	Vazio
 $enemiesEliminated	Inimigos eliminados:
@@ -371,7 +371,7 @@ $hintMessages	Mensagens de dica
 $hitAccuracy	Precisão de tiro:
 $hitsTaken	Tiros recebidos:
 $hybrid	Híbrido
-$hybridCaps	   HÍBRIDO
+$hybridCaps	  HÍBRIDO
 $iconOff	Ícone desligado
 $iconOn	Ícone ligado
 $invertYaxis	Inverter mira
@@ -382,7 +382,7 @@ $lean	(Pressionar) Inclinar
 $leanLeft	Inclinar esq. (Mira)
 $leanRight	Inclinar dir. (Mira)
 $lefty	Canhoto
-$leftyCaps	       CANHOTO
+$leftyCaps	    CANHOTO
 $levelCompleteCaps	FASE CONCLUÍDA
 $lifeAtSpark	A vida na Spark
 $load	Carregar
@@ -390,12 +390,12 @@ $loadGame	Carregar jogo
 $loadMission	Carregar missão
 $loadProfile	Carregar perfil
 $loadProfileCaps	CARREGAR PERFIL
-$locked	   Bloqueado
+$locked	Bloqueado
 $lookStrafe	Olhar / Desl. lateral
 $lookTurn	Olhar / Girar
-$makingOf1	    Como foi feito 1
-$makingOf2	    Como foi feito 2
-$makingOf3	    Como foi feito 3
+$makingOf1	 Como foi feito 1
+$makingOf2	 Como foi feito 2
+$makingOf3	 Como foi feito 3
 $medium	Médio
 $melee	Corpo a corpo
 $missionDuration	Duração da missão:
@@ -403,15 +403,17 @@ $more	Mais
 $moveStrafe	Mover / Desl. lateral
 $moveTurn	Mover / Girar
 $movies	Vídeos
-$multiplayer	   Multijogador
+$multiplayer	  Multijogador
 $multiplayerCaps	MULTIJOGADOR
+$pcSettings	 Opções do PC
+$pcSettingsCaps	OPÇÕES DO PC
 $music	Música
 $navigate	Navegar
 $newGame	Novo jogo
 $newGameCaps	NOVO JOGO
 $nextPrevious	Próx. / Ant.
 $no	Não
-$northAfrica	     Norte da   África
+$northAfrica	   Norte da   África
 $off	Desligado
 $on	Ligado
 $options	 Opções
@@ -429,14 +431,14 @@ $posture	Postura
 $postureDown	Baixar postura
 $postureUp	Subir postura
 $preferredWeapon	Arma preferida:
-$pressStart	       Pressione o botão START
-$pressStartNGC	           Pressione START
-$pressStartXbox	           Pressione START
+$pressStart	    Pressione o botão START
+$pressStartNGC	         Pressione START
+$pressStartXbox	         Pressione START
 $profile2	Esmeralda
 $profiles	Perfis
 $profilesCaps	PERFIS
 $quickshooter	Gatilho rápido
-$quickshooterCaps	   GATILHO RÁPIDO
+$quickshooterCaps	  GATILHO RÁPIDO
 $quit	Sair
 $recruit	Recruta novato
 $reload	Recarregar
@@ -453,12 +455,12 @@ $shotsFired	Tiros disparados:
 $showHUD	Mostrar HUD
 $showHelp	Mostrar ajuda
 $showObjectives	Mostrar objetivos
-$singlePlayer	    Um jogador
+$singlePlayer	     Um jogador
 $slower	Mais lento
 $sound	Som
 $space	Espaço
 $standard	Padrão
-$standardCaps	 PADRÃO
+$standardCaps	   PADRÃO
 $stereo	Estéreo
 $subtitles	Legendas
 $supersoldier	Supersoldado
@@ -477,7 +479,7 @@ $useItem	Usar item
 $vibration	Vibração
 $view	Ver
 $weapon	Arma
-$westernFront	   Frente  Ocidental
+$westernFront	 Frente  Ocidental
 $yes	Sim
 _Appear_Offline	Aparecer offline
 _Appear_Online	Aparecer online

@@ -332,7 +332,19 @@ void Shrink(const gpu::Draw2D& d, Kind kind, const Box& b, bool text, gpu::Place
     ShrinkAbout(p, s, ax * k + line, ay);
 }
 
+bool Place2D(const gpu::Draw2D& d, gpu::Place2D& p);
+
+// placed, then a main menu row of a language of the port's own moved to the middle (menu_mouse.cpp RowShift)
 bool Layout(const gpu::Draw2D& d, gpu::Place2D& p) {
+    bool placed = Place2D(d, p);
+    float dx;
+    if (!d.bounded || !cod::menu_mouse::RowShift(d.tex, d.x0, d.y0, d.x1, dx)) return placed;
+    if (!placed) p = {};
+    p.ox += dx * p.sx;
+    return true;
+}
+
+bool Place2D(const gpu::Draw2D& d, gpu::Place2D& p) {
     if (d.frame != g_frame) NewFrame(d.frame);
     Kind kind = kAsPlaced;
     Box truth{};

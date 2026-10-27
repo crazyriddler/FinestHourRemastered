@@ -305,8 +305,8 @@ $aimAssist	Wspomaganie celowania
 $alliesLost	Straceni sojusznicy:
 $altFire	Ogień alt.
 $altFireTank	Ogień alt. (czołg)
-$animation	   Animacje
-$artwork	   Grafiki
+$animation	        Animacje
+$artwork	    Grafiki
 $back	Wstecz
 $behindTheScenes	Za kulisami
 $behindTheScenesCaps	ZA KULISAMI
@@ -314,7 +314,7 @@ $buildingSpark	Budowa Spark
 $calibration1	Wyreguluj ekran telewizora tak, aby
 $calibration2	paski kolorów pod czerwoną linią były
 $calibration3	ledwo widoczne.
-$calibrationCaps	   KALIBRACJA
+$calibrationCaps	    KALIBRACJA
 $centerView	Wyśrodkuj wieżę
 $change	Zmień
 $changeAct	Zmień akt
@@ -327,8 +327,8 @@ $cheat4	Rykoszety (wszyscy)
 $cheat5	Zmniejszający strzał
 $cheat6	Snajperskie oko
 $cheat7	Duzi i mali
-$cheats	     Kody
-$cheatsCaps	      KODY
+$cheats	      Kody
+$cheatsCaps	        KODY
 $commando	Komandos
 $commandoCaps	KOMANDOS
 $continueGame	Kontynuuj grę
@@ -351,7 +351,7 @@ $dossier	Akta
 $dossiers	Akta
 $dossiersCaps	AKTA
 $down	W dół
-$easternFront	   Front   wschodni
+$easternFront	  Front   wschodni
 $easy	Łatwy
 $empty	Pusty
 $enemiesEliminated	Wyeliminowani wrogowie:
@@ -371,7 +371,7 @@ $hintMessages	Podpowiedzi
 $hitAccuracy	Celność:
 $hitsTaken	Otrzymane trafienia:
 $hybrid	Hybrydowy
-$hybridCaps	   HYBRYDOWY
+$hybridCaps	HYBRYDOWY
 $iconOff	Ikona wył.
 $iconOn	Ikona wł.
 $invertYaxis	Odwróć celowanie
@@ -382,7 +382,7 @@ $lean	(Naciśnij) Wychyl
 $leanLeft	Wychyl L (cel.)
 $leanRight	Wychyl P (cel.)
 $lefty	Leworęczny
-$leftyCaps	       LEWORĘCZNY
+$leftyCaps	 LEWORĘCZNY
 $levelCompleteCaps	POZIOM UKOŃCZONY
 $lifeAtSpark	Życie w Spark
 $load	Wczytaj
@@ -390,7 +390,7 @@ $loadGame	Wczytaj grę
 $loadMission	Wczytaj misję
 $loadProfile	Wczytaj profil
 $loadProfileCaps	WCZYTAJ PROFIL
-$locked	   Zablokowane
+$locked	Zablokowane
 $lookStrafe	Patrz / Krok w bok
 $lookTurn	Patrz / Obrót
 $makingOf1	    Making of 1
@@ -403,18 +403,20 @@ $more	Więcej
 $moveStrafe	Ruch / Krok w bok
 $moveTurn	Ruch / Obrót
 $movies	Filmy
-$multiplayer	   Gra wieloosobowa
+$multiplayer	Gra wieloosobowa
 $multiplayerCaps	GRA WIELOOSOBOWA
+$pcSettings	     Opcje PC
+$pcSettingsCaps	OPCJE PC
 $music	Muzyka
 $navigate	Nawigacja
 $newGame	Nowa gra
 $newGameCaps	NOWA GRA
 $nextPrevious	Następny / Poprzedni
 $no	Nie
-$northAfrica	     Afryka   Północna
+$northAfrica	  Afryka   Północna
 $off	Wył.
 $on	Wł.
-$options	 Opcje
+$options	  Opcje
 $optionsCaps	OPCJE
 $page	Strona
 $pause	Pauza
@@ -429,14 +431,14 @@ $posture	Postawa
 $postureDown	Postawa niżej
 $postureUp	Postawa wyżej
 $preferredWeapon	Ulubiona broń:
-$pressStart	       Naciśnij START
-$pressStartNGC	           Naciśnij START
-$pressStartXbox	           Naciśnij START
+$pressStart	         Naciśnij START
+$pressStartNGC	         Naciśnij START
+$pressStartXbox	         Naciśnij START
 $profile2	Esmerelda
 $profiles	Profile
 $profilesCaps	PROFILE
 $quickshooter	Szybki strzelec
-$quickshooterCaps	   SZYBKI STRZELEC
+$quickshooterCaps	 SZYBKI STRZELEC
 $quit	Wyjdź
 $recruit	Rekrut
 $reload	Przeładuj
@@ -453,12 +455,12 @@ $shotsFired	Oddane strzały:
 $showHUD	Pokaż HUD
 $showHelp	Pokaż pomoc
 $showObjectives	Pokaż cele
-$singlePlayer	    Gra jednoosobowa
+$singlePlayer	Gra jednoosobowa
 $slower	Wolniej
 $sound	Dźwięk
 $space	Spacja
 $standard	Standardowy
-$standardCaps	 STANDARDOWY
+$standardCaps	STANDARDOWY
 $stereo	Stereo
 $subtitles	Napisy
 $supersoldier	Superżołnierz
@@ -477,7 +479,7 @@ $useItem	Użyj przedmiotu
 $vibration	Wibracje
 $view	Widok
 $weapon	Broń
-$westernFront	   Front  zachodni
+$westernFront	  Front  zachodni
 $yes	Tak
 _Appear_Offline	Pokaż jako offline
 _Appear_Online	Pokaż jako online
@@ -1253,7 +1255,7 @@ _Yes_No	$ms$ Tak  $mc$ Nie
 @31aeddc5de00643a	Sierż. Bob Starkey: Musimy się rozdzielić.  Ja pójdę w lewo, ty trzymaj się prawej.
 $cheat8	Cheat 1 (don't translate)
 $cheat9	Cheat 1 (don't translate)
-$extras	 Dodatki
+$extras	Dodatki
 $extrasCaps	DODATKI
 $mono	Mono
 $normal	Normalny

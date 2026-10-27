@@ -1154,9 +1154,15 @@ FIT = {"hud_inventory_grenadeA", "hud_inventory_grenadeG", "hud_inventory_grenad
 # how far the drawing may reach in them (the item's quad ends before the box does)
 SLOT_MIDDLE = (39.2, 31.5)
 SLOT_REACH = (3.0, 3.0, 62.0, 61.0)
+# the counted items (the grenades, the mines, the bears) all in one place and at one size, clear of the count the
+# game writes over the slot's lower right (37..50 x 41..55 of the item's texels): their middle and their largest side
+# (in the middle, the Teller mine's disc covered the count and the grenades touched it)
+SLOT_PLACE = {n: ((31.5, 25.5), 32.0) for n in (
+    "hud_inventory_grenadeA", "hud_inventory_grenadeG", "hud_inventory_grenadeR", "hud_inventory_tellermine",
+    "hud_inventory_stickymine", "hud_inventory_KaiserBear", "hud_inventory_StickyBear")}
 
 
-def fit(out, src, slot=False):
+def fit(out, src, slot=False, name=""):
     """out (K times, straight alpha) moved and scaled so its drawing fills the original's box: a scale per axis, the
     two kept within 12% of each other (the shapes' proportions)"""
     oa = src[..., 3] > 128
@@ -1171,6 +1177,9 @@ def fit(out, src, slot=False):
         cx, cy = SLOT_MIDDLE
         k = min(1.0, 2 * (cx - SLOT_REACH[0]) / w, 2 * (SLOT_REACH[2] - cx) / w,
                 2 * (cy - SLOT_REACH[1]) / h, 2 * (SLOT_REACH[3] - cy) / h)
+        if name in SLOT_PLACE:
+            (cx, cy), side = SLOT_PLACE[name]
+            k = side / max(w, h)
         t = np.array([cx - w * k / 2, cy - h * k / 2, cx + w * k / 2, cy + h * k / 2]) * K
     ys, xs = np.nonzero(da)
     d = np.array([xs.min(), ys.min(), xs.max() + 1, ys.max() + 1], np.float64)
@@ -1208,7 +1217,7 @@ def main():
         p = ICONS[name](src)
         out = p.out if isinstance(p, Pic) else p
         if name in FIT:
-            out = fit(out, src, slot=name.startswith("hud_inventory_"))
+            out = fit(out, src, slot=name.startswith("hud_inventory_"), name=name)
         path = os.path.join(work, rid + ".c.png")
         Image.fromarray((np.clip(out, 0, 255) + 0.5).astype(np.uint8), "RGBA").save(path)
         files.append(path)

@@ -57,7 +57,15 @@ namespace lang {
 void Init();
 bool Portuguese();
 void Patch(const std::string& xbox_path, uint64_t pos, uint8_t* data, uint32_t n);
+// the leading spaces of the main menu's row (0 to 3) in a language of the port's own, -1 in the game's own
+int MainRowLead(int row);
 }  // namespace lang
+
+// a main menu row's text moved across to the screen's middle (common/menu_mouse.cpp): where a language of the port's
+// own is wider than the English and its spaces (none left to take away) leave it right of the middle
+namespace menu_mouse {
+bool RowShift(uint64_t tex, float x0, float y0, float x1, float& dx);
+}  // namespace menu_mouse
 
 // the movies' subtitles in a language the game's own movies lack (game/movie_subs.cpp): lang/<code>_movies.bin
 namespace movie_subs {

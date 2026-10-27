@@ -198,10 +198,14 @@ void PatchTables(char* data, size_t n) {
                 std::string text = it != g_keys.end() ? it->second : std::string();
                 // the main menu's PC Settings (offline.cpp's row) and the keyboard's title prompt (UTF-8)
                 const bool ru = g_lang == kRussian, pl = g_lang == kPolish;
-                if (key == "$multiplayer")
+                // (the file's $pcSettings rows: centred as the English row by tools/lang_center.py)
+                auto pc = g_keys.find(key == "$multiplayer" ? "$pcSettings" : "$pcSettingsCaps");
+                if ((key == "$multiplayer" || key == "$multiplayerCaps") && pc != g_keys.end())
+                    text = pc->second;
+                else if (key == "$multiplayer")
                     text = Text(ru ? "\xD0\x9D\xD0\xB0\xD1\x81\xD1\x82\xD1\x80\xD0\xBE\xD0\xB9\xD0\xBA\xD0\xB8 \xD0\x9F\xD0\x9A"
                                 : pl ? "Opcje PC" : "Op\xC3\xA7\xC3\xB5" "es do PC");
-                if (key == "$multiplayerCaps")
+                else if (key == "$multiplayerCaps")
                     text = Text(ru ? "\xD0\x9D\xD0\x90\xD0\xA1\xD0\xA2\xD0\xA0\xD0\x9E\xD0\x99\xD0\x9A\xD0\x98 \xD0\x9F\xD0\x9A"
                                 : pl ? "OPCJE PC" : "OP\xC3\x87\xC3\x95" "ES DO PC");
                 if (key == "$pressStartXbox" && row.find("ENTER") != std::string_view::npos)
@@ -351,6 +355,13 @@ X86_FUNC(sub_00124C80) {
 namespace cod::lang {
 
 bool Portuguese() { return g_on && g_lang == kPortuguese; }
+
+int MainRowLead(int row) {
+    static const char* const keys[4] = {"$singlePlayer", "$pcSettings", "$options", "$extras"};
+    if (!g_on || row < 0 || row > 3) return -1;
+    auto it = g_keys.find(keys[row]);
+    return it == g_keys.end() ? -1 : int(it->second.find_first_not_of(' '));
+}
 
 void Init() {
     const uint32_t l = app::Get().language;

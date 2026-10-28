@@ -255,6 +255,10 @@ The version installed is in `version.txt` beside the game. Unattended:
 - Cheats: the Free Camera moves three times as fast (about 18 m a second, four times that with fire held).
 - Remastered textures: the lattice towers' crossed beams use the original texture again: the remastered one's cut-out
   edges broke into dots.
+- Russian: the briefings' subtitles now show in every briefing (the ones played while a mission loads had none, Alexander
+  Sokolov's among them), the profile keyboard's Delete, Done and Shift are translated (as in Polish and Portuguese: rows
+  of the game's text tables past their first 4 KB were never translated), and the town in Sam Rivers' briefing is
+  Тиллет throughout.
 - Remastered textures: the Matmata headquarters (Matmata by night) lit right: its plaster walls and roof keep their
   remastered colour without the surface maps that showed lighter patches where the faces met and a diagonal across
   the roof, and its flag is lit as cloth, not skin (light polygons over it).

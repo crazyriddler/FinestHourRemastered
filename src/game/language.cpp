@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <mutex>
 #include <string>
@@ -33,6 +34,10 @@
 #include "core/log.h"
 #include "kernel/kernel.h"
 #include "xdk/hle.h"
+
+namespace cod::offline {
+bool KeyboardTitle();  // offline.cpp: the title screen asks for ENTER
+}
 
 namespace {
 
@@ -208,10 +213,11 @@ void PatchTables(char* data, size_t n) {
                 else if (key == "$multiplayerCaps")
                     text = Text(ru ? "\xD0\x9D\xD0\x90\xD0\xA1\xD0\xA2\xD0\xA0\xD0\x9E\xD0\x99\xD0\x9A\xD0\x98 \xD0\x9F\xD0\x9A"
                                 : pl ? "OPCJE PC" : "OP\xC3\x87\xC3\x95" "ES DO PC");
-                if (key == "$pressStartXbox" && row.find("ENTER") != std::string_view::npos)
+                const bool enter = row.find("ENTER") != std::string_view::npos || cod::offline::KeyboardTitle();
+                if (key == "$pressStartXbox" && enter)
                     text = Text(ru ? "\xD0\x9D\xD0\xB0\xD0\xB6\xD0\xBC\xD0\xB8\xD1\x82\xD0\xB5 ENTER"
                                 : pl ? "Naci\xC5\x9Bnij ENTER" : "Pressione ENTER");
-                if (key == "$pressStartXbox" && row.find("ENTER") != std::string_view::npos) {
+                if (key == "$pressStartXbox" && enter) {
                     // centred as the English: the table pads it with spaces (the typewriter's letters all one width)
                     std::string_view en = row.substr(comma + 1, row.find(',', comma + 1) - comma - 1);
                     size_t lead = en.find_first_not_of(' '), last = en.find_last_not_of(" \r");
@@ -373,13 +379,57 @@ void Init() {
     if (g_on) cod::movie_subs::Load(g_lang == kRussian ? "ru" : g_lang == kPolish ? "pl" : "pt");
 }
 
+}  // namespace cod::lang
+
+namespace {
+
+// COD.PAK's string tables, translated whole: the file is read a page (4 KB) at a time, a table's rows past its first
+// page come without its header. The first read holding a table's header reads the table from the file (to its end,
+// a NUL) and translates it; each read then takes the translated bytes over the part of a table it brought in.
+std::mutex g_tables_lock;
+std::vector<std::pair<uint64_t, std::string>> g_tables;  // the table's place in COD.PAK, its translated bytes
+
+void TablesOf(const std::string& path, uint64_t pos, uint8_t* data, uint32_t n) {
+    static constexpr std::string_view kHeader = "language,English,German,French,Italian,Spanish";
+    std::lock_guard lock(g_tables_lock);
+    std::string_view view(reinterpret_cast<char*>(data), n);
+    for (size_t at = view.find(kHeader); at != std::string_view::npos; at = view.find(kHeader, at + 1)) {
+        const uint64_t place = pos + at;
+        if (std::any_of(g_tables.begin(), g_tables.end(), [&](auto& t) { return t.first == place; })) continue;
+        std::string table;
+        const std::string host = kernel::ResolvePath(path, 0);
+        if (FILE* f = host.empty() ? nullptr : _wfopen(std::filesystem::path(host).c_str(), L"rb")) {
+            table.resize(1 << 20);
+            _fseeki64(f, int64_t(place), SEEK_SET);
+            table.resize(std::fread(table.data(), 1, table.size(), f));
+            std::fclose(f);
+            table.resize(std::min(table.find('\0'), table.size()));
+        }
+        if (table.size() < kHeader.size()) {
+            // (no host file: the disc image) the read's own rows, as before
+            PatchTables(reinterpret_cast<char*>(data), n);
+            continue;
+        }
+        PatchTables(table.data(), table.size());
+        g_tables.emplace_back(place, std::move(table));
+    }
+    for (const auto& [place, table] : g_tables) {
+        const uint64_t a = std::max<uint64_t>(place, pos), e = std::min<uint64_t>(place + table.size(), pos + n);
+        if (a < e) std::memcpy(data + (a - pos), table.data() + (a - place), size_t(e - a));
+    }
+}
+
+}  // namespace
+
+namespace cod::lang {
+
 // a read of the game's files (offline.cpp's read hook)
 void Patch(const std::string& path, uint64_t pos, uint8_t* data, uint32_t n) {
     if (!g_on || path.size() < 4) return;
     std::string low = path;
     std::transform(low.begin(), low.end(), low.begin(), [](unsigned char c) { return char(std::tolower(c)); });
     if (low.size() >= 7 && low.compare(low.size() - 7, 7, "cod.pak") == 0) {
-        PatchTables(reinterpret_cast<char*>(data), n);
+        TablesOf(path, pos, data, n);
         if (!g_fonts.empty()) PatchFonts(pos, data, n);
     }
     else if (low.find("sb_agd") != std::string::npos && low.find("\\english\\") != std::string::npos &&

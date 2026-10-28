@@ -70,7 +70,7 @@ bool RowShift(uint64_t tex, float x0, float y0, float x1, float& dx);
 // the movies' subtitles in a language the game's own movies lack (game/movie_subs.cpp): lang/<code>_movies.bin
 namespace movie_subs {
 void Load(const char* code);
-void Start(const std::string& movie);  // the movie PlayMovie plays (its file's name), "" when it ends
+void Opened(uint32_t bink, const std::string& path);  // BinkOpen's movie (its file's path) and its handle
 // drawn into the movie's frame BinkCopyToBuffer has just written (32 bit pixels)
 void Draw(uint32_t bink, uint32_t dest, uint32_t pitch, uint32_t height);
 }  // namespace movie_subs

@@ -38,10 +38,16 @@ X86_FUNC(sub_000B2000) {
                 return;
             }
     }
-    // (the subtitles of a language whose movies the game lacks: game/movie_subs.cpp)
-    cod::movie_subs::Start(ReadCString(R32(ctx.esp + 4)));
     PlayMovie(ctx, base);
-    cod::movie_subs::Start("");
+}
+
+// BinkOpen(name, flags), stdcall: every movie's handle and file, for the subtitles of a language whose movies the
+// game lacks (game/movie_subs.cpp)
+X86_EXTERN_FUNC(__imp__sub_00251CC0);
+X86_FUNC(sub_00251CC0) {
+    const std::string name = ReadCString(R32(ctx.esp + 4));
+    __imp__sub_00251CC0(ctx, base);
+    if (ctx.eax) cod::movie_subs::Opened(ctx.eax, name);
 }
 
 // (tests) XBE_BINK_DUMP's frames

@@ -7,6 +7,7 @@
 #include <fstream>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "app/app.h"
@@ -27,7 +28,7 @@ struct Sub {
 
 std::vector<Sub> g_subs;
 std::mutex g_lock;
-std::string g_movie;  // the one playing, lower case
+std::unordered_map<uint32_t, std::string> g_movies;  // each open movie's handle: its file's name, lower case, no extension
 
 std::string Lower(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return char(std::tolower(c)); });
@@ -72,16 +73,24 @@ void Load(const char* code) {
     LOGR("movie subtitles: %zu from %s_movies.bin", g_subs.size(), code);
 }
 
-void Start(const std::string& movie) {
-    std::string m = Lower(movie);
+// every movie's open, wherever it plays from (PlayMovie's, the levels' briefings as they load, the menus' own)
+void Opened(uint32_t bink, const std::string& path) {
+    std::string m = Lower(path);
+    size_t slash = m.find_last_of("\\/");
+    if (slash != std::string::npos) m.erase(0, slash + 1);
     if (m.size() > 4 && m.compare(m.size() - 4, 4, ".bik") == 0) m.resize(m.size() - 4);
     std::lock_guard lock(g_lock);
-    g_movie = m;
+    g_movies[bink] = m;
+    LOGR("movie subtitles: %s opened (%08X), %zu of its own", m.c_str(), bink,
+         size_t(std::count_if(g_subs.begin(), g_subs.end(), [&](const Sub& s) { return s.movie == m; })));
 }
 
 void Draw(uint32_t bink, uint32_t dest, uint32_t pitch, uint32_t height) {
     std::lock_guard lock(g_lock);
-    if (g_subs.empty() || g_movie.empty() || !bink || !dest || pitch < 640 * 4 || height < 480) return;
+    if (g_subs.empty() || !bink || !dest || pitch < 640 * 4 || height < 480) return;
+    auto open = g_movies.find(bink);
+    if (open == g_movies.end()) return;
+    const std::string& movie = open->second;
     // the frame being shown: the movie's frame counter is two ahead of it as the copy runs (measured against the
     // movie's frames), at its own rate (30 for these)
     uint32_t num = R32(bink + 0x14), den = R32(bink + 0x18);
@@ -89,7 +98,7 @@ void Draw(uint32_t bink, uint32_t dest, uint32_t pitch, uint32_t height) {
     const double t = (double(R32(bink + 0x0C)) - 2) / fps;
     uint8_t* out = static_cast<uint8_t*>(HostPtr(dest));
     for (const Sub& s : g_subs) {
-        if (s.movie != g_movie || t < s.start || t >= s.end) continue;
+        if (s.movie != movie || t < s.start || t >= s.end) continue;
         for (uint32_t y = 0; y < s.h; y++) {
             uint8_t* row = out + size_t(s.y + y) * pitch + size_t(s.x) * 4;
             const uint8_t* p = &s.px[size_t(y) * s.w * 2];

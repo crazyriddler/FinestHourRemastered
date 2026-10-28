@@ -101,6 +101,8 @@ void PatchStrings(const std::string& path, uint64_t pos, uint8_t* data, uint32_t
 }  // namespace
 
 namespace cod::offline {
+bool KeyboardTitle() { return g_keyboard_title; }
+
 void Init() {
     // the keyboard's prompts if they are chosen, or chosen by the device and no controller is plugged in
     const Settings& s = Get();

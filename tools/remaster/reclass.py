@@ -59,6 +59,25 @@ SURFACES.update({rid: "skin" for rid in (
 )})
 # a flag taken for skin: light polygons over it where its faces met (the Matmata headquarters', level 14)
 SURFACES["e609c975fc6d28dd"] = "fabric"  # flagwhite
+# the flags and banners the classifier took for paper, metal, skin, the ground or the interface: cloth (the others
+# with "flag" in their name are cloth already, or the HUD's and the objectives' icons, the flag pole's base, the
+# sprite of a soldier running with a flag)
+SURFACES.update({rid: "fabric" for rid in (
+    "a12e6522e0b55496",  # L1_1_NaziFlag
+    "269d01b5baea2e1f",  # L1_1_RussianFlag
+    "cfbecb42b67bcb7c",  # L3_5_USFlag
+    "fd12526f25f29d97",  # VT_Steamboat_flag_png
+    "c46666ce48d3943c",  # _aNaziFlagFabric
+    "0038ed62c95a975f",  # fabric_luftwaffe_flag_yellow
+    "4344a19edd992585",  # torn_flag_naz_png
+)})
+# the cacti (Tunisia): foliage sways in the wind, a cactus stands firm; their maps kept, not swaying
+SURFACES.update({rid: "atlas" for rid in (
+    "0541f938dfe5123e", "6db9e7e32caec00e",  # cactus1
+    "77edf3730a6bce64", "ebdbd35568e95d48",  # cactus2
+    "322023d4ab544363",  # cactus3
+    "961df8765d1c6bfb", "c087f0b6e3b37d91",  # cactus4
+)})
 
 
 def glass_frames(src, classes):

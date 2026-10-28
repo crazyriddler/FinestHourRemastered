@@ -259,6 +259,9 @@ The version installed is in `version.txt` beside the game. Unattended:
   Sokolov's among them), the profile keyboard's Delete, Done and Shift are translated (as in Polish and Portuguese: rows
   of the game's text tables past their first 4 KB were never translated), and the town in Sam Rivers' briefing is
   Тиллет throughout.
+- Wind: the cacti (Tunisia) stand firm; they swayed in the wind as if they were leaves.
+- Remastered materials: every flag and banner is lit as cloth: seven of them were lit as paper, metal, skin, the ground
+  or not at all (the Soviet flag shone like metal, the American like skin).
 - Remastered materials: faces where the game stretches a texture (under a niche, along a roof) are shaded like the
   faces around them: they were left without their material's shading and stood out as lighter patches with the
   polygons' edges plain (the Matmata headquarters' walls and roof, which keep their surface maps). Its flag is lit as

@@ -2,16 +2,23 @@
 # update release's update.json). Only this update's changes: written anew for each update. One section a language
 # ([en] needed; the others fall back to it), its lines as the game shows them. UTF-8.
 [en]
-- Remastered materials: faces where a texture is stretched (under niches, along roofs) no longer stand out as lighter patches; the Matmata headquarters' walls keep their full detail.
+- Wind: the cacti no longer sway in the wind like leaves.
+- Every flag and banner is lit as cloth (some were lit as metal, paper or skin).
 [fr]
-- Matériaux remasterisés : les faces où une texture est étirée (sous les niches, le long des toits) ne ressortent plus en taches claires ; les murs du QG de Matmata gardent tout leur détail.
+- Vent : les cactus ne se balancent plus au vent comme des feuilles.
+- Tous les drapeaux et bannières sont éclairés comme du tissu (certains l'étaient comme du métal, du papier ou de la peau).
 [it]
-- Materiali rimasterizzati: le facce con una texture stirata (sotto le nicchie, lungo i tetti) non risaltano più come macchie chiare; i muri del quartier generale di Matmata mantengono tutto il dettaglio.
+- Vento: i cactus non ondeggiano più al vento come foglie.
+- Tutte le bandiere e gli stendardi sono illuminati come stoffa (alcuni lo erano come metallo, carta o pelle).
 [es]
-- Materiales remasterizados: las caras donde una textura está estirada (bajo nichos, a lo largo de techos) ya no destacan como parches claros; las paredes del cuartel de Matmata conservan todo su detalle.
+- Viento: los cactus ya no se mueven con el viento como si fueran hojas.
+- Todas las banderas y estandartes se iluminan como tela (algunas se iluminaban como metal, papel o piel).
 [pt]
-- Materiais remasterizados: as faces onde uma textura está esticada (sob nichos, ao longo de telhados) não se destacam mais como manchas claras; as paredes do quartel de Matmata mantêm todo o detalhe.
+- Vento: os cactos não balançam mais ao vento como folhas.
+- Todas as bandeiras e estandartes são iluminados como tecido (alguns eram iluminados como metal, papel ou pele).
 [ru]
-- Ремастированные материалы: грани с растянутой текстурой (под нишами, вдоль крыш) больше не выделяются светлыми пятнами; стены штаба в Матмате сохраняют всю детализацию.
+- Ветер: кактусы больше не колышутся на ветру, как листья.
+- Все флаги и знамёна освещаются как ткань (некоторые освещались как металл, бумага или кожа).
 [pl]
-- Zremasterowane materiały: ściany, na których tekstura jest rozciągnięta (pod niszami, wzdłuż dachów), nie wyróżniają się już jasnymi plamami; ściany kwatery w Matmacie zachowują pełne detale.
+- Wiatr: kaktusy nie kołyszą się już na wietrze jak liście.
+- Wszystkie flagi i sztandary są oświetlane jak tkanina (niektóre były oświetlane jak metal, papier lub skóra).

@@ -2069,7 +2069,18 @@ std::string MaterialShade(int i) {
         "    }\n"
         "    float sp = min(sMat.a * pow(saturate(dot(sN, H)), gl) * (gl + 8) / 25.1, 0.6) * abs(mtl[1].w) * sun;\n"
         "    float3 shaded = outc.rgb * lerp(1, lf, mtl[0].w) * cav + sp * lit * saturate(dot(mNs, L) * 2 + 0.3);\n"
-        "    outc.rgb = lerp(outc.rgb, shaded, saturate(fogin.a) * mFlat);\n"
+        // (all of it where the texture is stretched too: its relief and its walk are faded out there already (mFlat),
+        // the cavity and the highlight stay. Without them those faces stood out lighter than their neighbours, the
+        // polygons' edges plain: the stretched faces under a niche, along a roof, Matmata's headquarters)
+        "    float3 before = outc.rgb;\n"
+        "    outc.rgb = lerp(outc.rgb, shaded, saturate(fogin.a));\n"
+        // (tests, XBE_MATERIAL_DEBUG: 5 the stretch's fade, 6 the cavity, 7 the colour before the material, 8 the
+        // highlight, 9 the material's change to the colour (grey none, lighter brighter))
+        "    if (mtl[3].x == 5) outc.rgb = mFlat;\n"
+        "    if (mtl[3].x == 6) outc.rgb = cav;\n"
+        "    if (mtl[3].x == 7) outc.rgb = before * 4;\n"
+        "    if (mtl[3].x == 8) outc.rgb = sp * lit * 4;\n"
+        "    if (mtl[3].x == 9) outc.rgb = 0.5 + (outc.rgb - before) * 8;\n"
         "    if (mtl[3].w > 0) {\n"
         // (the layer's cover as drawn, its texture's part taken softer: the vertices' fade times the soft cover; the
         // blend eased in over the texture's cover from 60% to 85%, not switched on at 95%: blotches with hard edges)

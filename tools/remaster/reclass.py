@@ -38,11 +38,6 @@ OVERRIDES = {
     "d63f67e622630665": "sky",
     "dbfeb4ce5701b825": "sky",
     "dd2e8ae211fb8e79": "sky",
-    # the Matmata headquarters' plaster (level 14): with their surface maps, lighter patches where its faces meet and a
-    # diagonal across the roof; their remastered colour alone, lit as the game lights it
-    "1b05c3d21ff53a2b": "concrete",  # _aWall_INSIDE_a
-    "5f50ac7d273e6cc1": "concrete",  # _aWallSMACK
-    "050fb317fb41dac5": "ground",  # _aWallGeneric
 }
 
 # left as the game has them, not replaced: their line and maps out of the pack

@@ -259,9 +259,10 @@ The version installed is in `version.txt` beside the game. Unattended:
   Sokolov's among them), the profile keyboard's Delete, Done and Shift are translated (as in Polish and Portuguese: rows
   of the game's text tables past their first 4 KB were never translated), and the town in Sam Rivers' briefing is
   Тиллет throughout.
-- Remastered textures: the Matmata headquarters (Matmata by night) lit right: its plaster walls and roof keep their
-  remastered colour without the surface maps that showed lighter patches where the faces met and a diagonal across
-  the roof, and its flag is lit as cloth, not skin (light polygons over it).
+- Remastered materials: faces where the game stretches a texture (under a niche, along a roof) are shaded like the
+  faces around them: they were left without their material's shading and stood out as lighter patches with the
+  polygons' edges plain (the Matmata headquarters' walls and roof, which keep their surface maps). Its flag is lit as
+  cloth, not skin (light polygons over it).
 - The HUD: the thrown items' remastered icons (the grenades, the Teller and sticky mines, the bears) all sit in one
   place at one size, clear of how many you carry: the Teller mine's disc covered the count and the grenades touched it.
 

@@ -238,6 +238,10 @@ def patch_files(exe):
         if line.startswith("file "):
             _, sha, path = line[5:].split(" ", 2)
             out[path] = sha
+        # (what it deleted too: a file of the base it took away and this version has again is written, the base's check
+        # by its size alone would leave it missing)
+        elif line.startswith("delete "):
+            out.setdefault(line[7:], "deleted")
     return out
 
 

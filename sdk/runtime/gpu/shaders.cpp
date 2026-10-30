@@ -1647,13 +1647,16 @@ std::string GuardVertexHlsl(std::string s) {
 
 std::string ShadowAlphaHlsl(bool proj, bool blended) {
     std::string s = R"(cbuffer DC : register(b1) { float4 surf; float4 fogp; float4 fogcolor; float4 misc; };
+cbuffer VC : register(b0) { float4 c[192]; row_major float4x4 shc[4]; float4 sht[4]; float4 shv; };
 Texture2D tex0 : register(t0);
 SamplerState smp0 : register(s0);
 struct SOut { float4 pos : SV_Position; float4 tc0 : TEXCOORD0; float da : TEXCOORD1; float4 clip : SV_ClipDistance0; float back : SV_ClipDistance1; };
 void main(SOut i) {
 )";
     s += proj ? "    float2 uv = i.tc0.xy / (i.tc0.w == 0 ? 1 : i.tc0.w);\n" : "    float2 uv = i.tc0.xy;\n";
-    s += R"(    float a = tex0.Sample(smp0, uv).a;
+    // (shv.w: the mip bias for a view wider than the game's, its texels as large again: leaves and branches cut out
+    // of a smaller mip, their alpha averaged under the test, cast nothing)
+    s += R"(    float a = tex0.SampleBias(smp0, uv, shv.w).a;
     int f = (int)misc.y;
     int v = (int)round(a * 255), r = (int)misc.x;
     bool ok = f == 0 ? false : f == 1 ? v < r : f == 2 ? v == r : f == 3 ? v <= r : f == 4 ? v > r : f == 5 ? v != r : f == 6 ? v >= r : true;

@@ -78,6 +78,9 @@ inline uint64_t g_vsc_changes = 0;
 // the screen's view widened by a Field of View past the game's (its view window times this): the weapon in hand drawn
 // as the game's view would (its clip space times this about the middle)
 inline std::atomic<float> g_weapon_scale{1.0f};
+// the Field of View setting's widening of the play's view (as g_weapon_scale, but whatever the camera of the moment):
+// the shadow maps grow with it
+inline std::atomic<float> g_fov_widen{1.0f};
 // the shadows' debug view (XBE_SHADOW_DEBUG at the start, "sdebug N" on the control channel): 0 none
 inline std::atomic<int> g_shadow_debug{-1};
 // the reflections' debug view (XBE_SSR_DEBUG at the start, "ssrdebug N" on the control channel): 0 none

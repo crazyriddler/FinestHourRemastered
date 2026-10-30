@@ -2,23 +2,37 @@
 # update release's update.json). Only this update's changes: written anew for each update. One section a language
 # ([en] needed; the others fall back to it), its lines as the game shows them. UTF-8.
 [en]
-- Wind: the cacti no longer sway in the wind like leaves.
-- Every flag and banner is lit as cloth (some were lit as metal, paper or skin).
+- Shadows: with a wider Field of View (90 to 110) the finer shadows (trees, buildings) no longer vanish near you.
+- Main menu: the battle behind the menu plays under the music, as on the PlayStation 2 (PC Settings > General > Menu Ambience).
+- Subtitles: Subtitle Position (lower), Subtitle Size and Wide Subtitles in PC Settings > Display.
+- Movies: a movie in the mods\movies folder plays in place of the game's own of the same name.
 [fr]
-- Vent : les cactus ne se balancent plus au vent comme des feuilles.
-- Tous les drapeaux et bannières sont éclairés comme du tissu (certains l'étaient comme du métal, du papier ou de la peau).
+- Ombres : avec un champ de vision plus large (90 à 110), les ombres fines (arbres, bâtiments) ne disparaissent plus près de vous.
+- Menu principal : la bataille derrière le menu se fait entendre sous la musique, comme sur PlayStation 2 (Options PC > Général > Ambiance du menu).
+- Sous-titres : Position des sous-titres (plus bas), Taille des sous-titres et Sous-titres larges dans Options PC > Affichage.
+- Films : un film placé dans le dossier mods\movies est lu à la place de celui du jeu portant le même nom.
 [it]
-- Vento: i cactus non ondeggiano più al vento come foglie.
-- Tutte le bandiere e gli stendardi sono illuminati come stoffa (alcuni lo erano come metallo, carta o pelle).
+- Ombre: con un campo visivo più ampio (da 90 a 110) le ombre sottili (alberi, edifici) non spariscono più vicino a te.
+- Menu principale: la battaglia dietro il menu si sente sotto la musica, come su PlayStation 2 (Opzioni PC > Generale > Atmosfera del menu).
+- Sottotitoli: Posizione sottotitoli (più in basso), Dimensione sottotitoli e Sottotitoli larghi in Opzioni PC > Schermo.
+- Filmati: un filmato nella cartella mods\movies viene riprodotto al posto di quello del gioco con lo stesso nome.
 [es]
-- Viento: los cactus ya no se mueven con el viento como si fueran hojas.
-- Todas las banderas y estandartes se iluminan como tela (algunas se iluminaban como metal, papel o piel).
+- Sombras: con un campo de visión más amplio (de 90 a 110) las sombras finas (árboles, edificios) ya no desaparecen cerca de ti.
+- Menú principal: la batalla tras el menú suena bajo la música, como en PlayStation 2 (Ajustes de PC > General > Ambiente del menú).
+- Subtítulos: Posición de los subtítulos (más abajo), Tamaño de los subtítulos y Subtítulos anchos en Ajustes de PC > Pantalla.
+- Vídeos: un vídeo en la carpeta mods\movies se reproduce en lugar del del juego con el mismo nombre.
 [pt]
-- Vento: os cactos não balançam mais ao vento como folhas.
-- Todas as bandeiras e estandartes são iluminados como tecido (alguns eram iluminados como metal, papel ou pele).
+- Sombras: com um campo de visão maior (de 90 a 110) as sombras finas (árvores, prédios) não somem mais perto de você.
+- Menu principal: a batalha atrás do menu toca sob a música, como no PlayStation 2 (Opções do PC > Geral > Ambiente do menu).
+- Legendas: Posição das legendas (mais abaixo), Tamanho das legendas e Legendas largas em Opções do PC > Tela.
+- Vídeos: um vídeo na pasta mods\movies é exibido no lugar do vídeo do jogo com o mesmo nome.
 [ru]
-- Ветер: кактусы больше не колышутся на ветру, как листья.
-- Все флаги и знамёна освещаются как ткань (некоторые освещались как металл, бумага или кожа).
+- Тени: при более широком поле зрения (от 90 до 110) тонкие тени (деревья, здания) больше не исчезают рядом с вами.
+- Главное меню: звуки боя звучат под музыку меню, как на PlayStation 2 (Настройки ПК > Общие > Звуки боя в меню).
+- Субтитры: Положение субтитров (ниже), Размер субтитров и Широкие субтитры в Настройки ПК > Экран.
+- Видео: видео из папки mods\movies воспроизводится вместо одноимённого видео игры.
 [pl]
-- Wiatr: kaktusy nie kołyszą się już na wietrze jak liście.
-- Wszystkie flagi i sztandary są oświetlane jak tkanina (niektóre były oświetlane jak metal, papier lub skóra).
+- Cienie: przy szerszym polu widzenia (od 90 do 110) drobne cienie (drzewa, budynki) nie znikają już w pobliżu.
+- Menu główne: odgłosy bitwy grają pod muzyką menu, jak na PlayStation 2 (Opcje PC > Ogólne > Odgłosy bitwy w menu).
+- Napisy: Pozycja napisów (niżej), Rozmiar napisów i Szerokie napisy w Opcje PC > Ekran.
+- Filmy: film z folderu mods\movies jest odtwarzany zamiast filmu gry o tej samej nazwie.

@@ -92,8 +92,11 @@ void Group(std::vector<Box>& boxes) {
     }
 }
 
+void SubtitlesFrame();
+
 void NewFrame(uint64_t frame) {
     g_frame = frame;
+    SubtitlesFrame();
     g_placed.clear();
     g_groups = std::move(g_pics);
     g_pics.clear();
@@ -332,6 +335,93 @@ void Shrink(const gpu::Draw2D& d, Kind kind, const Box& b, bool text, gpu::Place
     ShrinkAbout(p, s, ax * k + line, ay);
 }
 
+// The subtitles (Settings::subtitle_position, subtitle_size, subtitle_wide). The game writes them as lines of 19
+// console pixels from y 329 down, left aligned in a column half the 4:3 screen wide, each line's text one draw (the
+// speaker's name a draw of its own over its first). Their lines are known from the frame before (their widths): laid
+// out again from them, smaller about the column's middle, two on a row on a wide screen (the second after the
+// first, the rows' block about the screen's middle), lower with the last row by the screen's bottom. A line the
+// frame before did not have (a new subtitle's first frame) is left out for that frame.
+constexpr float kSubTop = 329, kSubLine = 19, kSubBottom = 450;
+constexpr float kSubSizes[] = {1.0f, 0.85f, 0.7f};
+constexpr int kSubLines = 8;
+struct SubLine {
+    float x0 = 0, w = 0;  // its left edge, its widest draw (its text's)
+    float widths[4] = {};  // its draws' widths (the text's, the speaker's name)
+    int n = 0;
+};
+SubLine g_sub_now[kSubLines], g_sub_before[kSubLines];
+
+void SubtitlesFrame() {
+    for (int k = 0; k < kSubLines; k++) g_sub_before[k] = g_sub_now[k], g_sub_now[k] = {};
+}
+
+// a line of the subtitles: its index from the top
+bool SubtitleLine(const gpu::Draw2D& d, int& k) {
+    if ((d.tag & 0xFF) != kHud || (d.tag & (kPixels | kInText)) || g_paused || g_front_end || !d.bounded) return false;
+    if (std::fabs(d.y1 - d.y0 - kSubLine) > 0.6f) return false;
+    float f = (d.y0 - kSubTop) / kSubLine;
+    k = int(std::lround(f));
+    return k >= 0 && k < kSubLines && std::fabs(f - float(k)) < 0.02f;
+}
+
+void Subtitles(const gpu::Draw2D& d, gpu::Place2D& p, bool& placed) {
+    const cod::Settings& c = cod::Get();
+    int k;
+    if (!SubtitleLine(d, k)) return;
+    const float w = d.x1 - d.x0;
+    SubLine& now = g_sub_now[k];
+    if (now.n == 0) now.x0 = d.x0;
+    now.x0 = std::min(now.x0, d.x0), now.w = std::max(now.w, w);
+    if (now.n < 4) now.widths[now.n++] = w;
+    const float s = kSubSizes[std::min<uint32_t>(c.subtitle_size, 2)];
+    const bool lower = c.subtitle_position == 1, wide = c.subtitle_wide && d.widen > 1.2f;
+    if (s == 1.0f && !lower && !wide) return;
+    // the frame before's lines: this one among them, as it was
+    const SubLine* b = g_sub_before;
+    bool known = b[k].n > 0 && std::fabs(b[k].x0 - d.x0) < 1.0f;
+    if (known) {
+        known = false;
+        for (int i = 0; i < b[k].n; i++) known |= std::fabs(b[k].widths[i] - w) < 0.3f;
+    }
+    if (!known) {
+        p = {0, 0, 0, 0};
+        placed = true;
+        return;
+    }
+    int n = 0;
+    float widest = 0;
+    while (n < kSubLines && b[n].n > 0) widest = std::max(widest, b[n].w), n++;
+    const bool pairs = wide && n > 1;
+    const int rows = pairs ? (n + 1) / 2 : n, row = pairs ? k / 2 : k;
+    // a space between a row's two lines, the screen's middle (the draws' x are narrowed by the widening: placed as
+    // the game's text is); the game's column is a little right of it, its rows' wider block goes about the middle
+    const bool narrowed = !(d.tag & kPixels) && d.widen > 1.0f;
+    const float gap = narrowed ? 6.0f / d.widen : 6.0f;
+    const float centre = pairs ? float(d.gw) * 0.5f / (narrowed ? d.widen : 1.0f) : b[0].x0 + widest * 0.5f;
+    float x;
+    if (pairs) {
+        // placed about the screen's middle whatever side of it the game's column was (Place: by its box, a column
+        // left or right of the middle went to that edge)
+        const float narrow = narrowed ? 1.0f / d.widen : 1.0f;
+        p = {1, float(d.gw) * 0.5f * (1 - narrow), 1, 0};
+        float block = 0;
+        for (int r = 0; r < rows; r++) {
+            int a = r * 2;
+            block = std::max(block, b[a].w + (a + 1 < n ? gap + b[a + 1].w : 0.0f));
+        }
+        x = centre - block * s * 0.5f + ((k & 1) ? (b[k - 1].w + gap) * s : 0.0f);
+    } else {
+        x = centre - widest * s * 0.5f;
+    }
+    const float top = lower ? kSubBottom - float(rows) * kSubLine * s : kSubTop;
+    const float y = top + float(row) * kSubLine * s, y0 = kSubTop + float(k) * kSubLine;
+    // x' = s x + bx, y' = s y + by, then the placement
+    const float bx = x - d.x0 * s, by = y - y0 * s;
+    p.ox += bx * p.sx, p.sx *= s;
+    p.oy += by * p.sy, p.sy *= s;
+    placed = true;
+}
+
 bool Place2D(const gpu::Draw2D& d, gpu::Place2D& p);
 
 // placed, then a main menu row of a language of the port's own moved to the middle (menu_mouse.cpp RowShift)
@@ -375,6 +465,7 @@ bool Place2D(const gpu::Draw2D& d, gpu::Place2D& p) {
         p = {};
     }
     Shrink(d, kind, truth, text, p);
+    Subtitles(d, p, placed);
     return placed || p.sx != 1 || p.sy != 1;
 }
 

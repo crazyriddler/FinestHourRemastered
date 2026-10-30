@@ -7,6 +7,7 @@
 #include <fstream>
 #include <map>
 
+#include "app/app.h"
 #include "kernel/disc.h"
 #include "kernel/kernel.h"
 #include "kernel/memory.h"
@@ -277,6 +278,18 @@ Target Resolve(const std::string& xbox_path, uint32_t root_handle) {
     // no Xbox name holds ':', and fs::path would take "D:" as a host drive
     for (auto& part : parts)
         if (part.find(':') != std::string::npos) return {};
+    // the game's movies replaced by the player's own: mods\movies\<name>.bik beside the executable (its language's
+    // folders as on the disc) for SHELL\MOVIES\<name>.bik, read in its place (a movie of another version of the
+    // game, its sound or its cut, which the port does not ship)
+    if (best->first == kCdRom && parts.size() >= 3 && Upper(parts[0]) == "SHELL" && Upper(parts[1]) == "MOVIES") {
+        fs::path mod = app::ExeDir() / "mods" / "movies";
+        for (size_t i = 2; i < parts.size(); i++) mod /= parts[i];
+        std::error_code ec;
+        if (fs::is_regular_file(mod, ec)) {
+            LOG_FIRST(50, "files: %s from %s", p.c_str(), mod.string().c_str());
+            return {mod.string()};
+        }
+    }
     if (best->first == kCdRom)
         if (const Disc* disc = MountedDisc()) return {{}, true, disc->Find(parts)};
     return {MatchCase(best->second, parts).string()};

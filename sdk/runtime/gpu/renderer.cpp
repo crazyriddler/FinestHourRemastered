@@ -1185,6 +1185,8 @@ private:
                       const DrawTextures& stages, uint32_t prim, uint32_t start, uint32_t count, const uint8_t* indices);
     void ResolveLight();
     bool DrawShadowMap();
+    float ShadowScale() const;
+    uint32_t shadow_base_tile_ = 0;  // the quality's own tile size (shadow_q_'s grown with a wider Field of View)
     // The casters' draws again (DrawShadowMap's, DrawGuard's: which pipeline, the instances, the guard's viewport by
     // their depth range): from first to last into l, its own state alone (another thread's list, or the main list,
     // the command state cmd_ left behind). DrawCasters shares them out between threads when there are many
@@ -6694,6 +6696,19 @@ void Renderer::ResolveLight() {
         mf = g_material_frame;
     }
     shadow_q_ = shadow::QualityFor(app::Get().shadow_quality, mf.units);
+    // A Field of View wider than the game's: the cascades' slices are as much wider, their texels as much larger, the
+    // fine shadows (leaves, a building's edges) blurred away (Issue #46). The tiles grow with it (by 256s, to 4096 at
+    // most: the setting's, not the camera's of the moment, the atlas made once); what is left over is made up by the
+    // filter's radius and the cut outs' mip bias in DrawShadowMap and ShadowMask (ShadowScale)
+    shadow_base_tile_ = shadow_q_.tile;
+    if (const float w = g_fov_widen.load(); w > 1.0f && shadow_q_.tile)
+        shadow_q_.tile = std::max(shadow_q_.tile, std::min(4096u, (uint32_t(std::ceil(shadow_q_.tile * w / 256.0f)) * 256u)));
+}
+
+// a texel's size in the cascades over the size it has at the game's own Field of View and the setting's tiles
+float Renderer::ShadowScale() const {
+    if (!shadow_q_.tile || !shadow_base_tile_) return 1.0f;
+    return std::clamp(g_weapon_scale.load() * float(shadow_base_tile_) / float(shadow_q_.tile), 0.25f, 4.0f);
 }
 
 rhi::Resource* Renderer::LensDirt(const std::string& text, rhi::GpuVa cb, uint32_t w, uint32_t h) {
@@ -7057,6 +7072,9 @@ bool Renderer::DrawShadowMap() {
         tail.sht[c][0] = 0.5f, tail.sht[c][1] = 0.5f, tail.sht[c][2] = ix - 0.5f, tail.sht[c][3] = 0.5f - iy;
     }
     tail.shv[0] = 1 / cam.p00, tail.shv[1] = 1 / cam.p11;
+    // the alpha tested casters' mip bias: texels larger than at the game's Field of View (ShadowScale), the cut outs
+    // sampled as there (their alpha averaged under the test at a smaller mip, the leaves cast nothing: Issue #46)
+    tail.shv[3] = -std::log2(std::max(1.0f, ShadowScale()));
     static_assert(sizeof(Tail) <= kShadowConstantsTail);
     for (const Caster& c : casters_) std::memcpy(c.tail, &tail, sizeof(tail));
     ShadowTimestamp(0);
@@ -8330,7 +8348,7 @@ rhi::Resource* Renderer::ShadowMask(Target& rt, Target& ds) {
         {float(rt.w), float(rt.h), 1.0f / rt.w, 1.0f / rt.h},
         {light_.direct, light_.ambient, q.distance * 0.82f, q.distance},
         {cascades_.far_z[0], cascades_.far_z[1], cascades_.far_z[2], cascades_.far_z[3]},
-        {float(cascades_.count), float(q.tile * 2), q.softness, float(q.taps)},
+        {float(cascades_.count), float(q.tile * 2), q.softness / ShadowScale(), float(q.taps)},
         {cascades_.texel[0], cascades_.texel[1], cascades_.texel[2], cascades_.texel[3]},
         {},
         {cam_min_z_, cam_max_z_ - cam_min_z_, ShadowDebug(),

@@ -367,6 +367,15 @@ std::vector<Page> BuildPages() {
                                    [&c] { return int(std::min<uint32_t>(c.hud_size, 2)); },
                                    [&c](int i) { c.hud_size = uint32_t(i); },
                                    "The compass, the stance, the crosshair, health and ammunition smaller, each in its place."));
+    display.items.push_back(Choice("Subtitle Position", {"Original", "Lower"},
+                                   [&c] { return int(std::min<uint32_t>(c.subtitle_position, 1)); },
+                                   [&c](int i) { c.subtitle_position = uint32_t(i); },
+                                   "Lower puts the subtitles near the bottom of the screen, clear of what is in the middle."));
+    display.items.push_back(Choice("Subtitle Size", {"Original", "Small", "Smaller"},
+                                   [&c] { return int(std::min<uint32_t>(c.subtitle_size, 2)); },
+                                   [&c](int i) { c.subtitle_size = uint32_t(i); }, "The subtitles' text smaller."));
+    display.items.push_back(Toggle("Wide Subtitles", &c.subtitle_wide,
+                                   "On a wide screen, the subtitles in longer lines: two of the game's lines on each."));
     display.items.push_back(Toggle("Hit Markers", &c.hud_hit_markers,
                                    "The marks when your shots hit and from where you are being hit."));
     display.items.push_back(Toggle("Compass", &c.hud_compass, "The compass and its objective star."));
@@ -519,6 +528,8 @@ std::vector<Page> BuildPages() {
 
     Page general{"GENERAL", {}};
     general.items.push_back(Toggle("Skip Intros", &c.skip_intros, "Straight to the title screen."));
+    general.items.push_back(Toggle("Menu Ambience", &c.menu_ambience,
+                                   "The sound of battle behind the main menu's music, as on the PlayStation 2."));
     general.items.push_back(Toggle("Check for Updates", &s.check_updates,
                                    "At the start, looks on GitHub for a newer update and offers it in the main menu (never delays the start)."));
     {

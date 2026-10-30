@@ -10,6 +10,7 @@ namespace cod {
 struct Settings {
     // general
     bool skip_intros = true;   // publisher and studio logos and the opening movie
+    bool menu_ambience = true; // the main menu's battle (its backdrop movie's own sound, which the Xbox kept muted under the music)
     bool developer = false;    // the testers' keys: F9 marks a place (a screenshot and where, in logs/marks), F3 the threads
     // display
     bool widescreen = true;    // the screen at the output's aspect (Hor+), 2D kept in proportion: set each frame from the output
@@ -24,6 +25,10 @@ struct Settings {
     bool hud_crosshair = true;
     uint32_t hud_size = 2;        // 0 the original's, 1 small, 2 smaller: each element where it was (game/hud.cpp);
                                   // a graphics preset sets it too (the Original preset the original's, the others smaller)
+    // the subtitles (game/hud.cpp Subtitles): where, how large, and two of the game's lines on one on a wide screen
+    uint32_t subtitle_position = 0;  // 0 the game's, 1 lower: the last line by the screen's bottom
+    uint32_t subtitle_size = 0;      // 0 the game's, 1 85%, 2 70%
+    bool subtitle_wide = false;
     // input
     bool keyboard_mouse = true;
     uint32_t mouse_sensitivity = 100;  // percent

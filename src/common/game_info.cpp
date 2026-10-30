@@ -561,6 +561,8 @@ void Command(const std::string& line_in) {
         if (std::sscanf(line.c_str(), "ssrdebug %d", &on) == 1) gpu::g_ssr_debug = on, LOGR("reflections: debug view %d", on);
         if (std::sscanf(line.c_str(), "sdebug %d", &on) == 1) gpu::g_shadow_debug = on, LOGR("shadows: debug view %d", on);
         if (std::sscanf(line.c_str(), "weaponwhole %d", &on) == 1) gpu::g_weapon_whole = on;
+        // tests: Menu Ambience as the settings would change it (game/intro.cpp follows it at once)
+        if (std::sscanf(line.c_str(), "menuambience %d", &on) == 1) cod::Get().menu_ambience = on != 0;
         // tests: the prompts as for a controller in hand or the keyboard (a test's pad presses come after the check)
         if (line == "prompts pad") cod::prompts::PadUsed();
         if (line == "prompts keys") cod::prompts::KeyboardUsed();
@@ -806,6 +808,7 @@ const app::GameInfo app::kGame = {
     .options =
         {
             {"skip_intros", &cod::Get().skip_intros, nullptr},
+            {"menu_ambience", &cod::Get().menu_ambience, nullptr},
             {"developer", &cod::Get().developer, nullptr, true},
             {"tv_frame", &cod::Get().tv_frame, nullptr},
             {"fov", nullptr, &cod::Get().fov},
@@ -815,6 +818,9 @@ const app::GameInfo app::kGame = {
             {"hud_stance", &cod::Get().hud_stance, nullptr},
             {"hud_crosshair", &cod::Get().hud_crosshair, nullptr},
             {"hud_size", nullptr, &cod::Get().hud_size},
+            {"subtitle_position", nullptr, &cod::Get().subtitle_position},
+            {"subtitle_size", nullptr, &cod::Get().subtitle_size},
+            {"subtitle_wide", &cod::Get().subtitle_wide, nullptr},
             {"keyboard_mouse", &cod::Get().keyboard_mouse, nullptr},
             {"mouse_sensitivity", nullptr, &cod::Get().mouse_sensitivity},
             {"invert_mouse", &cod::Get().invert_mouse, nullptr},

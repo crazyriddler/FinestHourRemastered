@@ -56,12 +56,11 @@ bool PlayerView() {
 float FovScale(float x) {
     float widest = g_widest.load();
     if (x > widest) g_widest = widest = x;
-    float k = 1.0f;
-    if (Get().fov && widest > 0 && !FrontEnd() && PlayerView()) {
-        constexpr float kHalfDegree = 3.14159265f / 360.0f;
-        k = std::tan(float(Get().fov) * kHalfDegree) / widest;
-    }
+    constexpr float kHalfDegree = 3.14159265f / 360.0f;
+    const float setting = Get().fov && widest > 0 ? std::tan(float(Get().fov) * kHalfDegree) / widest : 1.0f;
+    const float k = !FrontEnd() && PlayerView() ? setting : 1.0f;
     gpu::g_weapon_scale = k;
+    gpu::g_fov_widen = setting;
     return k;
 }
 

@@ -142,6 +142,8 @@ A native Linux build may come later: the renderer now runs on Vulkan too, which 
   brightness; **HDR Peak Brightness** (the display's peak by default) and **HDR Game Brightness**.
 - **HUD**: its **Size** (Original, Small, Smaller: each element in its place), and the **Hit Markers**, the
   **Compass**, the **Stance** and the **Crosshair** can each be hidden.
+- **Subtitles**: **Subtitle Position** (Lower: near the bottom of the screen), **Subtitle Size** and **Wide
+  Subtitles** (on a wide screen, longer lines: two of the game's lines on each).
 
 ### Graphics presets
 **Very High** (everything on), **High**, **Medium**, **Low** and **Original** set every graphics setting at once; any
@@ -203,6 +205,8 @@ game's own look and textures. The render scale is never part of a preset: it sta
   zone, sensitivity and look acceleration settings.
 - **Button Prompts** follow the device in hand: keys, Xbox, PlayStation or Switch buttons.
 - **Skip Intros**, **Language** (English, French, Italian, Spanish, Portuguese, Russian, Polish).
+- **Menu Ambience**: the battle behind the main menu (wind, guns, explosions far off) under its music, as on the
+  PlayStation 2 (the Xbox kept the menu backdrop's sound muted).
 - **Sound**: Stereo or **5.1 Surround** (PC Settings > General): the game mixes for Dolby Digital as on a console
   connected to a surround receiver, the battle placed around you on the front, centre, back and subwoofer.
 
@@ -212,6 +216,12 @@ All off by default, in **PC Settings > Cheats**:
 - **God Mode**: no damage.
 - **Infinite Ammo**: the weapons' ammunition, grenades and mines never run out.
 - **No Reload**: the magazine of the weapon in hand stays full.
+
+### Your own movies
+A Bink movie in a `mods\movies` folder beside `CODFH.exe` is played in place of the game's own of the same name
+(`mods\movies\Making1.bik` for the first making-of; a language's movies in its folder, `mods\movies\SPANISH\Act_1.bik`).
+The port ships no movies of its own: this is for your own version of one, as a Bink 1 file (RAD Video Tools makes
+them) at 640x480 like the game's.
 
 ## Controls
 

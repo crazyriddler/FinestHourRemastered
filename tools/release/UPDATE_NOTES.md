@@ -268,6 +268,18 @@ The version installed is in `version.txt` beside the game. Unattended:
   cloth, not skin (light polygons over it).
 - The HUD: the thrown items' remastered icons (the grenades, the Teller and sticky mines, the bears) all sit in one
   place at one size, clear of how many you carry: the Teller mine's disc covered the count and the grenades touched it.
+- Shadows with a wider Field of View (90 to 110 degrees): the shadow maps grow with the view, so the trees' and
+  the buildings' finer shadows no longer blur away or vanish near you (issue #46). At the game's own field of view
+  nothing changes.
+- Main menu: the battle behind the menu (wind, guns, explosions far off) plays under the music, as on the PlayStation
+  2: the menu's backdrop movie has it, but the Xbox kept it muted. PC Settings > General > Menu Ambience turns it off
+  (issue #44).
+- Subtitles: three new options in PC Settings > Display (issue #43): Subtitle Position (Lower puts them near the
+  bottom of the screen, clear of the item prompts in the middle), Subtitle Size, and Wide Subtitles (on a wide screen,
+  longer lines: two of the game's lines on each).
+- Movies: a movie in the `mods\movies` folder beside the game is played in place of the game's own of the same name
+  (`mods\movies\Making1.bik` for the first making-of), for anyone who wants to use their own version of one
+  (issue #45).
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

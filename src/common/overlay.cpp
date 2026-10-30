@@ -366,7 +366,7 @@ std::vector<Page> BuildPages() {
     display.items.push_back(Choice("HUD Size", {"Original", "Small", "Smaller"},
                                    [&c] { return int(std::min<uint32_t>(c.hud_size, 2)); },
                                    [&c](int i) { c.hud_size = uint32_t(i); },
-                                   "The compass, the stance, the crosshair, health and ammunition smaller, each in its place."));
+                                   "The HUD smaller, each piece in its place: the compass, the stance, the crosshair, health, ammunition, and the hints, messages and pickups with their icons."));
     display.items.push_back(Choice("Subtitle Position", {"Original", "Lower"},
                                    [&c] { return int(std::min<uint32_t>(c.subtitle_position, 1)); },
                                    [&c](int i) { c.subtitle_position = uint32_t(i); },

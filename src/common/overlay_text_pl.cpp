@@ -53,7 +53,7 @@ const PtRow kPlRows[] = {
     {"HUD Size", "Rozmiar HUD"},
     {"Small", "Mały"},
     {"Smaller", "Mniejszy"},
-    {"The compass, the stance, the crosshair, health and ammunition smaller, each in its place.", "Kompas, postawa, celownik, zdrowie i amunicja mniejsze, każde na swoim miejscu."},
+    {"The HUD smaller, each piece in its place: the compass, the stance, the crosshair, health, ammunition, and the hints, messages and pickups with their icons.", "Mniejszy HUD, każdy element na swoim miejscu: kompas, postawa, celownik, zdrowie, amunicja oraz podpowiedzi, komunikaty i przedmioty do podniesienia z ich ikonami."},
     {"Menu Ambience", "Odgłosy bitwy w menu"},
     {"The sound of battle behind the main menu's music, as on the PlayStation 2.", "Odgłosy bitwy pod muzyką menu głównego, jak na PlayStation 2."},
     {"Subtitle Position", "Pozycja napisów"},

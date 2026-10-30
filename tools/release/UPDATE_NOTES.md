@@ -280,6 +280,11 @@ The version installed is in `version.txt` beside the game. Unattended:
 - Movies: a movie in the `mods\movies` folder beside the game is played in place of the game's own of the same name
   (`mods\movies\Making1.bik` for the first making-of), for anyone who wants to use their own version of one
   (issue #45).
+- HUD Size now makes the rest of the HUD smaller too, each piece in its place: the hints at the top with their key
+  and button pictures, the messages, and the item you can pick up with its name under the crosshair (issue #43).
+  Read as text, they shrink a little less than the compass and the meters; the subtitles keep their own Subtitle
+  Size, the squad's names over their heads and the hit markers keep theirs. The subtitles' options now work in the
+  vehicles too (Come Out Fighting, the tanks), where the game writes them higher.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

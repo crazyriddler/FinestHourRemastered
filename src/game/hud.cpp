@@ -290,17 +290,62 @@ void ShrinkAbout(gpu::Place2D& p, float s, float ax, float ay) {
     p.sy *= s, p.oy = p.oy * s + ay * (1 - s);
 }
 
+bool SubtitleLine(const gpu::Draw2D& d, int& k);
+
+// The HUD's text and what stands loose by it (Issue #43: the hints at the top and their key pictures, the messages,
+// the item to pick up and its name under the crosshair), smaller with the HUD's size but less (kHudTextSizes: read
+// as text). A line goes with its row of the frame before (a hint's pieces and its key's picture, a paragraph's lines),
+// about the row's edge by the screen's side it is on and its top or bottom by its third of the screen; a row about
+// the middle of the screen goes about the screen's centre, as the crosshair, with the pickup's picture over it. The
+// subtitles have their own size (Subtitles), the squad's names over their heads and the hit markers keep theirs.
+constexpr float kHudTextSizes[] = {1.0f, 0.85f, 0.75f};
+constexpr float kMiddleReach = 120;  // console pixels above and below the screen's centre: the pickup's place
+constexpr uint64_t kHitMarkerTex[] = {0x0e30e882653a1b13, 0x4287efaf571ca472};
+
+void ShrinkLoose(const gpu::Draw2D& d, const Box& b, float s, gpu::Place2D& p) {
+    int line_k;
+    if (SubtitleLine(d, line_k)) return;
+    float w = float(d.gw), h = float(d.gh), k = d.widen > 1.0f ? 1.0f / d.widen : 1.0f;
+    float cx = (b.x0 + b.x1) * 0.5f, cy = (b.y0 + b.y1) * 0.5f;
+    Box r = b;
+    for (const Box& row : g_rows)
+        if (cx >= row.x0 - 2 && cx <= row.x1 + 2 && cy >= row.y0 - 2 && cy <= row.y1 + 2 && !row.hud) {
+            r = row;
+            break;
+        }
+    int side = Side(r.x0, r.x1, w);
+    float rcy = (r.y0 + r.y1) * 0.5f, ax, ay;
+    if (side == 0 && std::fabs(rcy - h * 0.5f) < kMiddleReach) {
+        ax = w * 0.5f, ay = h * 0.5f;
+    } else {
+        ax = side < 0 ? r.x0 : side > 0 ? r.x1 : (r.x0 + r.x1) * 0.5f;
+        ay = rcy < h / 3 ? r.y0 : rcy > h * 2 / 3 ? r.y1 : rcy;
+    }
+    float line = side < 0 ? 0 : side > 0 ? w * (1 - k) : w * 0.5f * (1 - k);
+    ShrinkAbout(p, s, ax * k + line, ay);
+}
+
 void Shrink(const gpu::Draw2D& d, Kind kind, const Box& b, bool text, gpu::Place2D& p) {
     uint32_t size = std::min<uint32_t>(cod::Get().hud_size, 2);
-    if (!size || (d.tag & 0xFF) != kHud || (d.tag & kInText) || g_paused || g_front_end) return;
+    if (!size || (d.tag & 0xFF) != kHud || g_paused || g_front_end) return;
     float s = kHudSizes[size], w = float(d.gw), h = float(d.gh), k = d.widen > 1.0f ? 1.0f / d.widen : 1.0f;
+    const float st = kHudTextSizes[size];
+    if (d.tag & kInText) {
+        // a key's or button's picture in a hint's line: with its line (its true place, as Place found it)
+        if (!d.bounded) return;
+        float cs = (d.x0 + d.x1) * 0.5f, ct = d.widen > 1.0f ? cs * d.widen : cs;
+        ShrinkLoose(d, Box{ct, d.y0, ct, d.y1, true}, st, p);
+        return;
+    }
     if (kind == kCentred) {
-        // the crosshair's pieces and the friend's name beside it
+        // the crosshair's pieces and the friend's name beside it; the rest about the middle (the item to pick up)
         if (Listed(kCrosshairTex, d.tex) || (text && (d.color & 0xFFFFFF) == 0x00FF3F)) ShrinkAbout(p, s, w * 0.5f, h * 0.5f);
+        else if (int line_k; !Listed(kHitMarkerTex, d.tex) && !(text && SubtitleLine(d, line_k)))
+            ShrinkAbout(p, st, w * 0.5f, h * 0.5f);  // (a subtitle's first line by the middle: in a vehicle)
         return;
     }
     const bool own = !text && Listed(kGroupTex, d.tex);  // the HUD's own pictures, whatever their size
-    if (kind != kPiece || (!own && (b.x1 - b.x0 > kLargest || b.y1 - b.y0 > kLargest))) return;
+    if (kind != kPiece || (!own && !text && (b.x1 - b.x0 > kLargest || b.y1 - b.y0 > kLargest))) return;
     // its element: the groups of pictures it is near, grown by any near them. The rest goes with the group it lies
     // inside (the ammunition's numbers): a line beside the HUD (a subtitle's speaker by the stance) keeps its size
     std::vector<Box> now = g_pics;
@@ -315,7 +360,10 @@ void Shrink(const gpu::Draw2D& d, Kind kind, const Box& b, bool text, gpu::Place
                 if (!inside && (follow ? Near(b, g, 0)
                                        : b.x0 >= g.x0 - kIn && b.x1 <= g.x1 + kIn && b.y0 >= g.y0 - kIn && b.y1 <= g.y1 + kIn))
                     e = g, inside = true;
-        if (!inside) return;
+        if (!inside) {
+            if (!follow && !Listed(kHitMarkerTex, d.tex)) ShrinkLoose(d, b, st, p);
+            return;
+        }
     }
     for (bool grew = true; grew;) {
         grew = false;
@@ -336,8 +384,9 @@ void Shrink(const gpu::Draw2D& d, Kind kind, const Box& b, bool text, gpu::Place
 }
 
 // The subtitles (Settings::subtitle_position, subtitle_size, subtitle_wide). The game writes them as lines of 19
-// console pixels from y 329 down, left aligned in a column half the 4:3 screen wide, each line's text one draw (the
-// speaker's name a draw of its own over its first). Their lines are known from the frame before (their widths): laid
+// console pixels down from the speaker's name (y 329 on foot, higher in a vehicle: 285.8 in Come Out Fighting's
+// half-track), left aligned in a column half the 4:3 screen wide, each line's text one draw (the speaker's name, in
+// its green, a draw of its own over its first: the column's top, kept from the last one seen). Their lines are known from the frame before (their widths): laid
 // out again from them, smaller about the column's middle, two on a row on a wide screen (the second after the
 // first, the rows' block about the screen's middle), lower with the last row by the screen's bottom. A line the
 // frame before did not have (a new subtitle's first frame) is left out for that frame.
@@ -350,6 +399,8 @@ struct SubLine {
     int n = 0;
 };
 SubLine g_sub_now[kSubLines], g_sub_before[kSubLines];
+float g_sub_top = kSubTop;
+constexpr uint32_t kSpeaker = 0x29FF39;  // the speaker's name
 
 void SubtitlesFrame() {
     for (int k = 0; k < kSubLines; k++) g_sub_before[k] = g_sub_now[k], g_sub_now[k] = {};
@@ -359,7 +410,8 @@ void SubtitlesFrame() {
 bool SubtitleLine(const gpu::Draw2D& d, int& k) {
     if ((d.tag & 0xFF) != kHud || (d.tag & (kPixels | kInText)) || g_paused || g_front_end || !d.bounded) return false;
     if (std::fabs(d.y1 - d.y0 - kSubLine) > 0.6f) return false;
-    float f = (d.y0 - kSubTop) / kSubLine;
+    if ((d.color & 0xFFFFFF) == kSpeaker) g_sub_top = d.y0;
+    float f = (d.y0 - g_sub_top) / kSubLine;
     k = int(std::lround(f));
     return k >= 0 && k < kSubLines && std::fabs(f - float(k)) < 0.02f;
 }
@@ -413,8 +465,8 @@ void Subtitles(const gpu::Draw2D& d, gpu::Place2D& p, bool& placed) {
     } else {
         x = centre - widest * s * 0.5f;
     }
-    const float top = lower ? kSubBottom - float(rows) * kSubLine * s : kSubTop;
-    const float y = top + float(row) * kSubLine * s, y0 = kSubTop + float(k) * kSubLine;
+    const float top = lower ? kSubBottom - float(rows) * kSubLine * s : g_sub_top;
+    const float y = top + float(row) * kSubLine * s, y0 = g_sub_top + float(k) * kSubLine;
     // x' = s x + bx, y' = s y + by, then the placement
     const float bx = x - d.x0 * s, by = y - y0 * s;
     p.ox += bx * p.sx, p.sx *= s;

@@ -140,7 +140,8 @@ A native Linux build may come later: the renderer now runs on Vulkan too, which 
 - **Brightness**, **FPS Counter**, **Anisotropic Filtering** up to 16x, **Sharpening**.
 - **HDR** (Direct3D 12, on when HDR is on in Windows): brighter lights and skies, the HUD and text at Windows' SDR
   brightness; **HDR Peak Brightness** (the display's peak by default) and **HDR Game Brightness**.
-- **HUD**: its **Size** (Original, Small, Smaller: each element in its place), and the **Hit Markers**, the
+- **HUD**: its **Size** (Original, Small, Smaller: each element in its place, the hints, messages and pickups
+  with their icons too), and the **Hit Markers**, the
   **Compass**, the **Stance** and the **Crosshair** can each be hidden.
 - **Subtitles**: **Subtitle Position** (Lower: near the bottom of the screen), **Subtitle Size** and **Wide
   Subtitles** (on a wide screen, longer lines: two of the game's lines on each).

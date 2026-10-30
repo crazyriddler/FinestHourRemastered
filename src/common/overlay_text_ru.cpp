@@ -53,7 +53,7 @@ const PtRow kRuRows[] = {
     {"HUD Size", "Размер HUD"},
     {"Small", "Мелкий"},
     {"Smaller", "Мельче"},
-    {"The compass, the stance, the crosshair, health and ammunition smaller, each in its place.", "Компас, стойка, прицел, здоровье и боеприпасы мельче, каждый на своём месте."},
+    {"The HUD smaller, each piece in its place: the compass, the stance, the crosshair, health, ammunition, and the hints, messages and pickups with their icons.", "Интерфейс мельче, каждый элемент на своём месте: компас, стойка, прицел, здоровье, боеприпасы, а также подсказки, сообщения и подбираемые предметы с их значками."},
     {"Menu Ambience", "Звуки боя в меню"},
     {"The sound of battle behind the main menu's music, as on the PlayStation 2.", "Звуки боя под музыку главного меню, как на PlayStation 2."},
     {"Subtitle Position", "Положение субтитров"},

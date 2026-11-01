@@ -2007,7 +2007,8 @@ std::string MaterialShade(int i) {
         "        float fd = saturate(1.6 - mP.z / (250 * mtl[3].z)) * mtl[3].y;\n"
         // (cloth's weave, the flags', finer: 3 times; metal's 4, on a vehicle's or a barrel's whole side; a weapon's,
         // -2, 4: wood's grain where its colour is wood's, warm and coloured, metal's on the rest, grey, dark, dirty)
-        "        float dr = mtl[2].w == 2 ? 3 : mtl[2].w == 3 || mtl[2].w == -2 ? 4 : 2;\n"
+        // (times the texture's own, dtl.z: a large flag's finer)
+        "        float dr = (mtl[2].w == 2 ? 3 : mtl[2].w == 3 || mtl[2].w == -2 ? 4 : 2) * dtl.z;\n"
         "        if (fd > 0) {\n"
         "            float2 dd;\n"
         // (-3: a half-timbered wall, its beams wood's where brown, its plaster's or stone's on the rest, 5)
@@ -2171,7 +2172,7 @@ std::string MaterialShade(int i) {
         "if (dtl.x >= 0 && dtl.y > 0) {\n"
         // (none over skin painted in a uniform's texture, the soldiers' hands: it read as dirt)
         "    float3 sb = mBase.rgb;\n"
-        "    float skin = dtl.y > 0.9 ? smoothstep(0.08, 0.2, sb.r - sb.b) * smoothstep(0.0, 0.06, sb.g - sb.b) * smoothstep(0.2, 0.35, sb.r) * step(sb.g, sb.r) : 0;\n"
+        "    float skin = dtl.y > 0.9 ? smoothstep(0.08, 0.2, sb.r - sb.b) * smoothstep(-0.05, -0.015, sb.g - sb.b) * smoothstep(0.2, 0.35, sb.r) * step(sb.g, sb.r) : 0;\n"
         "    float dm = mP.z / (100 * mtl[3].z);\n"
         "    float rep = max(texsize[" + std::to_string(i) + "].x, texsize[" + std::to_string(i) + "].y) / dtl.w;\n"
         "    float f1 = saturate(1.4 - dm / 14), f2 = saturate(1.5 - dm / 4);\n"

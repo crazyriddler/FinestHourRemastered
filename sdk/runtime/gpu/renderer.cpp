@@ -4292,16 +4292,22 @@ void Renderer::UploadConstants(const State& s, const DrawShaders& sh, const PsoK
         // sleeve or glove, a uniform with the hands painted in it), whichever class it was taken for. Negative, the
         // shader's pores on the skin's colour (their strength the skin's: the hands in view -0.9, the others -1.7) and
         // the weave on the rest, -(weave * 100 + pores): the arms in view 6 and 13, the others 3 and 5.5
-        if (draw_character_ && c.mtl[3][1] < 0) {
+        if (draw_character_ && c.mtl[3][1] < 0 && !m.flag) {
             c.mtl[3][1] = occlusion_done_ ? -0.9f : -1.7f;
             c.dtl[2] = occlusion_done_ ? -(6.0f * 100 + 13.0f) : -(3.0f * 100 + 5.5f);
         }
-        c.dtl[3] = draw_character_ ? 400.0f : m.cloth ? 110.0f : 160.0f;
+        // not a soldier's texture but drawn as a character (detail_scale.txt lists them): a flag the game moves by bones,
+        // a medkit to pick up. Its class's detail alone (a red cross or a flag's red no skin's), at the texture's own size
+        if (draw_character_ && c.mtl[3][1] < 0 && m.flag)
+            c.mtl[3][1] = c.mtl[2][3] == 6 ? -1.7f : -0.8f, c.dtl[2] = (c.mtl[2][3] == 6 ? 5.5f : 3.0f) * m.detail_scale;
+        // a surface's own detail (mtl[3].y > 0): its tiling times the texture's own (detail_scale.txt), in dtl.z
+        if (c.mtl[3][1] > 0) c.dtl[2] = m.detail_scale;
+        c.dtl[3] = (draw_character_ && !m.flag ? 400.0f : m.cloth ? 110.0f : 160.0f) / m.detail_scale;
         // (not on skin: its own pores, Character Detail; clothes and the weapon in hand stronger, their textures
         // spread over large parts)
         if (set.detail && details_ && m.grain >= 0 && m.grain < int(details_count_) && m.grain != 7 + 11 && !g_texview.load()) {
             c.dtl[0] = float(m.grain);
-            c.dtl[1] = draw_character_ ? 1.0f : m.snow && !m.mud ? 0.3f : 0.65f;  // (the shader takes over 0.9 for a character's: its skin left bare; snow's soft)
+            c.dtl[1] = draw_character_ && !m.flag ? 1.0f : m.snow && !m.mud ? 0.3f : 0.65f;  // (the shader takes over 0.9 for a character's: its skin left bare; snow's soft)
         }
         // source alpha blending (D3DBLEND_SRCALPHA): the height mask (cut-outs have no height: pom 0)
         constexpr uint32_t kSrcAlpha = 0x302;

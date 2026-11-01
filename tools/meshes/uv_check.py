@@ -66,12 +66,14 @@ def check(path, dump, sizes, fix, tol):
     if not os.path.exists(orig_path):
         return None
     m, o = fhm.read(path), fhm.read(orig_path)
-    if m.tri_source is None or not (m.regs >> 9 & 1) or not (o.regs >> 9 & 1):
+    # the texture coordinates: register 9, or 5 in the skinned models' layout (the first-person weapons and arms)
+    uvr = next((r for r in (9, 5) if m.regs >> r & 1 and o.regs >> r & 1), None)
+    if m.tri_source is None or uvr is None:
         return None
     size = sizes.get("%016x" % m.tex, (64, 64))
     tex = np.array(size, float)
-    P, UV = m.reg(0)[:, :3].astype(float), m.reg(9)[:, :2].astype(float)
-    OP, OUV = o.reg(0)[:, :3].astype(float), o.reg(9)[:, :2].astype(float)
+    P, UV = m.reg(0)[:, :3].astype(float), m.reg(uvr)[:, :2].astype(float)
+    OP, OUV = o.reg(0)[:, :3].astype(float), o.reg(uvr)[:, :2].astype(float)
     t = m.indices.reshape(-1, 3).astype(np.int64)
     ot = o.indices.reshape(-1, 3)
     src = m.tri_source.astype(np.int64)
@@ -154,7 +156,7 @@ def check(path, dump, sizes, fix, tol):
         # by no more than a tenth of the texture (a whole island would have slid)
         shift = np.abs(trial - UV).max() if moved.any() else 0
         if (after > tol).sum() < res["bad"] and after.max() <= res["worst"] + 0.5 and shift < 0.1:
-            i9 = m.reg_list().index(9)
+            i9 = m.reg_list().index(uvr)
             m.vertices[moved, i9, :2] = new[moved].astype(np.float32)
             fhm.write(path, m)
             res["fixed"] = int(moved.sum())

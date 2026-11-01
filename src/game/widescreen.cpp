@@ -108,6 +108,11 @@ void Turn(float* a, float* b, float angle) {  // a and b rotated in their plane
 }
 }  // namespace
 
+namespace {
+void NarrowFrustum();
+extern uint32_t g_wide_camera;
+}  // namespace
+
 X86_EXTERN_FUNC(__imp__sub_001C6720);
 X86_FUNC(sub_001C6720) {  // RwCameraBeginUpdate(camera)
     static const bool env = [] {
@@ -207,6 +212,7 @@ X86_FUNC(sub_001C6AA0) {
     const uint32_t camera = R32(ctx.esp + 4);
     if (camera && camera == cod::wide::Camera()) cod::wide::SetCamera(0);
     if (camera && camera == g_narrow[0]) g_narrow[0] = 0;
+    if (camera && camera == g_wide_camera) g_wide_camera = 0;
     __imp__sub_001C6AA0(ctx, base);
 }
 
@@ -214,37 +220,59 @@ X86_EXTERN_FUNC(__imp__sub_001C6710);
 X86_FUNC(sub_001C6710) {  // RwCameraEndUpdate(camera)
     __imp__sub_001C6710(ctx, base);
     if (R32(ctx.esp + 4) == cod::wide::Camera()) Restore();
+    if (R32(ctx.esp + 4) == g_wide_camera) NarrowFrustum();
 }
 
-// The world plugin's list of the level's sectors in the camera's view (sub_001F3FE0(world, camera), from its
-// BeginUpdate): only what the screen shows is drawn, so a building just off the screen (beside or behind) cast no
-// shadow into the view, its shadow coming and going as the camera turned. The list is made with the side and near
-// planes (and the frustum's box) moved out by half the shadows' reach, then the planes are put back: those sectors
-// are drawn (off the screen: their vertices only) and cast, while the atomics in them (anything the game moves or
-// destroys) are still tested against the true frustum as RenderWare draws them.
+// What casts into the view from just off the screen. RenderWare draws only what is in the camera's frustum: the
+// world plugin's list of the level's sectors in view (sub_001F3FE0(world, camera), from its BeginUpdate) and each
+// atomic in them tested as it is drawn; a building or a tree just beside or behind the view cast no shadow into it,
+// its shadow coming and going as the camera turned. While the screen's camera draws (the list made, to its
+// EndUpdate), its side and near planes and the frustum's box are moved out by half the shadows' reach: what is there
+// is drawn (off the screen: its vertices only) and casts. Nothing is kept from one frame to the next: what the game
+// takes away or destroys is not drawn and casts nothing. Tests: XBE_SHADOW_SECTORS=0 off, 1 the sectors alone.
+namespace {
+uint32_t g_wide_camera = 0;
+float g_wide_d[5], g_wide_box[6], g_wide_m = 0;
+
+// each value put back only while it is still the one moved out: the game may make the frustum again meanwhile (a
+// clip plane set, the camera moved), and the old value written over the new one left whole sectors out of the view
+void NarrowFrustum() {
+    if (!g_wide_camera) return;
+    for (int i = 0; i < 5; i++) {
+        const uint32_t va = g_wide_camera + 0x94 + uint32_t(i + 1) * 0x14 + 12;
+        if (F(va) == g_wide_d[i] + g_wide_m) SetF(va, g_wide_d[i]);
+    }
+    for (int i = 0; i < 6; i++) {
+        const uint32_t va = g_wide_camera + 0x10C + uint32_t(i) * 4;
+        if (F(va) == g_wide_box[i] + (i < 3 ? g_wide_m : -g_wide_m)) SetF(va, g_wide_box[i]);
+    }
+    g_wide_camera = 0;
+}
+}  // namespace
+
 X86_EXTERN_FUNC(__imp__sub_001F3FE0);
 X86_FUNC(sub_001F3FE0) {
     const uint32_t camera = R32(ctx.esp + 8);
     const uint32_t level = app::Get().shadow_quality;
-    static const bool off = [] { const char* e = std::getenv("XBE_SHADOW_SECTORS"); return e && *e == '0'; }();  // tests
-    if (off || !camera || camera != cod::wide::Camera() || cod::wide::FrontEnd() || !level) {
+    static const int mode = [] { const char* e = std::getenv("XBE_SHADOW_SECTORS"); return e ? std::atoi(e) : 2; }();
+    NarrowFrustum();
+    if (!mode || !camera || camera != cod::wide::Camera() || cod::wide::FrontEnd() || !level) {
         __imp__sub_001F3FE0(ctx, base);
         return;
     }
     const float m = 0.5f * gpu::shadow::QualityFor(level, 100.0f).distance;
-    float d[5], box[6];
+    g_wide_camera = camera, g_wide_m = m;
     for (int i = 0; i < 5; i++) {
         const uint32_t pl = camera + 0x94 + uint32_t(i + 1) * 0x14;  // near and the four sides (0 is the far plane)
-        d[i] = F(pl + 12);
-        SetF(pl + 12, d[i] + m);
+        g_wide_d[i] = F(pl + 12);
+        SetF(pl + 12, g_wide_d[i] + m);
     }
     for (int i = 0; i < 6; i++) {
-        box[i] = F(camera + 0x10C + uint32_t(i) * 4);
-        SetF(camera + 0x10C + uint32_t(i) * 4, box[i] + (i < 3 ? m : -m));  // RwBBox: sup, inf
+        g_wide_box[i] = F(camera + 0x10C + uint32_t(i) * 4);
+        SetF(camera + 0x10C + uint32_t(i) * 4, g_wide_box[i] + (i < 3 ? m : -m));  // RwBBox: sup, inf
     }
     __imp__sub_001F3FE0(ctx, base);
-    for (int i = 0; i < 5; i++) SetF(camera + 0x94 + uint32_t(i + 1) * 0x14 + 12, d[i]);
-    for (int i = 0; i < 6; i++) SetF(camera + 0x10C + uint32_t(i) * 4, box[i]);
+    if (mode == 1) NarrowFrustum();
 }
 
 X86_EXTERN_FUNC(__imp__sub_000D9E30);

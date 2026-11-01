@@ -18,7 +18,7 @@ import fhm  # noqa: E402
 def load(path, name, img):
     m = fhm.read(path)
     p = m.reg(0)[:, :3].astype(float)
-    uv = m.reg(9)[:, :2].astype(float)
+    uv = m.reg(9 if m.regs >> 9 & 1 else 5)[:, :2].astype(float)  # (5: the skinned models layout)
     t = m.indices
     t = t[(t[:, 0] != t[:, 1]) & (t[:, 1] != t[:, 2]) & (t[:, 0] != t[:, 2])]
     mesh = bpy.data.meshes.new(name)

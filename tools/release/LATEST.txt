@@ -2,42 +2,34 @@
 # update release's update.json). Only this update's changes: written anew for each update. One section a language
 # ([en] needed; the others fall back to it), its lines as the game shows them. UTF-8.
 [en]
-- Detail textures: skin and clothes told apart on every character (pores on faces and hands, weave on uniforms); weapons' wood and metal, vehicles' metal.
-- Every texture's material reviewed; remastered models' texture coordinates fixed (the medkit and others).
-- Parallax: no streaks on window and door jambs, deeper muddy snow roads.
-- Shadows: buildings just off the screen cast their shadows into view; the sky no longer casts one.
+- Shadows: trees, soldiers and buildings just off the screen now cast their shadows into view.
+- Flags: much finer cloth detail; flags and the medkit's red cross no longer get skin pores.
+- First-person arms and weapons: no more stretched or patchy textures on the stocks, bodies and hands; the line on the thumb is gone.
 [de]
-- Detailtexturen: Haut und Kleidung bei jeder Figur unterschieden (Poren auf Gesichtern und Händen, Gewebe auf Uniformen); Holz und Metall der Waffen, Metall der Fahrzeuge.
-- Das Material jeder Textur überprüft; Texturkoordinaten der überarbeiteten Modelle korrigiert (der Verbandskasten und andere).
-- Parallax: keine Streifen mehr an Fenster- und Türlaibungen, tiefere schlammige Schneestraßen.
-- Schatten: Gebäude knapp außerhalb des Bildes werfen ihre Schatten ins Bild; der Himmel wirft keinen mehr.
+- Schatten: Bäume, Soldaten und Gebäude knapp außerhalb des Bildes werfen jetzt ihre Schatten ins Bild.
+- Flaggen: viel feineres Stoffdetail; Flaggen und das rote Kreuz des Verbandskastens haben keine Hautporen mehr.
+- Arme und Waffen in der Ego-Ansicht: keine gestreckten oder fleckigen Texturen mehr an Schäften, Gehäusen und Händen; die Linie am Daumen ist weg.
 [fr]
-- Textures de détail : peau et vêtements distingués sur chaque personnage (pores sur les visages et les mains, trame sur les uniformes) ; bois et métal des armes, métal des véhicules.
-- Le matériau de chaque texture revu ; coordonnées de texture des modèles remasterisés corrigées (la trousse de soins et d'autres).
-- Parallaxe : plus de traînées sur les embrasures des fenêtres et des portes, routes de neige boueuse plus profondes.
-- Ombres : les bâtiments juste hors de l'écran projettent leur ombre dans la vue ; le ciel n'en projette plus.
+- Ombres : les arbres, les soldats et les bâtiments juste hors de l'écran projettent maintenant leur ombre dans la vue.
+- Drapeaux : détail de tissu bien plus fin ; les drapeaux et la croix rouge de la trousse de soins n'ont plus de pores de peau.
+- Bras et armes à la première personne : plus de textures étirées ou en taches sur les crosses, les corps et les mains ; la ligne sur le pouce a disparu.
 [it]
-- Texture di dettaglio: pelle e vestiti distinti su ogni personaggio (pori su volti e mani, trama sulle uniformi); legno e metallo delle armi, metallo dei veicoli.
-- Il materiale di ogni texture rivisto; coordinate di texture dei modelli rimasterizzati corrette (il kit medico e altri).
-- Parallasse: niente più strisce sugli stipiti di finestre e porte, strade di neve fangosa più profonde.
-- Ombre: gli edifici appena fuori dallo schermo proiettano la loro ombra nella vista; il cielo non ne proietta più.
+- Ombre: alberi, soldati ed edifici appena fuori dallo schermo ora proiettano la loro ombra nella vista.
+- Bandiere: dettaglio del tessuto molto più fine; le bandiere e la croce rossa del kit medico non hanno più i pori della pelle.
+- Braccia e armi in prima persona: niente più texture stirate o a chiazze su calci, corpi e mani; la linea sul pollice è sparita.
 [es]
-- Texturas de detalle: piel y ropa distinguidas en todos los personajes (poros en caras y manos, tejido en uniformes); madera y metal de las armas, metal de los vehículos.
-- Revisado el material de cada textura; corregidas las coordenadas de textura de los modelos remasterizados (el botiquín y otros).
-- Paralaje: sin rayas en las jambas de ventanas y puertas, carreteras de nieve embarrada más profundas.
-- Sombras: los edificios justo fuera de la pantalla proyectan su sombra en la vista; el cielo ya no proyecta sombra.
+- Sombras: los árboles, los soldados y los edificios justo fuera de la pantalla proyectan ahora su sombra en la vista.
+- Banderas: detalle de tela mucho más fino; las banderas y la cruz roja del botiquín ya no tienen poros de piel.
+- Brazos y armas en primera persona: sin texturas estiradas o a parches en culatas, cuerpos y manos; la línea del pulgar ha desaparecido.
 [pt]
-- Texturas de detalhe: pele e roupa distinguidas em todas as personagens (poros em rostos e mãos, trama nos uniformes); madeira e metal das armas, metal dos veículos.
-- O material de cada textura revisto; coordenadas de textura dos modelos remasterizados corrigidas (o kit médico e outros).
-- Paralaxe: sem riscas nos batentes de janelas e portas, estradas de neve lamacenta mais profundas.
-- Sombras: os edifícios logo fora do ecrã projetam a sua sombra na vista; o céu já não projeta sombra.
+- Sombras: as árvores, os soldados e os edifícios logo fora do ecrã projetam agora a sua sombra na vista.
+- Bandeiras: detalhe do tecido muito mais fino; as bandeiras e a cruz vermelha do kit médico já não têm poros de pele.
+- Braços e armas na primeira pessoa: sem texturas esticadas ou com manchas nas coronhas, corpos e mãos; a linha no polegar desapareceu.
 [ru]
-- Детальные текстуры: кожа и одежда различаются у всех персонажей (поры на лицах и руках, ткань на форме); дерево и металл оружия, металл техники.
-- Проверен материал каждой текстуры; исправлены текстурные координаты обновлённых моделей (аптечка и другие).
-- Параллакс: больше нет полос на откосах окон и дверей, глубже грязные снежные дороги.
-- Тени: здания сразу за краем экрана отбрасывают тени в кадр; небо больше не отбрасывает тень.
+- Тени: деревья, солдаты и здания сразу за краем экрана теперь отбрасывают тени в кадр.
+- Флаги: гораздо более мелкая фактура ткани; у флагов и красного креста аптечки больше нет пор кожи.
+- Руки и оружие от первого лица: больше нет растянутых или пятнистых текстур на прикладах, корпусах и руках; линия на большом пальце исчезла.
 [pl]
-- Tekstury detali: skóra i ubrania rozróżnione u każdej postaci (pory na twarzach i dłoniach, splot na mundurach); drewno i metal broni, metal pojazdów.
-- Sprawdzony materiał każdej tekstury; poprawione współrzędne tekstur odnowionych modeli (apteczka i inne).
-- Paralaksa: bez smug na ościeżach okien i drzwi, głębsze błotniste drogi w śniegu.
-- Cienie: budynki tuż poza ekranem rzucają cienie w kadr; niebo już nie rzuca cienia.
+- Cienie: drzewa, żołnierze i budynki tuż poza ekranem rzucają teraz cienie w kadr.
+- Flagi: znacznie drobniejszy detal tkaniny; flagi i czerwony krzyż apteczki nie mają już porów skóry.
+- Ręce i broń w widoku z pierwszej osoby: koniec z rozciągniętymi lub plamistymi teksturami na kolbach, korpusach i dłoniach; linia na kciuku zniknęła.

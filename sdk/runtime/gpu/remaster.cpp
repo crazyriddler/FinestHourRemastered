@@ -189,6 +189,17 @@ struct Store {
             if (line.find(" mud") != std::string::npos) it->second.mud = true;  // (its grain the ground's)
             else it->second.grain = 7 + 12;
         }
+        // a texture's detail finer or coarser than its class's ("<id> <times>"): a flag spread large over a pole
+        std::ifstream df(dir / "detail_scale.txt");
+        while (std::getline(df, line)) {
+            if (line.empty() || line[0] == '#') continue;
+            std::istringstream in(line);
+            std::string id;
+            float times = 1;
+            if (!(in >> id >> times) || times <= 0) continue;
+            auto it = materials.find(std::strtoull(id.c_str(), nullptr, 16));
+            if (it != materials.end()) it->second.detail_scale = times, it->second.flag = true;
+        }
         // the characters' textures' detail grain by their names (tools/remaster/grains.py: their classes are often
         // wrong for uniforms), over the class's
         std::ifstream gf(dir / "grains.txt");

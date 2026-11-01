@@ -304,6 +304,13 @@ The version installed is in `version.txt` beside the game. Unattended:
   ground in Matmata, deeper muddy snow roads (with their detail texture), and a steadier relief close up.
 - Shadows: buildings just off the screen (beside or behind you) now cast their shadows into the view, so a street's
   shadow no longer comes and goes as you turn (Last Bridge Standing); the sky box no longer casts a shadow.
+- Shadows: trees, soldiers and the buildings made of separate pieces just off the screen now cast their shadows into
+  the view too (a tree's shadow no longer ends where its top leaves the screen, nor vanishes as you turn).
+- Flags: their cloth detail is much finer (six times), and flags and the medkit's red cross no longer get the skin's
+  pores.
+- First-person arms and weapons: the remastered models' textures now follow the originals' (projected onto them), so
+  the stocks, the weapons' bodies and the hands are no longer stretched or patchy; the line along the thumb on the PPSh
+  is gone.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

@@ -39,6 +39,8 @@ struct Material {
     bool snow = false;    // the snowy ground (the pack's snow.txt): footprints in it (Snow Tracks)
     bool mud = false;     // ... mostly mud ("<id> mud"): footprints, but the ground's relief, parallax and detail
     bool sky = false;     // its class is sky (a sky box's faces): casts no shadow
+    float detail_scale = 1;  // its detail's tiling, times (the pack's detail_scale.txt: a large flag's weave finer)
+    bool flag = false;       // listed there: no character's (a flag, a pickup), its class's detail alone even drawn as one
 };
 
 // a DDS as read: its format, size and mips, the levels one after another

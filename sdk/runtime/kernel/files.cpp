@@ -290,6 +290,24 @@ Target Resolve(const std::string& xbox_path, uint32_t root_handle) {
             return {mod.string()};
         }
     }
+    // a language's folder the disc lacks (German text with the game's own speech and movies: its GERMAN folders of
+    // the speech banks and of the movies are not on this disc): the English one's files, or the folder's parent's
+    if (best->first == kCdRom) {
+        const Disc* disc = MountedDisc();
+        auto found = [&](const std::vector<std::string>& ps) {
+            std::error_code ec;
+            return disc ? disc->Find(ps) != nullptr : fs::exists(MatchCase(best->second, ps), ec);
+        };
+        for (size_t i = 0; i + 1 < parts.size(); i++) {
+            if (Upper(parts[i]) != "GERMAN" || found(parts)) continue;
+            std::vector<std::string> english = parts, up = parts;
+            english[i] = "ENGLISH";
+            up.erase(up.begin() + std::ptrdiff_t(i));
+            if (found(english)) parts = std::move(english);
+            else if (found(up)) parts = std::move(up);
+            break;
+        }
+    }
     if (best->first == kCdRom)
         if (const Disc* disc = MountedDisc()) return {{}, true, disc->Find(parts)};
     return {MatchCase(best->second, parts).string()};

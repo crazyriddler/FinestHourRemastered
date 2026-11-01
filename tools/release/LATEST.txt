@@ -2,23 +2,34 @@
 # update release's update.json). Only this update's changes: written anew for each update. One section a language
 # ([en] needed; the others fall back to it), its lines as the game shows them. UTF-8.
 [en]
-- HUD Size now also makes the hints, messages and pickups with their icons smaller, each in its place.
-- Subtitles: their options work in the vehicles too.
+- German: a new language with the game's own German text (menus, objectives, subtitles), the voices in English.
+- Russian: the squad's names and the Soviet weapons' names in Russian; the Extras page fixed.
+- Polish: the briefings and the other movies have Polish subtitles.
+[de]
+- Deutsch: eine neue Sprache mit den eigenen deutschen Texten des Spiels (Menüs, Ziele, Untertitel), die Stimmen auf Englisch.
+- Russisch: die Namen der Truppe und der sowjetischen Waffen auf Russisch; die Extras-Seite korrigiert.
+- Polnisch: die Einsatzbesprechungen und die anderen Videos haben polnische Untertitel.
 [fr]
-- Taille de l'interface réduit maintenant aussi les conseils, les messages et les objets à ramasser avec leurs icônes, chacun à sa place.
-- Sous-titres : leurs options fonctionnent aussi dans les véhicules.
+- Allemand : une nouvelle langue avec les textes allemands du jeu lui-même (menus, objectifs, sous-titres), les voix en anglais.
+- Russe : les noms de l'escouade et des armes soviétiques en russe ; la page Bonus corrigée.
+- Polonais : les briefings et les autres films ont des sous-titres polonais.
 [it]
-- Dimensione HUD ora rimpicciolisce anche i suggerimenti, i messaggi e gli oggetti da raccogliere con le loro icone, ognuno al suo posto.
-- Sottotitoli: le loro opzioni funzionano anche nei veicoli.
+- Tedesco: una nuova lingua con i testi tedeschi del gioco stesso (menu, obiettivi, sottotitoli), le voci in inglese.
+- Russo: i nomi della squadra e delle armi sovietiche in russo; la pagina Extra corretta.
+- Polacco: i briefing e gli altri filmati hanno i sottotitoli in polacco.
 [es]
-- Tamaño del HUD ahora también reduce los avisos, los mensajes y los objetos para recoger con sus iconos, cada uno en su sitio.
-- Subtítulos: sus opciones funcionan también en los vehículos.
+- Alemán: un idioma nuevo con los textos alemanes del propio juego (menús, objetivos, subtítulos), las voces en inglés.
+- Ruso: los nombres del pelotón y de las armas soviéticas en ruso; la página de Extras corregida.
+- Polaco: las presentaciones de misión y los demás vídeos tienen subtítulos en polaco.
 [pt]
-- Tamanho do HUD agora também diminui as dicas, as mensagens e os itens para pegar com seus ícones, cada um em seu lugar.
-- Legendas: suas opções funcionam também nos veículos.
+- Alemão: um novo idioma com os textos alemães do próprio jogo (menus, objetivos, legendas), as vozes em inglês.
+- Russo: os nomes do esquadrão e das armas soviéticas em russo; a página de Extras corrigida.
+- Polonês: os briefings e os outros vídeos têm legendas em polonês.
 [ru]
-- Размер HUD теперь уменьшает и подсказки, сообщения и подбираемые предметы с их значками, каждый на своём месте.
-- Субтитры: их настройки работают и в технике.
+- Немецкий: новый язык с немецкими текстами самой игры (меню, задачи, субтитры), голоса на английском.
+- Русский: имена бойцов и названия советского оружия на русском; исправлена страница «Бонусы».
+- Польский: брифинги и другие видео с польскими субтитрами.
 [pl]
-- Rozmiar HUD zmniejsza teraz także podpowiedzi, komunikaty i przedmioty do podniesienia z ich ikonami, każde na swoim miejscu.
-- Napisy: ich opcje działają też w pojazdach.
+- Niemiecki: nowy język z niemieckimi tekstami samej gry (menu, cele, napisy), głosy po angielsku.
+- Rosyjski: imiona oddziału i nazwy radzieckiej broni po rosyjsku; poprawiona strona Dodatków.
+- Polski: odprawy i pozostałe filmy mają polskie napisy.

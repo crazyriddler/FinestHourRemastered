@@ -501,6 +501,15 @@ const char* Tr(const char* en) {
         auto it = ru.find(en);
         return it == ru.end() ? en : it->second;
     }
+    if (l == 3) {
+        static const std::unordered_map<std::string, const char*> de = [] {
+            std::unordered_map<std::string, const char*> m;
+            for (size_t i = 0; i < kDeRowCount; i++) m.emplace(kDeRows[i].en, kDeRows[i].pt);
+            return m;
+        }();
+        auto it = de.find(en);
+        return it == de.end() ? en : it->second;
+    }
     if (l == 11) {
         static const std::unordered_map<std::string, const char*> pl = [] {
             std::unordered_map<std::string, const char*> m;

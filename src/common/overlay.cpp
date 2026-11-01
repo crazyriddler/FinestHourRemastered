@@ -533,14 +533,15 @@ std::vector<Page> BuildPages() {
     general.items.push_back(Toggle("Check for Updates", &s.check_updates,
                                    "At the start, looks on GitHub for a newer update and offers it in the main menu (never delays the start)."));
     {
-        static const uint32_t codes[] = {1, 4, 6, 5, 9, 10, 11};
+        // (German: the game's own German text, with its English speech and movies: game/language.cpp)
+        static const uint32_t codes[] = {1, 3, 4, 6, 5, 9, 10, 11};
         BootLanguage();
         // UTF-8, as ImGui takes text
-        general.items.push_back(Choice("Language", {"English", "Fran\xC3\xA7" "ais", "Italiano", "Espa\xC3\xB1ol",
+        general.items.push_back(Choice("Language", {"English", "Deutsch", "Fran\xC3\xA7" "ais", "Italiano", "Espa\xC3\xB1ol",
                                                     "Portugu\xC3\xAA" "s",
                                                     "\xD0\xA0\xD1\x83\xD1\x81\xD1\x81\xD0\xBA\xD0\xB8\xD0\xB9", "Polski"},
                                        [&s] {
-                                           for (int i = 0; i < 7; i++)
+                                           for (int i = 0; i < 8; i++)
                                                if (codes[i] == s.language) return i;
                                            return 0;
                                        },

@@ -18,6 +18,9 @@ extern const size_t kRuRowCount;
 // the Polish (overlay_text_pl.cpp)
 extern const PtRow kPlRows[];
 extern const size_t kPlRowCount;
+// the German (overlay_text_de.cpp)
+extern const PtRow kDeRows[];
+extern const size_t kDeRowCount;
 std::string Tr(const std::string& en);
 
 }  // namespace cod::overlay

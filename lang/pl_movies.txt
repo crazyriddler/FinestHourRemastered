@@ -1,0 +1,161 @@
+# Finest Hour Remastered: the movies' subtitles in Polish (src/game/movie_subs.cpp, drawn by tools/subs_render.py
+# into pl_movies.bin). "movie<tab>start s<tab>end s<tab>top y of 480<tab>text", \n a line break. UTF-8.
+# Their times and places those of the Russian subtitles (lang/ru_movies.txt), translated (issue #34).
+
+1_1_Mon	0.20	3.10	332	Nazywam się Aleksandr Sokołow.
+1_1_Mon	3.10	4.73	330	Myślałem, że jestem bezpieczny.
+1_1_Mon	4.73	9.17	332	Jako uczeń zegarmistrza\nnauczyłbym się fachu\ni otworzył własny warsztat.
+1_1_Mon	9.17	13.27	330	Może bym się ożenił,\nmiał dzieci, zaczął życie.
+1_1_Mon	13.27	19.37	332	Ale teraz nasze miasta są atakowane,\na Stalingrad położy kres tym marzeniom.
+1_1_Mon	19.37	25.43	330	Powinniśmy byli wiedzieć,\nże Niemcy obrócą się przeciwko nam\ni złamią pakt. Nie mają honoru.
+1_1_Mon	25.43	32.10	330	Komisarze tak szybko nas zebrali,\nmówiąc o Ojczyźnie, o ofierze naszych braci,\no naszym obowiązku.
+1_1_Mon	32.10	36.33	332	Mam dopiero dwadzieścia lat,\nale jestem gotów walczyć na śmierć.
+1_1_Mon	36.33	40.00	332	Widok mojego rodzinnego Stalingradu\ndoprowadza mnie do wściekłości.
+1_1_Mon	40.00	43.10	330	Jakby płonęło samo piekło.
+1_1_Mon	44.73	47.90	332	Aleksandr Sokołow\n20 września 1942\nStalingrad, ZSRR
+1_2_Mon	0.33	2.70	332	Nazywam się Tania Pawłowna.
+1_2_Mon	2.70	5.93	332	Niemal nie wiedzieliśmy,\nże faszystowska inwazja\ndotarła już do naszej wsi,
+1_2_Mon	5.93	10.07	338	dopóki w nocy nie obudził nas\nodległy chrzęst gąsienic czołgów.
+1_2_Mon	10.07	12.90	332	Pociski czołgowe zmusiły\nsąsiadów do ucieczki w poszukiwaniu schronienia,
+1_2_Mon	12.90	16.60	338	a w panice zgubiłam rodziców.
+1_2_Mon	16.60	19.30	332	Następnego dnia\nzabrali mnie żołnierze Armii Czerwonej.
+1_2_Mon	19.30	21.33	330	Miałam dwadzieścia pięć lat.
+1_2_Mon	21.33	26.17	330	W pierwszej walce nasz oddział został rozbity,\na ja schroniłam się w zburzonym budynku,
+1_2_Mon	26.17	29.77	333	gdzie zdjęłam karabin snajperski\nz ciała poległego towarzysza.
+1_2_Mon	29.77	35.27	332	Głos ojca prowadził mój celownik,\ngdy z tego karabinu położyłam\npierwszych czterech Niemców.
+1_2_Mon	35.27	40.00	330	O moich umiejętnościach zameldowano w sztabie,\nprzydzielono mnie jako snajperkę\ni wysłano do Stalingradu.
+1_2_Mon	40.00	43.00	332	Od tamtej pory poluję na Niemców.
+1_2_Mon	43.00	49.70	330	Zabrali mi rodzinę i dom,\na ja zamierzam odebrać im życie.
+1_2_Mon	51.73	54.90	332	Tatiana Pawłowna\n3 października 1942\nStalingrad, ZSRR
+1_3_Mon	0.33	2.50	332	Nazywam się Nikołaj Badanow.
+1_3_Mon	2.50	5.23	332	Dzień po tym,\njak Niemcy napadli na Związek Radziecki,
+1_3_Mon	5.23	10.50	334	zostawiłem żonę i nowonarodzonego syna\npod opieką rodziców\ni wstąpiłem do Armii Czerwonej.
+1_3_Mon	10.50	17.10	330	Po wielu latach pracy jako mechanik w Leningradzie\nnie zdziwiło mnie, że przydzielono mnie\ndo 24. Korpusu Pancernego.
+1_3_Mon	17.10	21.00	332	Żyję dla dnia,\nw którym zmiażdżymy Berlin gąsienicami.
+1_3_Mon	21.00	26.60	332	Być może to właśnie ta zaciętość\nprzyniosła mi własną załogę czołgu\ni przydział do Stalingradu.
+1_3_Mon	26.60	32.90	333	Moja załoga jest jak rodzina,\nale jest jeszcze jedna towarzyszka,\nz którą będę związany na zawsze.
+1_3_Mon	32.90	35.30	332	Nazywa się Tania Pawłowna,
+1_3_Mon	35.30	43.07	338	i uratowała nam skórę, gdy uciekaliśmy\nostatnim ocalałym T-34\npo szturmie na starą fabrykę traktorów.
+1_3_Mon	43.07	48.20	332	Wkrótce nasz czołg zaczął mieć\nkłopoty z silnikiem,\na smuga dymu zdradzała naszą pozycję,
+1_3_Mon	48.20	54.33	338	więc znaleźliśmy miejsce,\nktóre wyglądało na bezpieczne,\nżeby zająć się naprawą.
+1_3_Mon	57.20	60.37	332	Nikołaj Badanow\n3 października 1942\nStalingrad, ZSRR
+1_5_Mon	0.23	3.73	330	24 grudnia 1942 roku,\nokolice Stalingradu
+1_5_Mon	3.73	9.07	332	To, co zaczęliśmy pod Stalingradem,\nmieliśmy dokończyć\nw ramach operacji „Mały Saturn”,
+1_5_Mon	9.07	13.20	333	na odległym lotnisku\nprzy niewielkiej stanicy Tacinskaja.
+1_5_Mon	13.20	17.83	330	Naszym zadaniem było\npodejść do lotniska od północy przez Don,
+1_5_Mon	17.83	24.00	338	odcinając i okrążając\nuwięzione siły niemieckie,\nktórym Hitler zabronił się wycofać.
+1_5_Mon	24.00	30.23	330	Tam, w Tacinskiej, mieliśmy\nzaskoczyć lotnisko,
+1_5_Mon	30.23	34.70	330	zniszczyć jak najwięcej\nsamolotów i przerwać zaopatrzenie nazistów\nw kotle stalingradzkim.
+1_5_Mon	34.70	38.27	330	To było zadanie,\nktóre zamierzałem wykonać z przyjemnością.
+1_5_Mon	38.27	45.70	332	Ale gdy szykowaliśmy się do uderzenia,\nNiemcy dowiedzieli się o naszej obecności\ni zaczęli gorączkową ewakuację.
+1_5_Mon	45.70	52.80	332	Może nie zdążyliśmy\nkrzyknąć „niespodzianka!”,\nale wciąż było się czym zabawić.
+1_5_Mon	55.40	58.57	332	Nikołaj Badanow\n24 grudnia 1942\nTacinskaja, ZSRR
+2_1_Mon	0.57	5.60	333	Moja żona w końcu napisała:\n„Edwardzie Carlyle, po prostu poproś,\nżeby przenieśli cię gdzie indziej”.
+2_1_Mon	5.60	6.87	332	Tak też zrobiłem.
+2_1_Mon	6.87	13.13	330	Okazuje się, że jeśli uczyłeś chemii,\nmoże cię to dość szybko\nwyciągnąć zza biurka\n— jeśli oczywiście masz taki zamiar.
+2_1_Mon	13.13	18.77	332	O „Prywatnej Armii Popskiego”\ni jej związkach z „Pustynnymi Szczurami”\nnie wiedziałem nic,\npóki nie trafiłem na szkolenie.
+2_1_Mon	18.77	25.67	332	Filozofia tego\noddziału dywersyjnego to błyskawiczne uderzenia\ni potężne wybuchy głęboko na tyłach wroga.
+2_1_Mon	25.67	30.20	332	Miło jest wiedzieć, że za każdym razem,\ngdy podpalamy skład paliwa\nalbo skład amunicji,
+2_1_Mon	30.20	34.67	332	zatrzymujemy czołgi Rommla\ni pomagamy tym biedakom na froncie.
+2_1_Mon	34.67	40.00	330	Może to nie jest uczciwa walka,\nale Niemcy w Europie też raczej nie walczyli uczciwie,\nwięc do diabła z nimi.
+2_1_Mon	40.00	43.90	332	Moje zadania są ściśle tajne,\nwięc, o ile wie moja żona,
+2_1_Mon	43.90	50.10	333	wciąż siedzę za biurkiem,\nale z jakiegoś dziwnego powodu\nprzestałem narzekać.
+2_1_Mon	52.73	55.90	332	Edward Carlyle\n22 stycznia 1943\nMatmata, Tunezja
+2_2_Mon	0.27	2.73	332	Kiedy idziesz przez pustynię,\njak przez ocean piasku,
+2_2_Mon	2.73	8.60	338	musisz wiedzieć, dokąd zmierzasz,\ni mieć plan,\njak wejść i jak wyjść\n— jak najszybciej i najciszej.
+2_2_Mon	8.60	11.90	332	Choć prawdę mówiąc, wolimy,\ngdy „cicho” przestaje być ciche.
+2_2_Mon	11.90	16.67	332	Jedyne, co pozwala nam\nuderzać wroga w najczulsze miejsce,\nto nasze „jeepy”.
+2_2_Mon	16.67	21.90	333	Zawsze są załadowane paliwem,\namunicją i wodą tak,\nby przejechać 600 mil za jednym razem.
+2_2_Mon	21.90	28.63	330	Choć są nieopancerzone, można je\nciężko uzbroić: w dwa karabiny maszynowe kalibru .50,\nstrzelające nabojami przeciwpancernymi\ni zapalającymi.
+2_2_Mon	28.63	30.97	330	To czyni nas szybkimi i zabójczymi,\nkiedy trzeba,
+2_2_Mon	30.97	35.97	330	zdolnymi zmierzyć się z niemieckimi\npółgąsienicowymi i samochodami pancernymi,\nktóre poza tym nas przewyższają.
+2_2_Mon	35.97	41.53	332	A jednak nie zmienia to faktu,\nże jesteś całkowicie wystawiony na ogień,\nsiedząc w otwartym „jeepie”.
+2_2_Mon	41.53	45.10	330	I lepiej, żeby za kierownicą siedział\ncholernie dobry kierowca\n— na wypadek, gdyby zaczęły się kłopoty.
+2_2_Mon	45.10	47.93	332	A one zaczynają się zawsze, kolego.
+2_2_Mon	50.47	53.63	332	Edward Carlyle\n23 stycznia 1943\nKsar Tarsin, Tunezja
+3_1_Mon	0.37	2.50	332	Nazywam się Chuck Walker.
+3_1_Mon	2.50	6.97	332	Od dawna jestem w 1. Dywizji Piechoty\n— „Wielkiej Czerwonej Jedynce”.
+3_1_Mon	6.97	11.73	332	Walczyłem w Afryce Północnej i na Sycylii,\nlądowałem w Normandii w D-Day.
+3_1_Mon	11.73	16.87	332	Każdego dnia walczę,\nby ocalić życie swoje i moich ludzi.\nJestem dumny, że jestem na froncie.
+3_1_Mon	16.87	20.43	332	Wiem, że nikt z nas nie wróci do domu,\ndopóki Niemcy nie skapitulują całkowicie,
+3_1_Mon	20.43	22.70	330	i chcemy tam być, kiedy to nastąpi.
+3_1_Mon	22.70	25.07	332	Dlatego Akwizgran jest tak ważny.
+3_1_Mon	25.07	28.40	332	Nadszedł czas przenieść tę wojnę\nprosto do Niemiec — tam, gdzie się zaczęła.
+3_1_Mon	28.40	33.27	332	Nie chodzi o medale ani o honor\n— to wszystko nie ma znaczenia,\ngdy walczysz o życie.
+3_1_Mon	33.27	40.50	330	Chodzi o to, żeby wygrać wojnę,\na służba w „Wielkiej Czerwonej Jedynce”\nnauczyła mnie: wojnę wygrywa się,\nprzeżywając ją.
+3_1_Mon	40.50	45.03	330	A to znaczy — zabijać Niemców,\nzanim oni zabiją mnie.
+3_1_Mon	47.83	51.00	332	Chuck Walker\n21 października 1944\nAkwizgran, Niemcy
+3_3_Mon	0.47	2.07	332	Nazywam się Sam Rivers.
+3_3_Mon	2.07	7.50	330	Dzień po ataku na Pearl Harbor\nrazem z moim najlepszym przyjacielem Jimem\npobiegliśmy zaciągnąć się do armii USA.
+3_3_Mon	7.50	10.60	332	Większość naszych kumpli\nz chicagowskiej dzielnicy zrobiła to samo.
+3_3_Mon	10.60	12.13	330	Miałem zaledwie osiemnaście lat.
+3_3_Mon	12.13	19.07	332	Ledwo starczyło mi czasu,\nżeby się pożegnać, spakować\ni ożenić z moją kochaną Maggie\ntrzy godziny przed wyjazdem na szkolenie.
+3_3_Mon	19.07	26.13	330	Przydzielono mnie do 761. Batalionu Czołgów,\nktóry niemal w całości składał się z kolorowych,\nnie licząc oficerów.
+3_3_Mon	26.13	34.27	330	W Camp Hood nie byliśmy szczególnie lubiani,\nale to tylko popychało nas,\nby stworzyć niezniszczalną drużynę\ni zdobyć szacunek wszystkich, których spotkaliśmy.
+3_3_Mon	34.27	40.30	332	Sam generał Patton zobaczył nas w akcji i nalegał,\nby przydzielić nas do jego 3. Armii\ni wysłać do Europy.
+3_3_Mon	40.30	42.07	332	Dziś jesteśmy w miasteczku Tillet.
+3_3_Mon	42.07	46.40	332	Wszystkie inne amerykańskie oddziały,\nktórym kazano zdobyć to miasto,\npróbowały i poniosły porażkę.
+3_3_Mon	46.40	51.47	332	Teraz nasza kolej.\nWszyscy walczymy o coś więcej\nniż samo pokonanie wroga.
+3_3_Mon	51.47	56.77	332	Każdy w 761. ma coś\ndo udowodnienia sobie i ludziom w domu.
+3_3_Mon	56.77	60.50	330	Dla nas zwycięstwo ma podwójne znaczenie.
+3_3_Mon	63.17	66.33	332	Sam Rivers\n9 stycznia 1945\nTillet, Belgia
+3_5_Mon	0.67	4.60	332	Minęły cztery wyczerpujące miesiące\nod kiedy zdobyliśmy nasze\npierwsze niemieckie miasto — Akwizgran.
+3_5_Mon	4.60	7.90	332	Tamta operacja i tygodnie,\nktóre po niej nastąpiły, były szczególnie ciężkie.
+3_5_Mon	7.90	11.43	330	Zażarta walka w mrozie,\npróba zatrzymania Niemców pod Stavelot
+3_5_Mon	11.43	16.37	331	— to była jedna z niewielu\nchwil tej wojny,\nkiedy naprawdę myślałem,\nże mogę nie wrócić do domu.
+3_5_Mon	16.37	19.23	332	Moi ludzie wyszli z niej\nz odznaczeniami za swoje poświęcenie.
+3_5_Mon	19.23	23.77	332	To nie zmienia faktu,\nże zapłaciliśmy wysoką cenę\nza wejście do Niemiec.
+3_5_Mon	23.77	28.90	332	Dochodzą nas słuchy,\nże most na Renie wciąż stoi,\ni zmierzamy tam, żeby to sprawdzić.
+3_5_Mon	28.90	31.63	330	Koniec tej wojny jest bliski,\ni wszyscy o tym wiemy.
+3_5_Mon	31.63	34.47	330	Niemcy nie mają już dokąd pójść\npoza własnym domem,
+3_5_Mon	34.47	37.37	330	a dom nie jest już bezpiecznym\nmiejscem do spania.
+3_5_Mon	39.17	42.33	332	Chuck Walker\n7 kwietnia 1945\nRemagen, Niemcy
+Act_1	1.00	3.50	360	Europa, rok 1940.
+Act_1	3.50	8.67	332	Bezwzględne dążenie Hitlera\ndo poszerzenia granic Niemiec wciągnęło jego naród\nw wojnę z całym światem.
+Act_1	8.67	15.97	330	Mobilizacja armii Wielkiej Brytanii i Francji\nnie jest w stanie powstrzymać najeźdźców:\nnaziści najeżdżają sąsiednie kraje\nna północy i zachodzie Europy,
+Act_1	15.97	20.33	338	jednocześnie kierując się na wschód —\nku życiodajnym złożom ropy\nZwiązku Radzieckiego.
+Act_1	20.33	23.97	332	Jesienią rozpętuje się wojna błyskawiczna,\nktóra ma złamać Anglię,
+Act_1	23.97	27.63	332	a Ameryka zwiększa produkcję,\nspiesząc Brytyjczykom z pomocą.
+Act_1	27.63	34.10	332	Nadchodzi rok 1941 —\nzaczyna się bitwa o Afrykę Północną,\nAfrika Korps Rommla przybywa do Trypolisu.
+Act_1	34.10	38.53	332	Na froncie wschodnim niecierpliwy\nHitler zrywa pakt ze Związkiem Radzieckim.
+Act_1	38.53	44.20	332	Stalin odpowiada taktyką spalonej ziemi,\nzamierzając zostawić faszystowskim najeźdźcom\njedynie ruiny,
+Act_1	44.20	47.10	338	lecz jedno po drugim jego miasta upadają.
+Act_1	47.10	52.00	330	Teraz, w 1942 roku, na Stalingrad spadają\nzmasowane niemieckie naloty,
+Act_1	52.00	55.07	330	a bitwa o to chwalebne miasto\nprzybiera zaciekły charakter.
+Act_1	55.20	59.87	332	Armia Czerwona nie cofa się,\ni zaczyna się kontrofensywa przeciwko siłom,
+Act_1	59.87	65.03	332	rozciągniętym od Wołgi po Atlantyk\ni daleko w głąb afrykańskiej pustyni.
+Act_1	65.03	73.30	332	W obliczu niemożliwego\nmiliony ludzi odpowiadają\nna wezwanie swoich krajów, swoich rodzin, swojego życia.
+Act_2	0.83	8.27	332	Kontrolując Afrykę Północną,\npaństwa Osi miałyby większe szanse\nutrzymać Morze Śródziemne —\nobecnie epicentrum wojny.
+Act_2	8.27	15.57	332	Na nieszczęście dla włoskiego\ndyktatora Benita Mussoliniego,\njego armia nie jest w stanie stawić czoła\nwojskom brytyjskim w regionie.
+Act_2	15.57	20.60	332	Hitler, obawiając się,\nże dalsze straty w Afryce\nzagrożą jego planom\nna froncie wschodnim,
+Act_2	20.60	24.77	332	wysyła generała Rommla\ni jego Afrika Korps, by zaprowadzili porządek.
+Act_2	24.77	31.63	332	Do 1942 roku Alianci dochodzą do wniosku,\nże najlepszym sposobem, by złamać\nkręgosłup państw Osi, jest otwarcie kolejnego frontu,
+Act_2	31.63	35.57	332	i tak rodzi się operacja „Torch”,\nwspólne przedsięwzięcie\nwojsk brytyjskich i amerykańskich.
+Act_2	35.57	41.80	332	Potężna, skoordynowana\nofensywa przez linie wroga,\nniszcząca zapasy paliwa,\nżywności i sprzętu,
+Act_2	41.80	48.20	332	ma doprowadzić do upadku Trzeciej Rzeszy w Afryce\ni osłabić natarcie Osi na całym świecie.
+Act_2	48.20	56.30	332	Wszystko idzie zgodnie z planem i do stycznia 1943 roku\nbrytyjska 8. Armia generała Montgomery'ego\nprzepędza Rommla i jego wojska,
+Act_2	56.30	60.77	338	zmuszając je, by w pośpiechu szykowały\nostatni rozpaczliwy opór na linii Mareth.
+Act_3	0.73	7.57	330	Na początku 1943 roku, w bitwie o wyzwolenie\nojczystej ziemi, Armia Czerwona rozbija\nniemiecki kocioł pod Stalingradem,
+Act_3	7.80	12.17	338	co oznacza pierwszą\npoważną porażkę armii Hitlera.
+Act_3	12.17	18.47	332	6 czerwca 1944 roku — D-Day.\nAlianci rozpoczynają zakrojoną na szeroką skalę\ninwazję z morza i powietrza\nna wybrzeże Normandii,
+Act_3	18.47	24.33	330	która wkrótce przemieni się w pełny\nodwrót niegdyś potężnych\nniemieckich armii przez całą Francję i Belgię.
+Act_3	24.33	30.70	332	Zachęcony sukcesem,\nbrytyjski feldmarszałek Montgomery\nopracowuje plan, który,\njak zapewnia, zakończy wojnę do Bożego Narodzenia,
+Act_3	30.70	33.17	338	pod kryptonimem\n„Market Garden”.
+Act_3	33.17	37.80	332	Mając inicjatywę po swojej stronie,\nAlianci atakują przemysłowe\nserce Niemiec od północy,
+Act_3	37.80	43.07	330	próbując obejść od flanki potężną Linię Zygfryda\ni przebić się do Berlina.
+Act_3	43.07	48.80	332	Jednak plan Montgomery'ego kończy się sromotną klęską,\nkiedy ostatniego mostu na Renie\nnie udaje się utrzymać.
+Act_3	48.80	53.80	332	Gorzka porażka i ogromne straty\ngrzebią wszelkie nadzieje na rychły koniec wojny,
+Act_3	53.80	57.40	333	a ocalałe wojska alianckie\nwycofują się do Francji.
+Act_3	57.40	62.17	330	Na szczęście w październiku,\ngdy Linia Zygfryda zostaje wreszcie przełamana od zachodu,
+Act_3	62.17	68.90	332	Amerykanie szykują się do szturmu na Akwizgran —\nmiasto, któremu przypadnie\nwątpliwy zaszczyt\nbycia pierwszym dużym niemieckim miastem,
+Act_3	68.90	71.80	332	które padło przed siłami Aliantów.
+EndGame	0.47	2.93	353	Marzec 1945 roku.
+EndGame	2.93	7.93	332	Most na Renie pod Remagen jest pewnie utrzymany,\na wojska alianckie wlewają się do Niemiec,
+EndGame	7.93	11.97	330	niosąc walkę z nazistami prosto\npod próg Trzeciej Rzeszy.
+EndGame	11.97	17.10	332	Wojska niemieckie w Zagłębiu Ruhry kapitulują,\na wojska radzieckie docierają do Berlina.
+EndGame	17.10	27.73	330	Niegdyś dumna, pozornie\nniezwyciężona armia niemiecka, która dążyła\ndo podboju cudzych ziem od Związku Radzieckiego\npo zachodnie krańce Europy i Afrykę Północną,
+EndGame	27.73	32.67	338	jest teraz zmuszona rozpaczliwie\nbronić własnej ojczyzny.
+EndGame	32.67	37.77	332	Bezwarunkowa kapitulacja wszystkich\nniemieckich sił zbrojnych\nprzed Aliantami — bez której,\njak oświadczał prezydent Roosevelt,
+EndGame	37.77	42.37	333	wojna nie może się skończyć\n— jest już blisko.
+EndGame	42.37	45.50	332	Świat, tak długo udręczony wojną,
+EndGame	45.50	48.30	338	wkrótce będzie mógł świętować.

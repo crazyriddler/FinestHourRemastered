@@ -1,0 +1,161 @@
+# Finest Hour Remastered: the movies' subtitles in German (src/game/movie_subs.cpp, drawn by tools/subs_render.py
+# into de_movies.bin). "movie<tab>start s<tab>end s<tab>top y of 480<tab>text", \n a line break. UTF-8.
+# Their times and places those of the Russian subtitles (lang/ru_movies.txt), translated (issue #47).
+
+1_1_Mon	0.20	3.10	332	Mein Name ist Alexander Sokolow.
+1_1_Mon	3.10	4.73	330	Ich dachte, ich wäre sicher.
+1_1_Mon	4.73	9.17	332	Als Lehrling eines Uhrmachers\nhätte ich das Handwerk gelernt\nund eine eigene Werkstatt eröffnet.
+1_1_Mon	9.17	13.27	330	Vielleicht hätte ich geheiratet,\nKinder bekommen, ein Leben begonnen.
+1_1_Mon	13.27	19.37	332	Doch jetzt werden unsere Städte angegriffen,\nund Stalingrad wird diesen Träumen ein Ende setzen.
+1_1_Mon	19.37	25.43	330	Wir hätten wissen müssen,\ndass die Deutschen sich gegen uns wenden\nund den Pakt brechen. Sie haben keine Ehre.
+1_1_Mon	25.43	32.10	330	Die Kommissare haben uns so schnell zusammengetrieben,\nsie sprachen vom Vaterland, vom Opfer unserer Brüder,\nvon unserer Pflicht.
+1_1_Mon	32.10	36.33	332	Ich bin erst zwanzig,\naber ich bin bereit, bis zum Tod zu kämpfen.
+1_1_Mon	36.33	40.00	332	Der Anblick meiner Heimatstadt Stalingrad\nmacht mich rasend vor Wut.
+1_1_Mon	40.00	43.10	330	Als würde die Hölle selbst brennen.
+1_1_Mon	44.73	47.90	332	Alexander Sokolow\n20. September 1942\nStalingrad, UdSSR
+1_2_Mon	0.33	2.70	332	Mein Name ist Tanja Pawlowna.
+1_2_Mon	2.70	5.93	332	Wir wussten kaum,\ndass die faschistische Invasion\nschon unser Dorf erreicht hatte,
+1_2_Mon	5.93	10.07	338	bis wir nachts\nvom fernen Rasseln der Panzerketten erwachten.
+1_2_Mon	10.07	12.90	332	Panzergranaten trieben\ndie Nachbarn in Deckung,
+1_2_Mon	12.90	16.60	338	und in der Panik verlor ich meine Eltern.
+1_2_Mon	16.60	19.30	332	Am nächsten Tag\nnahmen mich Soldaten der Roten Armee auf.
+1_2_Mon	19.30	21.33	330	Ich war fünfundzwanzig.
+1_2_Mon	21.33	26.17	330	Im ersten Gefecht wurde unsere Einheit aufgerieben,\nund ich rettete mich in ein zerstörtes Gebäude,
+1_2_Mon	26.17	29.77	333	wo ich ein Scharfschützengewehr\nvom Körper eines gefallenen Kameraden nahm.
+1_2_Mon	29.77	35.27	332	Die Stimme meines Vaters führte mein Visier,\nals ich mit diesem Gewehr\ndie ersten vier Deutschen niederstreckte.
+1_2_Mon	35.27	40.00	330	Mein Können wurde dem Stab gemeldet,\nman machte mich zur Scharfschützin\nund schickte mich nach Stalingrad.
+1_2_Mon	40.00	43.00	332	Seitdem jage ich Deutsche.
+1_2_Mon	43.00	49.70	330	Sie haben mir meine Familie und mein Zuhause genommen,\nund ich werde ihnen das Leben nehmen.
+1_2_Mon	51.73	54.90	332	Tatjana Pawlowna\n3. Oktober 1942\nStalingrad, UdSSR
+1_3_Mon	0.33	2.50	332	Mein Name ist Nikolai Badanow.
+1_3_Mon	2.50	5.23	332	Am Tag nachdem\ndie Deutschen die Sowjetunion überfielen,
+1_3_Mon	5.23	10.50	334	ließ ich meine Frau und meinen neugeborenen Sohn\nin der Obhut meiner Eltern\nund trat in die Rote Armee ein.
+1_3_Mon	10.50	17.10	330	Nach vielen Jahren als Mechaniker in Leningrad\nwunderte es mich nicht, dass man mich\ndem 24. Panzerkorps zuteilte.
+1_3_Mon	17.10	21.00	332	Ich lebe für den Tag,\nan dem wir Berlin unter unseren Ketten zermalmen.
+1_3_Mon	21.00	26.60	332	Vielleicht hat mir gerade dieser Kampfgeist\neine eigene Panzerbesatzung\nund die Versetzung nach Stalingrad eingebracht.
+1_3_Mon	26.60	32.90	333	Meine Besatzung ist wie eine Familie,\naber es gibt noch eine Kameradin,\nmit der ich für immer verbunden sein werde.
+1_3_Mon	32.90	35.30	332	Ihr Name ist Tanja Pawlowna,
+1_3_Mon	35.30	43.07	338	und sie hat uns die Haut gerettet, als wir\nmit dem letzten verbliebenen T-34\nnach dem Sturm auf die alte Traktorenfabrik flohen.
+1_3_Mon	43.07	48.20	332	Bald darauf bekam unser Panzer\nProbleme mit dem Motor,\nund die Rauchfahne verriet unsere Stellung,
+1_3_Mon	48.20	54.33	338	also suchten wir uns einen Ort,\nder sicher aussah,\num ihn zu reparieren.
+1_3_Mon	57.20	60.37	332	Nikolai Badanow\n3. Oktober 1942\nStalingrad, UdSSR
+1_5_Mon	0.23	3.73	330	24. Dezember 1942,\nUmgebung von Stalingrad
+1_5_Mon	3.73	9.07	332	Was wir bei Stalingrad begonnen hatten,\nsollten wir im Rahmen\nder Operation „Kleiner Saturn“ vollenden,
+1_5_Mon	9.07	13.20	333	auf einem abgelegenen Flugfeld\nnahe der kleinen Staniza Tazinskaja.
+1_5_Mon	13.20	17.83	330	Unsere Aufgabe war es,\nsich dem Flugfeld von Norden über den Don zu nähern,
+1_5_Mon	17.83	24.00	338	und die festsitzenden deutschen Kräfte\nabzuschneiden und einzukesseln,\ndenen Hitler den Rückzug verboten hatte.
+1_5_Mon	24.00	30.23	330	Dort, in Tazinskaja, sollten wir\ndas Flugfeld überraschen,
+1_5_Mon	30.23	34.70	330	so viele Flugzeuge wie möglich zerstören\nund den Nachschub der Nazis\nim Kessel von Stalingrad unterbrechen.
+1_5_Mon	34.70	38.27	330	Das war ein Auftrag,\nden ich mit Vergnügen ausführen wollte.
+1_5_Mon	38.27	45.70	332	Doch als wir zum Schlag ausholten,\nerfuhren die Deutschen von unserer Anwesenheit\nund begannen eine hastige Evakuierung.
+1_5_Mon	45.70	52.80	332	Vielleicht kamen wir nicht mehr dazu,\n„Überraschung!“ zu rufen,\naber Spaß gab es trotzdem noch genug.
+1_5_Mon	55.40	58.57	332	Nikolai Badanow\n24. Dezember 1942\nTazinskaja, UdSSR
+2_1_Mon	0.57	5.60	333	Meine Frau schrieb mir schließlich:\n„Edward Carlyle, bitte doch einfach darum,\ndass man dich woandershin versetzt.“
+2_1_Mon	5.60	6.87	332	Das tat ich dann auch.
+2_1_Mon	6.87	13.13	330	Wie sich zeigt, kann einen ein Hintergrund\nals Chemielehrer ziemlich schnell\nhinter dem Schreibtisch hervorholen\n– wenn man das denn will.
+2_1_Mon	13.13	18.77	332	Von „Popski's Private Army“\nund ihren Verbindungen zu den „Wüstenratten“\nwusste ich nichts,\nbis ich zur Ausbildung kam.
+2_1_Mon	18.77	25.67	332	Die Philosophie dieses\nSabotagezugs sind blitzschnelle Schläge\nund gewaltige Explosionen tief im Rücken des Feindes.
+2_1_Mon	25.67	30.20	332	Es ist ein gutes Gefühl zu wissen, dass jedes Mal,\nwenn wir ein Treibstofflager\noder ein Munitionsdepot in Brand setzen,
+2_1_Mon	30.20	34.67	332	wir Rommels Panzer aufhalten\nund den armen Kerlen an der Front helfen.
+2_1_Mon	34.67	40.00	330	Vielleicht ist das kein fairer Kampf,\naber die Deutschen haben in Europa auch kaum fair gekämpft,\nalso zum Teufel mit ihnen.
+2_1_Mon	40.00	43.90	332	Meine Einsätze sind streng geheim,\nalso, soweit meine Frau weiß,
+2_1_Mon	43.90	50.10	333	sitze ich immer noch hinter dem Schreibtisch,\naber aus irgendeinem seltsamen Grund\nhabe ich aufgehört, mich zu beklagen.
+2_1_Mon	52.73	55.90	332	Edward Carlyle\n22. Januar 1943\nMatmata, Tunesien
+2_2_Mon	0.27	2.73	332	Wenn man durch die Wüste zieht,\nwie durch einen Ozean aus Sand,
+2_2_Mon	2.73	8.60	338	muss man wissen, wohin man will,\nund einen Plan haben,\nwie man hinein- und wieder herauskommt\n– so schnell und leise wie möglich.
+2_2_Mon	8.60	11.90	332	Ehrlich gesagt ist es uns lieber,\nwenn „leise“ nicht mehr leise ist.
+2_2_Mon	11.90	16.67	332	Das Einzige, womit wir\nden Feind an seiner empfindlichsten Stelle treffen können,\nsind unsere „Jeeps“.
+2_2_Mon	16.67	21.90	333	Sie sind immer so mit Treibstoff,\nMunition und Wasser beladen,\ndass sie 600 Meilen am Stück schaffen.
+2_2_Mon	21.90	28.63	330	Sie sind zwar ungepanzert, lassen sich aber\nschwer bewaffnen: mit zwei Maschinengewehren Kaliber .50,\ndie panzerbrechende\nund Brandmunition verschießen.
+2_2_Mon	28.63	30.97	330	Das macht uns schnell und tödlich,\nwenn es darauf ankommt,
+2_2_Mon	30.97	35.97	330	fähig, es mit deutschen\nHalbkettenfahrzeugen und Panzerwagen aufzunehmen,\ndie uns sonst in allem überlegen sind.
+2_2_Mon	35.97	41.53	332	Und doch ändert das nichts daran,\ndass man dem Feuer völlig ausgesetzt ist,\nwenn man in einem offenen „Jeep“ sitzt.
+2_2_Mon	41.53	45.10	330	Und am Steuer sollte besser\nein verdammt guter Fahrer sitzen\n– für den Fall, dass es Ärger gibt.
+2_2_Mon	45.10	47.93	332	Und den gibt es immer, Kumpel.
+2_2_Mon	50.47	53.63	332	Edward Carlyle\n23. Januar 1943\nKsar Tarsin, Tunesien
+3_1_Mon	0.37	2.50	332	Mein Name ist Chuck Walker.
+3_1_Mon	2.50	6.97	332	Ich gehöre schon lange zur 1. Infanteriedivision\n– der „Big Red One“.
+3_1_Mon	6.97	11.73	332	Ich habe in Nordafrika und auf Sizilien gekämpft\nund bin am D-Day in der Normandie gelandet.
+3_1_Mon	11.73	16.87	332	Jeden Tag kämpfe ich darum,\nmein Leben und das meiner Männer zu retten.\nIch bin stolz, an der Front zu sein.
+3_1_Mon	16.87	20.43	332	Ich weiß, dass keiner von uns nach Hause kommt,\nbevor die Deutschen nicht vollständig kapitulieren,
+3_1_Mon	20.43	22.70	330	und wir wollen dabei sein, wenn es so weit ist.
+3_1_Mon	22.70	25.07	332	Deshalb ist Aachen so wichtig.
+3_1_Mon	25.07	28.40	332	Es ist Zeit, diesen Krieg\nnach Deutschland zu tragen – dorthin, wo er begann.
+3_1_Mon	28.40	33.27	332	Es geht nicht um Orden oder Ehre\n– all das zählt nicht,\nwenn man um sein Leben kämpft.
+3_1_Mon	33.27	40.50	330	Es geht darum, den Krieg zu gewinnen,\nund der Dienst in der „Big Red One“\nhat mich gelehrt: Einen Krieg gewinnt man,\nindem man ihn überlebt.
+3_1_Mon	40.50	45.03	330	Und das heißt – Deutsche töten,\nbevor sie mich töten.
+3_1_Mon	47.83	51.00	332	Chuck Walker\n21. Oktober 1944\nAachen, Deutschland
+3_3_Mon	0.47	2.07	332	Mein Name ist Sam Rivers.
+3_3_Mon	2.07	7.50	330	Am Tag nach dem Angriff auf Pearl Harbor\nrannten mein bester Freund Jim und ich los,\num uns bei der US-Armee zu melden.
+3_3_Mon	7.50	10.60	332	Die meisten unserer Kumpels\naus dem Viertel in Chicago taten dasselbe.
+3_3_Mon	10.60	12.13	330	Ich war erst achtzehn.
+3_3_Mon	12.13	19.07	332	Ich hatte kaum Zeit,\nmich zu verabschieden, meine Sachen zu packen\nund meine liebe Maggie zu heiraten,\ndrei Stunden bevor es zur Grundausbildung ging.
+3_3_Mon	19.07	26.13	330	Man teilte mich dem 761. Panzerbataillon zu,\ndas fast ganz aus Schwarzen bestand,\nbis auf die Offiziere.
+3_3_Mon	26.13	34.27	330	In Camp Hood war man uns nicht gerade wohlgesinnt,\naber das spornte uns nur an,\nein unschlagbares Team zu werden\nund uns den Respekt aller zu verdienen, die uns begegneten.
+3_3_Mon	34.27	40.30	332	General Patton selbst sah uns im Einsatz und bestand darauf,\ndass man uns seiner 3. Armee zuteilte\nund nach Europa schickte.
+3_3_Mon	40.30	42.07	332	Heute sind wir im Städtchen Tillet.
+3_3_Mon	42.07	46.40	332	Alle anderen amerikanischen Einheiten,\ndie diese Stadt einnehmen sollten,\nhaben es versucht und sind gescheitert.
+3_3_Mon	46.40	51.47	332	Jetzt sind wir dran.\nWir alle kämpfen für mehr\nals nur dafür, den Feind zu schlagen.
+3_3_Mon	51.47	56.77	332	Jeder in der 761. hat etwas\nzu beweisen, sich selbst und den Leuten zu Hause.
+3_3_Mon	56.77	60.50	330	Für uns hat der Sieg eine doppelte Bedeutung.
+3_3_Mon	63.17	66.33	332	Sam Rivers\n9. Januar 1945\nTillet, Belgien
+3_5_Mon	0.67	4.60	332	Vier zermürbende Monate sind vergangen,\nseit wir unsere\nerste deutsche Stadt eingenommen haben – Aachen.
+3_5_Mon	4.60	7.90	332	Diese Operation und die Wochen,\ndie darauf folgten, waren besonders hart.
+3_5_Mon	7.90	11.43	330	Ein bitterer, kalter Kampf,\nder Versuch, die Deutschen bei Stavelot aufzuhalten
+3_5_Mon	11.43	16.37	331	– das war einer der wenigen\nMomente in diesem Krieg,\nin denen ich wirklich dachte,\ndass ich vielleicht nicht nach Hause komme.
+3_5_Mon	16.37	19.23	332	Meine Männer gingen daraus\nmit Auszeichnungen für ihre Opfer hervor.
+3_5_Mon	19.23	23.77	332	Das ändert nichts daran,\ndass wir einen hohen Preis\nfür den Einzug nach Deutschland bezahlt haben.
+3_5_Mon	23.77	28.90	332	Uns erreichen Gerüchte,\ndass eine Brücke über den Rhein noch steht,\nund wir sind auf dem Weg, um das zu überprüfen.
+3_5_Mon	28.90	31.63	330	Das Ende dieses Krieges ist nah,\nund das wissen wir alle.
+3_5_Mon	31.63	34.47	330	Deutschland bleibt kein Ort mehr\nals das eigene Zuhause,
+3_5_Mon	34.47	37.37	330	und auch das Zuhause ist kein sicherer\nOrt mehr zum Schlafen.
+3_5_Mon	39.17	42.33	332	Chuck Walker\n7. April 1945\nRemagen, Deutschland
+Act_1	1.00	3.50	360	Europa, 1940.
+Act_1	3.50	8.67	332	Hitlers rücksichtsloses Streben,\ndie Grenzen Deutschlands zu erweitern, hat sein Volk\nin einen Krieg mit der ganzen Welt gestürzt.
+Act_1	8.67	15.97	330	Die Mobilmachung der Armeen Großbritanniens und Frankreichs\nkann die Eindringlinge nicht aufhalten:\ndie Nazis fallen in die Nachbarländer\nim Norden und Westen Europas ein
+Act_1	15.97	20.33	338	und stoßen zugleich nach Osten vor –\nzu den lebenswichtigen Ölfeldern\nder Sowjetunion.
+Act_1	20.33	23.97	332	Im Herbst entbrennt ein Blitzkrieg,\nder England brechen soll,
+Act_1	23.97	27.63	332	während Amerika seine Produktion steigert,\num den Briten zu Hilfe zu eilen.
+Act_1	27.63	34.10	332	1941 bricht an –\nder Kampf um Nordafrika beginnt,\nRommels Afrikakorps trifft in Tripolis ein.
+Act_1	34.10	38.53	332	An der Ostfront bricht ein ungeduldiger\nHitler den Pakt mit der Sowjetunion.
+Act_1	38.53	44.20	332	Stalin antwortet mit der Taktik der verbrannten Erde\nund will den faschistischen Eindringlingen\nnur Ruinen hinterlassen,
+Act_1	44.20	47.10	338	doch eine seiner Städte nach der anderen fällt.
+Act_1	47.10	52.00	330	Jetzt, 1942, gehen auf Stalingrad\nmassive deutsche Luftangriffe nieder,
+Act_1	52.00	55.07	330	und die Schlacht um diese ruhmreiche Stadt\nwird erbittert geführt.
+Act_1	55.20	59.87	332	Die Rote Armee weicht nicht zurück,\nund eine Gegenoffensive beginnt gegen Kräfte,
+Act_1	59.87	65.03	332	die von der Wolga bis zum Atlantik\nund tief in die afrikanische Wüste reichen.
+Act_1	65.03	73.30	332	Im Angesicht des Unmöglichen\nfolgen Millionen Menschen dem Ruf\nihrer Länder, ihrer Familien, ihres Lebens.
+Act_2	0.83	8.27	332	Mit der Kontrolle über Nordafrika\nhätten die Achsenmächte bessere Aussichten,\ndas Mittelmeer zu halten –\nnun der Brennpunkt des Krieges.
+Act_2	8.27	15.57	332	Zum Unglück für den italienischen\nDiktator Benito Mussolini\nkann seine Armee den britischen\nTruppen in der Region nicht standhalten.
+Act_2	15.57	20.60	332	Hitler fürchtet,\ndass weitere Verluste in Afrika\nseine Pläne an der Ostfront\ngefährden,
+Act_2	20.60	24.77	332	und schickt General Rommel\nund sein Afrikakorps, um Ordnung zu schaffen.
+Act_2	24.77	31.63	332	Bis 1942 gelangen die Alliierten zu dem Schluss,\ndass man den Achsenmächten am besten\ndas Rückgrat bricht, indem man eine weitere Front eröffnet,
+Act_2	31.63	35.57	332	und so entsteht die Operation „Torch“,\nein gemeinsames Unternehmen\nbritischer und amerikanischer Truppen.
+Act_2	35.57	41.80	332	Ein gewaltiger, koordinierter\nVorstoß durch die feindlichen Linien,\nder die Vorräte an Treibstoff,\nLebensmitteln und Ausrüstung vernichtet,
+Act_2	41.80	48.20	332	soll das Dritte Reich in Afrika zu Fall bringen\nund den Ansturm der Achse weltweit schwächen.
+Act_2	48.20	56.30	332	Alles verläuft nach Plan, und bis Januar 1943\ntreibt die britische 8. Armee von General Montgomery\nRommel und seine Truppen vor sich her
+Act_2	56.30	60.77	338	und zwingt sie, in aller Eile ihren\nletzten verzweifelten Widerstand an der Mareth-Linie vorzubereiten.
+Act_3	0.73	7.57	330	Anfang 1943 zerschlägt die Rote Armee\nim Kampf um die Befreiung der Heimat\nden deutschen Kessel bei Stalingrad,
+Act_3	7.80	12.17	338	was die erste\ngroße Niederlage von Hitlers Armeen bedeutet.
+Act_3	12.17	18.47	332	6. Juni 1944 – D-Day.\nDie Alliierten beginnen eine gewaltige\nInvasion von See und aus der Luft\nan der Küste der Normandie,
+Act_3	18.47	24.33	330	die bald zum vollständigen\nRückzug der einst mächtigen\ndeutschen Armeen durch ganz Frankreich und Belgien wird.
+Act_3	24.33	30.70	332	Vom Erfolg beflügelt\nentwirft der britische Feldmarschall Montgomery\neinen Plan, der, wie er versichert,\nden Krieg bis Weihnachten beenden wird,
+Act_3	30.70	33.17	338	unter dem Decknamen\n„Market Garden“.
+Act_3	33.17	37.80	332	Mit der Initiative auf ihrer Seite\ngreifen die Alliierten das industrielle\nHerz Deutschlands von Norden an,
+Act_3	37.80	43.07	330	um den mächtigen Westwall zu umgehen\nund nach Berlin durchzubrechen.
+Act_3	43.07	48.80	332	Doch Montgomerys Plan scheitert kläglich,\nals sich die letzte Brücke über den Rhein\nnicht halten lässt.
+Act_3	48.80	53.80	332	Die bittere Niederlage und gewaltige Verluste\nbegraben alle Hoffnungen auf ein baldiges Kriegsende,
+Act_3	53.80	57.40	333	und die überlebenden alliierten Truppen\nziehen sich nach Frankreich zurück.
+Act_3	57.40	62.17	330	Zum Glück, als im Oktober\nder Westwall endlich von Westen durchbrochen ist,
+Act_3	62.17	68.90	332	bereiten sich die Amerikaner auf den Sturm auf Aachen vor –\neine Stadt, der die\nzweifelhafte Ehre zuteilwird,\ndie erste große deutsche Stadt zu sein,
+Act_3	68.90	71.80	332	die vor den Alliierten fällt.
+EndGame	0.47	2.93	353	März 1945.
+EndGame	2.93	7.93	332	Die Rheinbrücke bei Remagen ist fest in alliierter Hand,\nund die Truppen der Alliierten strömen nach Deutschland
+EndGame	7.93	11.97	330	und tragen den Kampf gegen die Nazis\nbis vor die Tür des Dritten Reiches.
+EndGame	11.97	17.10	332	Die deutschen Truppen im Ruhrgebiet kapitulieren,\nund die sowjetischen Truppen erreichen Berlin.
+EndGame	17.10	27.73	330	Die einst stolze, scheinbar\nunbesiegbare deutsche Armee, die\nfremdes Land von der Sowjetunion\nbis an die Westränder Europas und nach Nordafrika erobern wollte,
+EndGame	27.73	32.67	338	muss nun verzweifelt\ndie eigene Heimat verteidigen.
+EndGame	32.67	37.77	332	Die bedingungslose Kapitulation aller\ndeutschen Streitkräfte\nvor den Alliierten – ohne die,\nwie Präsident Roosevelt erklärte,
+EndGame	37.77	42.37	333	der Krieg nicht enden kann\n– ist nicht mehr fern.
+EndGame	42.37	45.50	332	Die Welt, so lange vom Krieg gequält,
+EndGame	45.50	48.30	338	wird bald jubeln können.

@@ -23,6 +23,8 @@ from lang_merge import game_bytes  # noqa: E402
 PC_SETTINGS = {"russian": ("Настройки ПК", "НАСТРОЙКИ ПК"), "polish": ("Opcje PC", "OPCJE PC"),
                "portuguese": ("Opções do PC", "OPÇÕES DO PC")}
 TYPEWRITER = {"$pressStart", "$pressStartNGC", "$pressStartXbox"}
+# rows the measure leaves a space short, set by eye against the English (the Extras page's Russian rows: issue #47)
+NUDGE = {"russian": {"$credits": 1, "$cheats": 1}}
 
 
 def english_rows(pak):
@@ -91,6 +93,7 @@ def pad(key, english, text, w, language):
         n = lead + (len(en) - len(t)) // 2
     else:
         n = round(lead + (measure(en, w, language) - measure(t, w, language)) / (2 * w[32]))
+        n += NUDGE.get(language, {}).get(key, 0)
     return " " * max(0, n) + t
 
 

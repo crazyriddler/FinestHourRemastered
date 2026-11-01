@@ -259,8 +259,9 @@ const char* Text(int which) {
                                "\xD0\x92\xD1\x8B\xD0\xB9\xD1\x82\xD0\xB8 \xD0\xB2 Windows?", "\xD0\x9D\xD0\xB5\xD1\x82",
                                "\xD0\x94\xD0\xB0"};
     static const char* pl[] = {"Wyjd\xC5\xBA z gry", "Wyj\xC5\x9B\xC4\x87 do Windows?", "Nie", "Tak"};
+    static const char* de[] = {"Spiel beenden", "Zu Windows zur\xC3\xBC" "ckkehren?", "Nein", "Ja"};
     uint32_t l = Language();
-    const char** t = l == 4 ? fr : l == 6 ? it : l == 5 ? es : l == 9 ? pt : l == 10 ? ru : l == 11 ? pl : en;
+    const char** t = l == 3 ? de : l == 4 ? fr : l == 6 ? it : l == 5 ? es : l == 9 ? pt : l == 10 ? ru : l == 11 ? pl : en;
     return t[which];
 }
 

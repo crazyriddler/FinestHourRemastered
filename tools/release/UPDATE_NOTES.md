@@ -285,6 +285,14 @@ The version installed is in `version.txt` beside the game. Unattended:
   Read as text, they shrink a little less than the compass and the meters; the subtitles keep their own Subtitle
   Size, the squad's names over their heads and the hit markers keep theirs. The subtitles' options now work in the
   vehicles too (Come Out Fighting, the tanks), where the game writes them higher.
+- German: a new language (PC Settings > General > Language > Deutsch), with the game's own German text, which is
+  on the disc beside the English but which this version never offered: the menus, objectives, hints and
+  subtitles as the German release wrote them. The voices stay in English, the movies have German subtitles and the
+  PC Settings are translated (issue #47).
+- Russian: the squad's names over their heads are in Russian (С-т Пусков, Ряд. Стори...), and so are the Soviet
+  weapons' names under the hand when you can pick one up (ППШ-41, ДП-28, винтовка Мосина...). The Extras page's
+  title (now Бонусы) no longer runs past the page, and its rows line up as in English (issue #47).
+- Polish: the briefings, the acts' movies and the ending have Polish subtitles (issue #34).
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

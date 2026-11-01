@@ -33,6 +33,7 @@
 #include "common/cod.h"
 #include "core/log.h"
 #include "kernel/kernel.h"
+#include "kernel/memory.h"
 #include "xdk/hle.h"
 
 namespace cod::offline {
@@ -150,6 +151,31 @@ void PatchFonts(uint64_t pos, uint8_t* data, uint32_t n) {
             if (!it->masked || b != 0xFF) data[k - pos] = b;
         }
     }
+}
+
+// The squad's names over their heads (SoldierTrigger's name in the levels' data in COD.PAK, issue #47): lang/ru_names.bin,
+// made by tools/lang_names.py from lang/ru_names.txt, the same patches as the fonts' (each name in its own slot, its
+// length the English's room)
+void LoadNames() {
+    std::ifstream in(app::ExeDir() / "lang" / "ru_names.bin", std::ios::binary);
+    char magic[8] = {};
+    uint64_t pak = 0;
+    uint32_t count = 0;
+    if (!in.read(magic, 8) || std::memcmp(magic, "FHRFONT1", 8) != 0 || !in.read(reinterpret_cast<char*>(&pak), 8) ||
+        !in.read(reinterpret_cast<char*>(&count), 4))
+        return LOGW("language: lang/ru_names.bin missing: the names over the soldiers stay in English");
+    for (uint32_t i = 0; i < count; i++) {
+        uint64_t at = 0;
+        uint32_t len = 0, kind = 0;
+        if (!in.read(reinterpret_cast<char*>(&at), 8) || !in.read(reinterpret_cast<char*>(&len), 4) ||
+            !in.read(reinterpret_cast<char*>(&kind), 4))
+            break;
+        FontPatch f{at, false, std::string(len, '\0')};
+        if (!in.read(f.bytes.data(), len)) break;
+        g_fonts.push_back(std::move(f));
+    }
+    std::sort(g_fonts.begin(), g_fonts.end(), [](const FontPatch& a, const FontPatch& b) { return a.at < b.at; });
+    LOGR("language: ru_names.bin, %u names", count);
 }
 
 void Load() {
@@ -375,8 +401,43 @@ void Init() {
     g_lang = g_on ? l : 0;
     if (g_on) Load();
     if (g_lang == kRussian || g_lang == kPolish) LoadFonts();
+    if (g_lang == kRussian) LoadNames();
     // the movies' subtitles (game/movie_subs.cpp): lang/<code>_movies.bin where there is one
     if (g_on) cod::movie_subs::Load(g_lang == kRussian ? "ru" : g_lang == kPolish ? "pl" : "pt");
+    else if (l == 3) cod::movie_subs::Load("de");
+}
+
+// The Soviet weapons' names (the pickups' labels under the hand, issue #47): the game's weapon tables (one a language,
+// 0x3217F0 to 0x3220C0) point at names in its image; in Russian those of the Soviet weapons point at the port's own,
+// in the game's letters (the string tables' pickup messages' names)
+void Loaded() {
+    if (g_lang != kRussian) return;
+    struct Weapon {
+        uint32_t va;
+        const char* english;
+        const char* russian;
+    };
+    static const Weapon kWeapons[] = {
+        {0x2E4484, "PPSH", "ППШ-41"},
+        {0x2E444C, "Mosin Nagant", "Винтовка Мосина"},
+        {0x2E4428, "Nagant Sniper", "Снайперская винтовка Мосина"},
+        {0x2E44A4, "DP", "ДП-28"},
+        {0x2E43C8, "Maxim", "Максим"},
+        {0x2E4390, "T34 Coax", "Пулемёт Т-34"},
+        {0x2E439C, "T34 Cannon", "Пушка Т-34"},
+        {0x2E4378, "Mosin Ammo Clip", "Обойма Мосина"},
+        {0x2E43FC, "RTD33", "РГД-33"},
+    };
+    int moved = 0;
+    for (const Weapon& w : kWeapons) {
+        if (kernel::ReadCString(w.va) != w.english) continue;
+        const std::string text = GameText(w.russian, kRussian);
+        const uint32_t at = mem::AllocSystem(uint32_t(text.size()) + 1);
+        std::memcpy(kernel::HostPtr(at), text.c_str(), text.size() + 1);
+        for (uint32_t a = 0x3217F0; a < 0x3220C0; a += 4)
+            if (kernel::R32(a) == w.va) kernel::W32(a, at), moved++;
+    }
+    LOGR("language: %d Soviet weapons' names in Russian", moved);
 }
 
 }  // namespace cod::lang
@@ -438,3 +499,17 @@ void Patch(const std::string& path, uint64_t pos, uint8_t* data, uint32_t n) {
 }
 
 }  // namespace cod::lang
+
+// German (the settings' 3, the console's XC_LANGUAGE): this disc's text has German beside its English (the string tables'
+// German column, the levels' German string assets, the subtitles' German lines in the speech banks), but the game's
+// language from the console's (sub_000A4F70, through sub_000B3530) keeps its own four: English, French, Italian,
+// Spanish. German is made the game's own (its 1, sub_00129310) and the speech and movies it lacks are the English ones
+// (kernel/files.cpp: a GERMAN folder the disc lacks). The German movies' subtitles: lang/de_movies.bin
+X86_EXTERN_FUNC(__imp__sub_000B3530);
+X86_FUNC(sub_000B3530) {
+    __imp__sub_000B3530(ctx, base);
+    if (app::Get().language == 3) {
+        kernel::CallGuest(ctx, 0x129310, {1u});
+        ctx.eax = (ctx.eax & ~0xFFu) | 1u;  // (known)
+    }
+}

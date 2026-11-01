@@ -205,7 +205,8 @@ game's own look and textures. The render scale is never part of a preset: it sta
 - **Controllers**: Xbox, PlayStation and Switch, hot plugging and rumble, a modern layout or the original's, dead
   zone, sensitivity and look acceleration settings.
 - **Button Prompts** follow the device in hand: keys, Xbox, PlayStation or Switch buttons.
-- **Skip Intros**, **Language** (English, French, Italian, Spanish, Portuguese, Russian, Polish).
+- **Skip Intros**, **Language** (English, German, French, Italian, Spanish, Portuguese, Russian, Polish; German
+  with the game's own German text from the disc, the voices in English).
 - **Menu Ambience**: the battle behind the main menu (wind, guns, explosions far off) under its music, as on the
   PlayStation 2 (the Xbox kept the menu backdrop's sound muted).
 - **Sound**: Stereo or **5.1 Surround** (PC Settings > General): the game mixes for Dolby Digital as on a console

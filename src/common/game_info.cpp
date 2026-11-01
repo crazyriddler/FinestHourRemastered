@@ -570,6 +570,26 @@ void Command(const std::string& line_in) {
         if (line == "showtex")
             for (auto& slot : gpu::g_hidden_tex) slot = 0;
         if (line.rfind("memseq ", 0) == 0) MemSeq(line.substr(7));
+        // tests: where a text lies in the console's memory ("strfind <text>"), the words before it
+        if (line.rfind("strfind ", 0) == 0) {
+            const std::string text = line.substr(8);
+            int found = 0;
+            for (uint32_t a = 0x10000; a + 0x40 < 0x4000000 && found < 64; a++) {
+                if ((a & 0xFFF) == 0 && (!mem::IsCommitted(a) || !mem::IsCommitted(a + 0xFFF))) {
+                    a += 0xFFF;
+                    continue;
+                }
+                if (std::memcmp(kernel::HostPtr(a), text.data(), text.size()) != 0) continue;
+                found++;
+                const uint32_t w = a & ~3u;
+                LOGR("strfind %08X: before %08X %08X %08X %08X after %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X %08X",
+                     a, kernel::R32(w - 16), kernel::R32(w - 12), kernel::R32(w - 8), kernel::R32(w - 4), kernel::R32(w),
+                     kernel::R32(w + 4), kernel::R32(w + 8), kernel::R32(w + 12), kernel::R32(w + 16), kernel::R32(w + 20),
+                     kernel::R32(w + 24), kernel::R32(w + 28), kernel::R32(w + 32), kernel::R32(w + 36), kernel::R32(w + 40),
+                     kernel::R32(w + 44));
+            }
+            LOGR("strfind: %d found", found);
+        }
         // tests: a RenderWare texture by its name (RwTexture: its name at +0x10), and what points at an address
         // (a material at its texture, a list at its entries): "texfind <name>", "refs <hex address>"
         if (line.rfind("texfind ", 0) == 0 || line.rfind("refs ", 0) == 0) {
@@ -848,7 +868,7 @@ const app::GameInfo app::kGame = {
             cod::jobs::Init();
             control::SetCommandHandler(Command);
         },
-    .loaded = nullptr,
+    .loaded = [] { cod::lang::Loaded(); },
     .window =
         [](void* hwnd) {
             cod::overlay::Init();

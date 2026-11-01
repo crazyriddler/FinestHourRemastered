@@ -52,7 +52,7 @@ std::atomic<bool> g_shown{false};
 std::atomic<float> g_progress{0};
 std::mutex g_lock;
 std::string g_version, g_error, g_file, g_sha256;
-std::string g_notes[7];  // en fr it es pt ru pl
+std::string g_notes[8];  // en fr it es pt ru pl de
 uint64_t g_size = 0;
 
 fs::path TempDir() {
@@ -233,14 +233,14 @@ void Check() {
     const std::string v = JsonString(json, "version");
     LOGR("updates: installed %s, latest %s", installed.c_str(), v.empty() ? "?" : v.c_str());
     if (v.empty() || v <= installed) return;
-    static const char* const langs[7] = {"en", "fr", "it", "es", "pt", "ru", "pl"};
+    static const char* const langs[8] = {"en", "fr", "it", "es", "pt", "ru", "pl", "de"};
     {
         std::lock_guard l(g_lock);
         g_version = v;
         g_file = JsonString(json, "file");
         g_sha256 = JsonString(json, "sha256");
         g_size = JsonNumber(json, "size");
-        for (int i = 0; i < 7; i++) g_notes[i] = JsonString(json, std::string("notes_") + langs[i]);
+        for (int i = 0; i < 8; i++) g_notes[i] = JsonString(json, std::string("notes_") + langs[i]);
     }
     if (g_file.empty() || g_file.find_first_of("/\\") != std::string::npos || g_sha256.size() != 64 || !g_size) return;
     g_state = State::Offered;
@@ -328,7 +328,7 @@ std::string Version() {
 }
 std::string Notes() {
     const uint32_t lang = app::Get().language;
-    const int i = lang == 4 ? 1 : lang == 6 ? 2 : lang == 5 ? 3 : lang == 9 ? 4 : lang == 10 ? 5 : lang == 11 ? 6 : 0;
+    const int i = lang == 4 ? 1 : lang == 6 ? 2 : lang == 5 ? 3 : lang == 9 ? 4 : lang == 10 ? 5 : lang == 11 ? 6 : lang == 3 ? 7 : 0;
     std::lock_guard l(g_lock);
     return g_notes[i].empty() ? g_notes[0] : g_notes[i];
 }

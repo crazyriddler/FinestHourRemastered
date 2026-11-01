@@ -327,7 +327,7 @@ $cheat4	Рикошет (все)
 $cheat5	Уменьшение
 $cheat6	Меткий глаз
 $cheat7	Большие и малые
-$cheats	      Читы
+$cheats	       Читы
 $cheatsCaps	        ЧИТЫ
 $commando	Коммандос
 $commandoCaps	КОММАНДОС
@@ -335,7 +335,7 @@ $continueGame	Продолжить игру
 $controls	Управление
 $createNew	Новый
 $createProfileCaps	НОВЫЙ ПРОФИЛЬ
-$credits	    Авторы
+$credits	     Авторы
 $cycle	Смена
 $cycleGrenade	Сменить гранату
 $cycleItem	Сменить предмет
@@ -1255,8 +1255,8 @@ _Yes_No	$ms$ Да  $mc$ Нет
 @31aeddc5de00643a	Серж. Боб Старки: Придётся разделиться. Я пойду налево, ты держись правее.
 $cheat8	Cheat 1 (don't translate)
 $cheat9	Cheat 1 (don't translate)
-$extras	Доп. материалы
-$extrasCaps	ДОП. МАТЕРИАЛЫ
+$extras	Бонусы
+$extrasCaps	БОНУСЫ
 $mono	Моно
 $normal	Обычный
 $profile1	Johnny Bravo

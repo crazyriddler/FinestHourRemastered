@@ -60,6 +60,7 @@ bool Paused();       // the pause screen is up (hud.cpp)
 // Portuguese: the game's text from lang/pt.txt as it reads its files (game/language.cpp)
 namespace lang {
 void Init();
+void Loaded();  // the game's image in memory, before it runs
 bool Portuguese();
 void Patch(const std::string& xbox_path, uint64_t pos, uint8_t* data, uint32_t n);
 // the leading spaces of the main menu's row (0 to 3) in a language of the port's own, -1 in the game's own

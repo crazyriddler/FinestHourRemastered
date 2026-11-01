@@ -1897,6 +1897,7 @@ std::string MaterialSetup(int i, const std::string& uv) {
     // parallax occlusion: the view walks into the height field, nearer surfaces only
     // (from 14 m on the walk moves nothing: skipped). Its taps (and the soft height below) through s5, trilinear:
     // anisotropy over tens of taps a pixel costs much and shows nothing in where the walk stops
+    s += "float3 mPomDbg = 0;\n";  // (XBE_MATERIAL_DEBUG 10: the walk's texels / 32, pixels / 32, the view's slant)
     s += "float mFade = saturate(1 - mP.z * 0.0007);\n";
     // where a pixel spans several of the material's texels (its maps are 4 times the texture: from their second level
     // on) the walk's shift is under a pixel and only flickers: it fades out from the first level to the third
@@ -1906,20 +1907,33 @@ std::string MaterialSetup(int i, const std::string& uv) {
            "    float fade = mFade;\n"
            "    float steps = lerp(10, 40, 1 - saturate(vt.z));\n"
            "    float uvw = sqrt((dot(mU1, mU1) + dot(mU2, mU2)) / max(dot(mDx, mDx) + dot(mDy, mDy), 1e-12));\n"
-           "    float depth = min(mtl[2].y * mtl[3].z * uvw, mtl[2].y) * mFlat;\n"
+           // (seen at a grazing angle, along a window's jamb or a narrow wall, the walk crosses many of the height map's
+           // texels a pixel: in steps of several texels it stair-stepped into terraces. It fades out below 25 degrees
+           // over the surface, and its steps are by the height map's texels as well, 1.5 each, up to 64)
+           "    float depth = min(mtl[2].y * mtl[3].z * uvw, mtl[2].y) * mFlat * smoothstep(0.2, 0.45, vt.z);\n"
            "    float2 walk = -vt.xy / max(vt.z, 0.45) * depth * fade * lerp(0.35, 1, saturate(vt.z * 1.6));\n"
            // (the whole walk's length on the screen in pixels: under half a pixel it moves nothing, and a step a pixel
            // and a third or so is all a shorter one needs; the steps by the angle stand where it is long)
            "    float jd = mU1.x * mU2.y - mU2.x * mU1.y;\n"
            "    float wpx = length(float2(mU2.y * walk.x - mU2.x * walk.y, mU1.x * walk.y - mU1.y * walk.x)) / max(abs(jd), 1e-20);\n"
-           "    steps = wpx < 0.5 ? 0 : min(steps, max(6, ceil(wpx * 0.75)));\n"
+           "    float2 msz; mmat.GetDimensions(msz.x, msz.y);\n"
+           "    float wtx = length(walk * msz);\n"
+           "    mPomDbg = float3(saturate(wtx / 32), saturate(wpx / 32), vt.z);\n"
+           // (close up, the walk crossed tens of the height map's texels, the generated relief's cliffs drawn out
+           // into streaks and terraces (a window's jamb seen from a step away): at most 12 of them, and the height
+           // softer the longer the walk)
+           // (twice that for a parallax set deeper by hand than any class's, over 0.08: the muddy snowy roads)
+           "    float wcap = saturate((mtl[2].y > 0.08 ? 24 : 12) / max(wtx, 1e-3));\n"
+           "    walk *= wcap; wpx *= wcap; wtx *= wcap;\n"
+           "    steps = wpx < 0.5 ? 0 : min(64, max(max(6, ceil(wpx * 0.75)), ceil(wtx / 1.5)));\n"
            "    float2 duv = walk / max(steps, 1);\n"
            "    if (steps > 0) {\n"
-           "    float2 hU1 = mU1 * 3, hU2 = mU2 * 3;\n"
+           "    float hs = 3 * max(1, wtx / 8);\n"
+           "    float2 hU1 = mU1 * hs, hU2 = mU2 * hs;\n"
            "    float layer = 1 / steps, d = 0, pd = 0;\n"
            "    float2 cur = mUv, prev = mUv;\n"
            "    float hd = 1 - mmat.SampleGrad(mtri, cur, hU1, hU2).g, phd = hd;\n"
-           "    [loop] for (int k = 0; k < 40; k++) {\n"
+           "    [loop] for (int k = 0; k < 64; k++) {\n"
            "        if (d >= hd || k >= steps) break;\n"
            "        prev = cur; phd = hd; pd = d;\n"
            "        cur += duv; d += layer;\n"
@@ -1953,26 +1967,61 @@ std::string MaterialShade(int i) {
         // coarse relief (the game paints their shading)
         "if (mtl[0].w == 0 && mtl[3].y < 0 && mtl[2].w >= 0) {\n"
         "    float fd = saturate(1.6 - mP.z / (200 * mtl[3].z)) * -mtl[3].y;\n"
-        // (a uniform's weave not over the skin painted in it, the hands: their colour skin's, red over blue)
-        "    if (mtl[2].w != 6) { float3 sb = mBase.rgb; fd *= 1 - smoothstep(0.08, 0.2, sb.r - sb.b) * smoothstep(0.0, 0.06, sb.g - sb.b) * smoothstep(0.2, 0.35, sb.r) * step(sb.g, sb.r); }\n"
+        // (a uniform's weave not over the skin painted in it, the hands: their colour skin's, red over blue, its green
+        // the blue's or more: a pink hand's as well as a tan face's, not purple)
+        "    float3 sb = mBase.rgb;\n"
+        "    float sk = smoothstep(0.08, 0.2, sb.r - sb.b) * smoothstep(-0.05, -0.015, sb.g - sb.b) * smoothstep(0.2, 0.35, sb.r) * step(sb.g, sb.r);\n"
+        // (every character, dtl.z < 0: a texture of skin and cloth alike, a face and its helmet, a hand and its sleeve
+        // or glove: the pores on the skin's colour, the weave on the rest, each its own size, -(weave * 100 + pores),
+        // and strength, the pores' -mtl[3].y, the weave's 0.8)
+        "    const bool mixed = dtl.z < 0;\n"
+        "    float tz = abs(dtl.z), tw = floor(tz / 100), tp = mixed ? tz - tw * 100 : tz;\n"
+        // (skin's hue, its green over its red from the blue: the faces' and hands' 0.15 to 0.5, khaki and olive cloth's
+        // 0.4 to 0.7: up to 0.5 in a texture of skin, mtl[2].w 6; in one of cloth, 2, a hand painted in it alone, under
+        // 0.32: a tan uniform's hue is a face's)
+        "    if (mixed) {\n"
+        "        float hue = (sb.g - sb.b) / max(sb.r - sb.b, 1e-3), cut = mtl[2].w == 6 ? 0.5 : 0.32;\n"
+        "        sk *= 1 - smoothstep(cut - 0.05, cut + 0.05, hue);\n"
+        "        fd = saturate(1.6 - mP.z / (200 * mtl[3].z)) * lerp(0.8, -mtl[3].y, sk);\n"
+        "    }\n"
+        "    else if (mtl[2].w != 6) fd *= 1 - sk;\n"
         "    if (fd > 0) {\n"
-        "        float2 dn = mdet.SampleGrad(" + MatSampler(i) + ", float3(frac(mUv * dtl.z), mtl[2].w), mU1 * dtl.z, mU2 * dtl.z).rg * 2 - 1;\n"
+        "        float2 dn = mdet.SampleGrad(" + MatSampler(i) + ", float3(frac(mUv * tp), mixed ? 6 : mtl[2].w), mU1 * tp, mU2 * tp).rg * 2 - 1;\n"
+        "        if (mixed) {\n"
+        "            float2 dw = mdet.SampleGrad(" + MatSampler(i) + ", float3(frac(mUv * tw), 2), mU1 * tw, mU2 * tw).rg * 2 - 1;\n"
+        "            dn = lerp(dw, dn, sk);\n"
+        "        }\n"
         "        float3 sT = normalize(mT - mNs * dot(mT, mNs) + 1e-12), sB = normalize(mB - mNs * dot(mB, mNs) + 1e-12);\n"
         "        float3 dN = normalize(mNs + (sT * dn.x + sB * dn.y) * 0.6);\n"
         "        float3 L = mtl[1].xyz;\n"
         "        float shade = 1 + (dot(dN, L) - dot(mNs, L)) * 0.35 * fd;\n"
         "        float3 H = normalize(L + mV);\n"
-        "        float sheen = pow(saturate(dot(dN, H)), 24) * 0.06 * fd * mtl[2].z;\n"
+        "        float sheen = pow(saturate(dot(dN, H)), 24) * 0.06 * fd * mtl[2].z * (mixed ? sk : 1);\n"
         "        float lit = smoothstep(0.03, 0.4, dot(v0.rgb, 0.3333));\n"
         "        outc.rgb = outc.rgb * lerp(1, shade, lit) + sheen * lit;\n"
         "    }\n"
         "}\n"
         "if (mtl[0].w > 0) {\n"
         "    float3 nt = float3(mNt * float2(1, mtl[0].z) * mtl[2].x * mFlat, 0);\n"
-        "    if (mtl[2].w >= 0 && mtl[3].y > 0) {\n"
+        "    if ((mtl[2].w >= 0 || mtl[2].w == -2 || mtl[2].w == -3) && mtl[3].y > 0) {\n"
         "        float fd = saturate(1.6 - mP.z / (250 * mtl[3].z)) * mtl[3].y;\n"
-        "        if (fd > 0) nt.xy += (mdet.SampleGrad(" + MatSampler(i) + ", float3(frac(mUv * 2), mtl[2].w), mU1 * 2, mU2 * 2).rg * 2 - 1)"
-        " * float2(1, mtl[0].z) * fd;\n"
+        // (cloth's weave, the flags', finer: 3 times; metal's 4, on a vehicle's or a barrel's whole side; a weapon's,
+        // -2, 4: wood's grain where its colour is wood's, warm and coloured, metal's on the rest, grey, dark, dirty)
+        "        float dr = mtl[2].w == 2 ? 3 : mtl[2].w == 3 || mtl[2].w == -2 ? 4 : 2;\n"
+        "        if (fd > 0) {\n"
+        "            float2 dd;\n"
+        // (-3: a half-timbered wall, its beams wood's where brown, its plaster's or stone's on the rest, 5)
+        "            if (mtl[2].w == -2 || mtl[2].w == -3) {\n"
+        "                float3 c = mBase.rgb;\n"
+        "                float wood = smoothstep(0.2, 0.35, (c.r - c.b) / max(c.r, 1e-3)) * smoothstep(0.05, 0.12, c.r - c.b) * step(c.g, c.r);\n"
+        "                float2 dw = mdet.SampleGrad(" + MatSampler(i) + ", float3(frac(mUv * dr), 1), mU1 * dr, mU2 * dr).rg * 2 - 1;\n"
+        "                float2 dm = mdet.SampleGrad(" + MatSampler(i) + ", float3(frac(mUv * dr), mtl[2].w == -2 ? 3 : 5), mU1 * dr, mU2 * dr).rg * 2 - 1;\n"
+        "                dd = lerp(dm, dw, wood);\n"
+        "            } else {\n"
+        "                dd = mdet.SampleGrad(" + MatSampler(i) + ", float3(frac(mUv * dr), mtl[2].w), mU1 * dr, mU2 * dr).rg * 2 - 1;\n"
+        "            }\n"
+        "            nt.xy += dd * float2(1, mtl[0].z) * fd;\n"
+        "        }\n"
         "    }\n"
         "    if (mrefl.z < 0) {\n"
         "        float wt = -mrefl.z;\n"
@@ -2084,6 +2133,7 @@ std::string MaterialShade(int i) {
         "    if (mtl[3].x == 7) outc.rgb = before * 4;\n"
         "    if (mtl[3].x == 8) outc.rgb = sp * lit * 4;\n"
         "    if (mtl[3].x == 9) outc.rgb = 0.5 + (outc.rgb - before) * 8;\n"
+        "    if (mtl[3].x == 10) outc.rgb = mPomDbg;\n"
         "    if (mtl[3].w > 0) {\n"
         // (the layer's cover as drawn, its texture's part taken softer: the vertices' fade times the soft cover; the
         // blend eased in over the texture's cover from 60% to 85%, not switched on at 95%: blotches with hard edges)

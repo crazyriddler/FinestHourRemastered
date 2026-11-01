@@ -168,6 +168,7 @@ struct Store {
             m.water = cls == "water";
             m.skin = cls == "skin";
             m.cloth = cls == "fabric";
+            m.sky = cls == "sky";
             // the detail colour grain of its kind (tools/remaster/details.py ALBEDO, after its 7 normal maps); none for
             // what is not a surface (the HUD, effects, the sky, water, glass)
             static const char* const kGrains[] = {"stone", "brick", "concrete", "wood", "metal", "fabric", "ground",
@@ -183,7 +184,10 @@ struct Store {
         while (std::getline(sf, line)) {
             if (line.empty() || line[0] == '#') continue;
             auto it = materials.find(std::strtoull(line.c_str(), nullptr, 16));
-            if (it != materials.end()) it->second.snow = true, it->second.grain = 7 + 12, snowy++;
+            if (it == materials.end()) continue;
+            it->second.snow = true, snowy++;
+            if (line.find(" mud") != std::string::npos) it->second.mud = true;  // (its grain the ground's)
+            else it->second.grain = 7 + 12;
         }
         // the characters' textures' detail grain by their names (tools/remaster/grains.py: their classes are often
         // wrong for uniforms), over the class's

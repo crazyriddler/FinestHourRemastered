@@ -2,34 +2,42 @@
 # update release's update.json). Only this update's changes: written anew for each update. One section a language
 # ([en] needed; the others fall back to it), its lines as the game shows them. UTF-8.
 [en]
-- German: a new language with the game's own German text (menus, objectives, subtitles), the voices in English.
-- Russian: the squad's names and the Soviet weapons' names in Russian; the Extras page fixed.
-- Polish: the briefings and the other movies have Polish subtitles.
+- Detail textures: skin and clothes told apart on every character (pores on faces and hands, weave on uniforms); weapons' wood and metal, vehicles' metal.
+- Every texture's material reviewed; remastered models' texture coordinates fixed (the medkit and others).
+- Parallax: no streaks on window and door jambs, deeper muddy snow roads.
+- Shadows: buildings just off the screen cast their shadows into view; the sky no longer casts one.
 [de]
-- Deutsch: eine neue Sprache mit den eigenen deutschen Texten des Spiels (Menüs, Ziele, Untertitel), die Stimmen auf Englisch.
-- Russisch: die Namen der Truppe und der sowjetischen Waffen auf Russisch; die Extras-Seite korrigiert.
-- Polnisch: die Einsatzbesprechungen und die anderen Videos haben polnische Untertitel.
+- Detailtexturen: Haut und Kleidung bei jeder Figur unterschieden (Poren auf Gesichtern und Händen, Gewebe auf Uniformen); Holz und Metall der Waffen, Metall der Fahrzeuge.
+- Das Material jeder Textur überprüft; Texturkoordinaten der überarbeiteten Modelle korrigiert (der Verbandskasten und andere).
+- Parallax: keine Streifen mehr an Fenster- und Türlaibungen, tiefere schlammige Schneestraßen.
+- Schatten: Gebäude knapp außerhalb des Bildes werfen ihre Schatten ins Bild; der Himmel wirft keinen mehr.
 [fr]
-- Allemand : une nouvelle langue avec les textes allemands du jeu lui-même (menus, objectifs, sous-titres), les voix en anglais.
-- Russe : les noms de l'escouade et des armes soviétiques en russe ; la page Bonus corrigée.
-- Polonais : les briefings et les autres films ont des sous-titres polonais.
+- Textures de détail : peau et vêtements distingués sur chaque personnage (pores sur les visages et les mains, trame sur les uniformes) ; bois et métal des armes, métal des véhicules.
+- Le matériau de chaque texture revu ; coordonnées de texture des modèles remasterisés corrigées (la trousse de soins et d'autres).
+- Parallaxe : plus de traînées sur les embrasures des fenêtres et des portes, routes de neige boueuse plus profondes.
+- Ombres : les bâtiments juste hors de l'écran projettent leur ombre dans la vue ; le ciel n'en projette plus.
 [it]
-- Tedesco: una nuova lingua con i testi tedeschi del gioco stesso (menu, obiettivi, sottotitoli), le voci in inglese.
-- Russo: i nomi della squadra e delle armi sovietiche in russo; la pagina Extra corretta.
-- Polacco: i briefing e gli altri filmati hanno i sottotitoli in polacco.
+- Texture di dettaglio: pelle e vestiti distinti su ogni personaggio (pori su volti e mani, trama sulle uniformi); legno e metallo delle armi, metallo dei veicoli.
+- Il materiale di ogni texture rivisto; coordinate di texture dei modelli rimasterizzati corrette (il kit medico e altri).
+- Parallasse: niente più strisce sugli stipiti di finestre e porte, strade di neve fangosa più profonde.
+- Ombre: gli edifici appena fuori dallo schermo proiettano la loro ombra nella vista; il cielo non ne proietta più.
 [es]
-- Alemán: un idioma nuevo con los textos alemanes del propio juego (menús, objetivos, subtítulos), las voces en inglés.
-- Ruso: los nombres del pelotón y de las armas soviéticas en ruso; la página de Extras corregida.
-- Polaco: las presentaciones de misión y los demás vídeos tienen subtítulos en polaco.
+- Texturas de detalle: piel y ropa distinguidas en todos los personajes (poros en caras y manos, tejido en uniformes); madera y metal de las armas, metal de los vehículos.
+- Revisado el material de cada textura; corregidas las coordenadas de textura de los modelos remasterizados (el botiquín y otros).
+- Paralaje: sin rayas en las jambas de ventanas y puertas, carreteras de nieve embarrada más profundas.
+- Sombras: los edificios justo fuera de la pantalla proyectan su sombra en la vista; el cielo ya no proyecta sombra.
 [pt]
-- Alemão: um novo idioma com os textos alemães do próprio jogo (menus, objetivos, legendas), as vozes em inglês.
-- Russo: os nomes do esquadrão e das armas soviéticas em russo; a página de Extras corrigida.
-- Polonês: os briefings e os outros vídeos têm legendas em polonês.
+- Texturas de detalhe: pele e roupa distinguidas em todas as personagens (poros em rostos e mãos, trama nos uniformes); madeira e metal das armas, metal dos veículos.
+- O material de cada textura revisto; coordenadas de textura dos modelos remasterizados corrigidas (o kit médico e outros).
+- Paralaxe: sem riscas nos batentes de janelas e portas, estradas de neve lamacenta mais profundas.
+- Sombras: os edifícios logo fora do ecrã projetam a sua sombra na vista; o céu já não projeta sombra.
 [ru]
-- Немецкий: новый язык с немецкими текстами самой игры (меню, задачи, субтитры), голоса на английском.
-- Русский: имена бойцов и названия советского оружия на русском; исправлена страница «Бонусы».
-- Польский: брифинги и другие видео с польскими субтитрами.
+- Детальные текстуры: кожа и одежда различаются у всех персонажей (поры на лицах и руках, ткань на форме); дерево и металл оружия, металл техники.
+- Проверен материал каждой текстуры; исправлены текстурные координаты обновлённых моделей (аптечка и другие).
+- Параллакс: больше нет полос на откосах окон и дверей, глубже грязные снежные дороги.
+- Тени: здания сразу за краем экрана отбрасывают тени в кадр; небо больше не отбрасывает тень.
 [pl]
-- Niemiecki: nowy język z niemieckimi tekstami samej gry (menu, cele, napisy), głosy po angielsku.
-- Rosyjski: imiona oddziału i nazwy radzieckiej broni po rosyjsku; poprawiona strona Dodatków.
-- Polski: odprawy i pozostałe filmy mają polskie napisy.
+- Tekstury detali: skóra i ubrania rozróżnione u każdej postaci (pory na twarzach i dłoniach, splot na mundurach); drewno i metal broni, metal pojazdów.
+- Sprawdzony materiał każdej tekstury; poprawione współrzędne tekstur odnowionych modeli (apteczka i inne).
+- Paralaksa: bez smug na ościeżach okien i drzwi, głębsze błotniste drogi w śniegu.
+- Cienie: budynki tuż poza ekranem rzucają cienie w kadr; niebo już nie rzuca cienia.

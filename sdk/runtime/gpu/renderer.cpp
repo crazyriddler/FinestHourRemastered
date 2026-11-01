@@ -4211,7 +4211,7 @@ void Renderer::UploadConstants(const State& s, const DrawShaders& sh, const PsoK
         // all over it; snow lies soft and white: a gentle relief, little depth, no ground detail map
         // (its generated cavity map, the cracks it read in the snow, darkened them to black scratches: faint too,
         // with the relief's turn of the light, mtl[0].w)
-        if (m.snow) c2[0] = m.normal * 0.3f, c2[1] *= 0.3f, c2[3] = -1, c0[3] *= 0.25f;
+        if (m.snow && !m.mud) c2[0] = m.normal * 0.3f, c2[1] *= 0.3f, c2[3] = -1, c0[3] *= 0.25f;
         // characters (lit per pixel by their program): the remastered colour alone. The generated relief of faces, hair
         // and cloth reads their painted shading as shape and doubles it, and they need no highlights
         if (draw_character_) c0[3] = 0, c1[3] = 0, c2[1] = 0;
@@ -4226,6 +4226,12 @@ void Renderer::UploadConstants(const State& s, const DrawShaders& sh, const PsoK
         if (draw_character_ && occlusion_done_ && set.weapon_materials && m.pbr && !m.skin) {
             // gentle: its relief the generated map's broad shapes only (the fine grain sparkled, the weapon close and
             // large on the screen), its sheen soft
+            c0[3] = set.materials ? 0.3f : 0.0f;
+            c1[3] = set.specular / 100.0f * 0.8f;
+            c2[0] = m.normal * 0.25f;
+        }
+        // the soldiers' weapons (a weapon's texture, its detail by colour: -2) as the one in hand
+        else if (draw_character_ && m.detail == -2 && set.weapon_materials && m.pbr) {
             c0[3] = set.materials ? 0.3f : 0.0f;
             c1[3] = set.specular / 100.0f * 0.8f;
             c2[0] = m.normal * 0.25f;
@@ -4262,7 +4268,11 @@ void Renderer::UploadConstants(const State& s, const DrawShaders& sh, const PsoK
             return e ? float(std::atoi(e)) : 0.0f;
         }();
         c.mtl[3][0] = debug;
-        c.mtl[3][1] = set.detail && details_ && m.detail < int(details_count_) && !draw_character_ ? 0.45f : 0.0f;
+        // (metal's stronger, its fine scratches faint at 0.45; a weapon's wood and metal, -2, in the soldiers' hands and
+        // in the player's too)
+        c.mtl[3][1] = !set.detail || !details_ || m.detail >= int(details_count_) ? 0.0f
+                      : m.detail == -2 ? (draw_character_ && occlusion_done_ ? 0.5f : 0.6f)
+                      : draw_character_ ? 0.0f : m.detail == 3 ? 0.7f : 0.45f;
         // a character close up (Character Detail): its skin's pores or its uniform's weave, fine (the detail maps' skin,
         // 6, or fabric's, 2), as a negative strength
         if (draw_character_ && set.character_detail && details_ && !(occlusion_done_ && !m.skin)) {
@@ -4273,16 +4283,25 @@ void Renderer::UploadConstants(const State& s, const DrawShaders& sh, const PsoK
         c.mtl[3][2] = mf.units;
         // Detail Textures: its kind's grain, everything (the world, the soldiers, the weapon in hand)
         c.dtl[0] = -1;
-        // the sizes: a character's pores and weave large (tiled 3 times: low resolution textures), the hands and the
-        // weapon in hand, close and large on the screen, finer (10); the world's grain a tile per 160 texels, the
-        // characters' and the weapon's larger (400)
-        c.dtl[2] = draw_character_ && occlusion_done_ ? 10.0f : (m.skin || m.grain == 7 + 11) && m.grain != 7 + 5 ? 4.0f : 3.0f;  // (pores a little finer than weave)
-        c.dtl[3] = draw_character_ ? 400.0f : 160.0f;
+        // the sizes: a character's pores and weave large (tiled 3 times: low resolution textures, the pores 5.5), the
+        // hands and the weapon in hand, close and large on the screen, finer (10, the hands' pores 13); the world's
+        // grain a tile per 160 texels (cloth's, the flags', finer: 110), the characters' and the weapon's larger (400)
+        const bool pores = (m.skin || m.grain == 7 + 11) && m.grain != 7 + 5;
+        c.dtl[2] = draw_character_ && occlusion_done_ ? (pores ? 13.0f : 10.0f) : pores ? 5.5f : 3.0f;  // (pores finer than weave)
+        // every character's skin and cloth by their colour: a texture holds both (a face and its helmet, a hand and its
+        // sleeve or glove, a uniform with the hands painted in it), whichever class it was taken for. Negative, the
+        // shader's pores on the skin's colour (their strength the skin's: the hands in view -0.9, the others -1.7) and
+        // the weave on the rest, -(weave * 100 + pores): the arms in view 6 and 13, the others 3 and 5.5
+        if (draw_character_ && c.mtl[3][1] < 0) {
+            c.mtl[3][1] = occlusion_done_ ? -0.9f : -1.7f;
+            c.dtl[2] = occlusion_done_ ? -(6.0f * 100 + 13.0f) : -(3.0f * 100 + 5.5f);
+        }
+        c.dtl[3] = draw_character_ ? 400.0f : m.cloth ? 110.0f : 160.0f;
         // (not on skin: its own pores, Character Detail; clothes and the weapon in hand stronger, their textures
         // spread over large parts)
         if (set.detail && details_ && m.grain >= 0 && m.grain < int(details_count_) && m.grain != 7 + 11 && !g_texview.load()) {
             c.dtl[0] = float(m.grain);
-            c.dtl[1] = draw_character_ ? 1.0f : m.snow ? 0.3f : 0.65f;  // (the shader takes over 0.9 for a character's: its skin left bare; snow's soft)
+            c.dtl[1] = draw_character_ ? 1.0f : m.snow && !m.mud ? 0.3f : 0.65f;  // (the shader takes over 0.9 for a character's: its skin left bare; snow's soft)
         }
         // source alpha blending (D3DBLEND_SRCALPHA): the height mask (cut-outs have no height: pom 0)
         constexpr uint32_t kSrcAlpha = 0x302;
@@ -6774,6 +6793,13 @@ void Renderer::FxaaPass(Target& rt, rhi::Resource* from) {
     bound_rt_ = bound_ds_ = nullptr;
 }
 
+// tests (XBE_SHADOW_CASTERS): a piece's key in the casters' log, its vertex buffer's data, its count and its texture
+uint64_t CasterKey(const State& s, uint32_t count, uint64_t tex) {
+    const uint32_t vb0 = s.streams[0].vb;
+    const uint64_t data = vb0 ? kernel::R32(vb0 + 4) : 0u;
+    return ((data << 32) | count) ^ (tex * 0x9E3779B97F4A7C15ull);
+}
+
 void Renderer::RecordCaster(const State& s, const Assembled& a, const DrawShaders& sh, const PixelKey& pk, const PsoKey& k,
                                 const DrawTextures& stages) {
     // the 3D of the screen with a depth write, solid or cut out by its alpha test, before the occlusion (the weapon
@@ -6792,6 +6818,9 @@ void Renderer::RecordCaster(const State& s, const Assembled& a, const DrawShader
     {
         constexpr uint32_t kOne = 0x1;
         if (draw_emitter_) return;
+        // nor the sky's box: its faces not at the far plane (Last Bridge Standing's), flattened onto the cascades' near
+        // end they shaded the whole street, and came and went as the view turned
+        if (stages.mat && stages.mat->m && stages.mat->m->sky) return;
         if (k.blend && k.dst == kOne) return;
     }
     bool alpha = alpha_test && stages.info[0].kind == kTex2D;
@@ -6909,9 +6938,11 @@ void Renderer::RecordCaster(const State& s, const Assembled& a, const DrawShader
     c.zmin = v.min_z, c.zmax = v.max_z;
     casters_.push_back(c);
     static const bool list = std::getenv("XBE_SHADOW_CASTERS") != nullptr;
-    if (list && presents_ % 600 == 300)
-        LOGR("shadows: caster %zu vs %08X prog %d count %u z %.3f..%.3f zfunc %X alpha %d blend %d tex0 %016llx", casters_.size(), s.vs_handle,
-             sh.prog, c.count, v.min_z, v.max_z, k.zfunc, alpha, k.blend, (unsigned long long)stages.id[0]);
+    static const bool every = list && std::string(std::getenv("XBE_SHADOW_CASTERS")) == "all";  // (every 20th frame)
+    if (list && (presents_ % 600 == 300 || (every && presents_ % 20 == 0)))
+        LOGR("shadows: caster %zu vs %08X prog %d count %u z %.3f..%.3f zfunc %X alpha %d blend %d tex0 %016llx key %016llx", casters_.size(), s.vs_handle,
+             sh.prog, c.count, v.min_z, v.max_z, k.zfunc, alpha, k.blend, (unsigned long long)stages.id[0],
+             (unsigned long long)CasterKey(s, a.index_count ? a.index_count : a.draw_count, stages.id[0]));
 }
 
 bool Renderer::DrawnAlready(const State& s, const Assembled& a, const DrawShaders& sh, const PsoKey& k, const DrawConstants& c,

@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include "app/app.h"
 #include "common/cod.h"
 #include "common/widescreen.h"
 #include "core/log.h"
@@ -213,6 +214,37 @@ X86_EXTERN_FUNC(__imp__sub_001C6710);
 X86_FUNC(sub_001C6710) {  // RwCameraEndUpdate(camera)
     __imp__sub_001C6710(ctx, base);
     if (R32(ctx.esp + 4) == cod::wide::Camera()) Restore();
+}
+
+// The world plugin's list of the level's sectors in the camera's view (sub_001F3FE0(world, camera), from its
+// BeginUpdate): only what the screen shows is drawn, so a building just off the screen (beside or behind) cast no
+// shadow into the view, its shadow coming and going as the camera turned. The list is made with the side and near
+// planes (and the frustum's box) moved out by half the shadows' reach, then the planes are put back: those sectors
+// are drawn (off the screen: their vertices only) and cast, while the atomics in them (anything the game moves or
+// destroys) are still tested against the true frustum as RenderWare draws them.
+X86_EXTERN_FUNC(__imp__sub_001F3FE0);
+X86_FUNC(sub_001F3FE0) {
+    const uint32_t camera = R32(ctx.esp + 8);
+    const uint32_t level = app::Get().shadow_quality;
+    static const bool off = [] { const char* e = std::getenv("XBE_SHADOW_SECTORS"); return e && *e == '0'; }();  // tests
+    if (off || !camera || camera != cod::wide::Camera() || cod::wide::FrontEnd() || !level) {
+        __imp__sub_001F3FE0(ctx, base);
+        return;
+    }
+    const float m = 0.5f * gpu::shadow::QualityFor(level, 100.0f).distance;
+    float d[5], box[6];
+    for (int i = 0; i < 5; i++) {
+        const uint32_t pl = camera + 0x94 + uint32_t(i + 1) * 0x14;  // near and the four sides (0 is the far plane)
+        d[i] = F(pl + 12);
+        SetF(pl + 12, d[i] + m);
+    }
+    for (int i = 0; i < 6; i++) {
+        box[i] = F(camera + 0x10C + uint32_t(i) * 4);
+        SetF(camera + 0x10C + uint32_t(i) * 4, box[i] + (i < 3 ? m : -m));  // RwBBox: sup, inf
+    }
+    __imp__sub_001F3FE0(ctx, base);
+    for (int i = 0; i < 5; i++) SetF(camera + 0x94 + uint32_t(i + 1) * 0x14 + 12, d[i]);
+    for (int i = 0; i < 6; i++) SetF(camera + 0x10C + uint32_t(i) * 4, box[i]);
 }
 
 X86_EXTERN_FUNC(__imp__sub_000D9E30);

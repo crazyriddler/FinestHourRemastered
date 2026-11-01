@@ -37,6 +37,8 @@ struct Material {
     bool water = false;   // its names say water (rivers, the Volga, sewers): ripples and reflections (Water)
     float sway = 0;      // foliage and cloth cut out by their alpha sway in the wind (Wind)
     bool snow = false;    // the snowy ground (the pack's snow.txt): footprints in it (Snow Tracks)
+    bool mud = false;     // ... mostly mud ("<id> mud"): footprints, but the ground's relief, parallax and detail
+    bool sky = false;     // its class is sky (a sky box's faces): casts no shadow
 };
 
 // a DDS as read: its format, size and mips, the levels one after another

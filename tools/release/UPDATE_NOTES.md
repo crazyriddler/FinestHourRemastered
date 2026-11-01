@@ -293,6 +293,17 @@ The version installed is in `version.txt` beside the game. Unattended:
   weapons' names under the hand when you can pick one up (ППШ-41, ДП-28, винтовка Мосина...). The Extras page's
   title (now Бонусы) no longer runs past the page, and its rows line up as in English (issue #47).
 - Polish: the briefings, the acts' movies and the ending have Polish subtitles (issue #34).
+- Detail textures: every soldier's and character's skin and clothes are told apart by their colour, so faces and
+  hands get the skin's fine pores and uniforms, sleeves and gloves get the cloth's weave, even where one texture holds
+  both (the hands in view too). Skin's and flags' detail is finer.
+- Weapons: wood and metal by their colour, each with its own detail (in your hands and in the soldiers'); vehicles,
+  radios and other metal objects have the metal's detail, stronger than before. Every texture's material was reviewed
+  and the ones taken for the wrong kind corrected.
+- Remastered models: texture coordinates that had drifted from the originals' are fixed (the medkit's lid and others).
+- Parallax: no more streaks on the jambs of windows and doors (those cut faces have no parallax now), a shallower
+  ground in Matmata, deeper muddy snow roads (with their detail texture), and a steadier relief close up.
+- Shadows: buildings just off the screen (beside or behind you) now cast their shadows into the view, so a street's
+  shadow no longer comes and goes as you turn (Last Bridge Standing); the sky box no longer casts a shadow.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

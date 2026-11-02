@@ -126,7 +126,7 @@ class Pipeline : public Object {};
 class QueryPool : public Object {};
 
 // The shaders' arguments, as numbered parameters (D3D12's root signatures):
-//   Main:   0 b0, 1 b1 (constant buffers), 2 t0..t6 (shader resources), 3 s0..s3 (samplers), 4 t7..t9, 5 b2;
+//   Main:   0 b0, 1 b1 (constant buffers), 2 t0..t6 (shader resources), 3 s0..s3 (samplers), 4 t7..t11, 5 b2;
 //           s4 is a fixed sampler (linear, clamped)
 //   Motion: 0..4 b0..b4, 5 t0
 enum class Layout : uint8_t { Main, Motion };

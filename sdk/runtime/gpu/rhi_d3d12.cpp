@@ -253,10 +253,11 @@ public:
                 params[2 + i].DescriptorTable.pDescriptorRanges = &ranges[i];
                 params[2 + i].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
             }
-            // t7: the sun's reach on the screen, t8: the wave field (Water Interaction), t9: the snow's trail
+            // t7: the sun's reach on the screen, t8: the wave field (Water Interaction), t9: the snow's trail, t10 and
+            // t11: a road's outline and its texture (the road mask: level 30)
             D3D12_DESCRIPTOR_RANGE sun{};
             sun.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-            sun.NumDescriptors = 3;
+            sun.NumDescriptors = 5;
             sun.BaseShaderRegister = 7;
             params[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
             params[4].DescriptorTable.NumDescriptorRanges = 1;

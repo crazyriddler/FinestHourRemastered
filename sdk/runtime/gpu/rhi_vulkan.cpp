@@ -57,9 +57,9 @@ namespace {
 
 using Microsoft::WRL::ComPtr;
 
-constexpr uint32_t kTBinding = 8;    // t0..t9 at bindings 8..17 of set 0
+constexpr uint32_t kTBinding = 8;    // t0..t11 at bindings 8..19 of set 0
 constexpr uint32_t kSBinding = 24;   // s0..s6 at 24..30 (s4, s5, s6 fixed)
-constexpr uint32_t kTextures = 10, kSamplers = 4, kCbvs = 5;
+constexpr uint32_t kTextures = 12, kSamplers = 4, kCbvs = 5;
 constexpr VkDeviceSize kCbvRange = 65536;  // a constant buffer's most (D3D12's)
 
 // ----------------------------------------------------------------------------------------------------------------

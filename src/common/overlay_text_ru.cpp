@@ -271,6 +271,8 @@ const PtRow kRuRows[] = {
     {"Look Right", "Обзор вправо"},
     {"Look Up", "Обзор вверх"},
     {"Cinematic Depth of Field", "Кинематографичная ГРИП"},
+    {"Distance Depth of Field", "ГРИП вдали"},
+    {"The far distance, the hills and the horizon, goes softly out of focus.", "Даль, холмы и горизонт мягко размываются."},
     {"In the game's own cutscenes the background goes softly out of focus.", "В сюжетных сценах игры фон мягко размывается."},
     {"Brighter lights, fire and skies on an HDR display, the HUD and text at Windows' SDR brightness. Needs HDR on in Windows' display settings (Direct3D 12).", "Более яркие огни, огонь и небо на HDR-экране, интерфейс и текст — с яркостью SDR из Windows. Нужно включить HDR в параметрах дисплея Windows (Direct3D 12)."},
     {"HDR Peak Brightness", "Пиковая яркость HDR"},

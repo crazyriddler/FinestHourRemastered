@@ -202,9 +202,11 @@ struct DrawConstants {
     // space now to the clip space of the frame before, and to this frame's (rows; its pixel moved by the difference)
     float sunrp[2][16];
     float layout_y[4];   // 2D placed by the game (g_layout_2d): y times layout_y.x plus layout_y.y, console pixels
-    float wpos[4][4];    // the world's x, y, z from view space (rows); wpos[3].x 1: a "planar" piece (hide.txt)
+    float wpos[4][4];    // the world's x, y, z from view space (rows); wpos[3].x 1: a "planar" piece (hide.txt); [3].w 1: a tread rolled by [3].z
     float fadebox[2][4]; // a "fade<w>" piece (hide.txt): its centre x, z and half extents in its own space; w (0 none)
     float vmove[4][4];   // a "move" piece (hide.txt): its vertices at x, z (its own space) given the height y; w 1 (0 none)
+    float cell[4];       // x 1: the material a cell of a picture laid over many textures (remaster::Material::cell);
+                         // y 1: foliage, faded out close to the eye
 };
 
 }  // namespace gpu

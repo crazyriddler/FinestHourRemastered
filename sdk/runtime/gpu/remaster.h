@@ -27,6 +27,9 @@ std::string IdName(uint64_t id);  // 16 hex digits
 struct Material {
     bool pbr = false;    // normal and material maps besides the colour
     bool tiles = false;
+    bool cell = false;    // a cell of a picture laid over many textures, each its own (tiles 2: level 30's road): no wrap
+    bool cell_fade_off = false;  // ... (tiles 3) a road's verges: the road's texture within its outline
+    bool road_cover = false;     // ground laid over a road's tiles (tiles 4: level 30's snow layers): the same
     float normal = 1, pom = 0, spec = 0;
     int detail = -1;     // detail texture index, -1 none
     int grain = -1;      // its kind's detail colour grain (the details array's slice past the normal maps, Detail Textures), -1 none

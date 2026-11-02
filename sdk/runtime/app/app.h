@@ -39,6 +39,7 @@ struct Settings {
     bool sun_shafts = true;          // beams of sunlight past what stands before the sun
     bool aim_dof = true;             // aiming down the sights blurs the view's edges and what lies behind the target
     bool cinematic_dof = false;      // the game's own cutscenes: what lies behind the middle softly out of focus
+    bool distance_dof = true;        // the far distance (the hills, the horizon) softly out of focus
     bool explosion_flash = true;     // a close explosion lights up the whole view
     bool damage_shake = true;        // being hit shakes the view a little
     bool flash_shadows = true;       // the four muzzle flashes nearest the eye cast shadows

@@ -164,7 +164,8 @@ using SUint = uint32_t app::Settings::*;
 constexpr SBool kPresetFlags[] = {
     &app::Settings::smaa, &app::Settings::fxaa, &app::Settings::bloom, &app::Settings::ao, &app::Settings::contact_shadows,
     &app::Settings::dynamic_lights, &app::Settings::light_halos, &app::Settings::soft_particles, &app::Settings::heat_haze,
-    &app::Settings::sun_shafts, &app::Settings::aim_dof, &app::Settings::explosion_flash, &app::Settings::damage_shake,
+    &app::Settings::sun_shafts, &app::Settings::aim_dof, &app::Settings::distance_dof, &app::Settings::explosion_flash,
+    &app::Settings::damage_shake,
     &app::Settings::flash_shadows, &app::Settings::character_detail, &app::Settings::weapon_materials,
     &app::Settings::sharp_distance, &app::Settings::lens_flare, &app::Settings::water, &app::Settings::water_interaction,
     &app::Settings::snow_tracks, &app::Settings::shockwaves, &app::Settings::animated_fire, &app::Settings::barrel_heat,
@@ -190,7 +191,7 @@ app::Settings PresetValues(int p) {
     if (p >= kMedium) {
         v.shadow_quality = 2, v.aniso = 8;
         v.smaa = v.ao = v.contact_shadows = v.reflections = v.ambient_particles = v.soft_shadows = false;
-        v.water_interaction = v.light_halos = v.sun_shafts = v.lit_smoke = false;
+        v.water_interaction = v.light_halos = v.sun_shafts = v.lit_smoke = v.distance_dof = false;
         v.character_detail = v.sharp_distance = false;
     }
     if (p >= kLow) {
@@ -476,6 +477,8 @@ std::vector<Page> BuildPages() {
     effects.items.push_back(Toggle("Aim Depth of Field", &s.aim_dof, "Aiming down the sights blurs the edges and the background."));
     effects.items.push_back(Toggle("Cinematic Depth of Field", &s.cinematic_dof,
                                    "In the game's own cutscenes the background goes softly out of focus."));
+    effects.items.push_back(Toggle("Distance Depth of Field", &s.distance_dof,
+                                   "The far distance, the hills and the horizon, goes softly out of focus."));
     effects.items.push_back(Toggle("Eye Adaptation", &s.auto_exposure,
                                    "The view adapts a little between dark rooms and bright streets."));
     effects.items.push_back(Toggle("Color Grading", &s.color_grade, "Each campaign's own tones: winter, desert, Europe."));

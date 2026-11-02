@@ -155,7 +155,10 @@ struct Store {
             Material m;
             if (!(in >> id >> cls >> pbr >> m.normal >> m.pom >> m.spec >> m.detail >> tiles)) continue;
             m.pbr = pbr != 0;
-            m.tiles = tiles != 0;
+            m.tiles = tiles == 1 || tiles == 4;
+            m.road_cover = tiles == 4;
+            m.cell = tiles == 2 || tiles == 3;
+            m.cell_fade_off = tiles == 3;
             // the classes' reflectivity: metal and glass most, varnished wood, worn stone and tiles a little, cloth,
             // skin, paper and the ground hardly
             static const std::pair<const char*, float> kRefl[] = {

@@ -79,7 +79,20 @@ def run(key, src_dir, dump, pack, levels):
     A, B, C = OP[ot[:, 0]], OP[ot[:, 1]], OP[ot[:, 2]]
     reach = 0.08 * float(np.ptp(OP, axis=0).max())
     if N is None:
-        return None
+        # (an unlit mesh, no normals of its own: its faces', summed about each vertex by their area)
+        fn = np.cross(P[t[:, 1]] - P[t[:, 0]], P[t[:, 2]] - P[t[:, 0]])
+        N = np.zeros_like(P)
+        for c in range(3):
+            np.add.at(N, t[:, c], fn)
+        N /= np.maximum(np.linalg.norm(N, axis=1, keepdims=True), 1e-9)
+    FN = np.cross(P[t[:, 1]] - P[t[:, 0]], P[t[:, 2]] - P[t[:, 0]])
+    FN /= np.maximum(np.linalg.norm(FN, axis=1, keepdims=True), 1e-9)
+
+    def nrm(d, i):
+        """the normals of vertex data d (one vertex or several), else (none of its own) triangle i's"""
+        if 3 in rl:
+            return d[..., rl.index(3), :3].astype(float)
+        return np.broadcast_to(FN[i], d[..., 0, :3].shape).astype(float)
     by_vertex = [[] for _ in range(len(OP))]
     for i, tri in enumerate(ot):
         for v in tri:
@@ -172,10 +185,10 @@ def run(key, src_dir, dump, pack, levels):
             for sb in subs:
                 vs = np.array([corner_data(tri, sb[c]) for c in range(3)])
                 pm = vs[:, 0, :3].mean(0)
-                nm = vs[:, rl.index(3), :3].sum(0)
+                nm = nrm(vs, i).sum(0)
                 nm /= max(np.linalg.norm(nm), 1e-9)
                 _, k = project(pm[None].astype(float), nm[None].astype(float), A, B, C, OUV, ot, reach)
-                cuv = island_uv(vs[:, 0, :3].astype(float), vs[:, rl.index(3), :3].astype(float), k[0])
+                cuv = island_uv(vs[:, 0, :3].astype(float), nrm(vs, i), k[0])
                 out = []
                 for c in range(3):
                     vs[c, ir, :2] = cuv[c]
@@ -198,10 +211,10 @@ def run(key, src_dir, dump, pack, levels):
             if split[e]:
                 for q in range(1, n_split):
                     d = edge_point(tri[a], tri[b], q / n_split)
-                    d[ir, :2] = island_uv(d[0, :3][None].astype(float), d[rl.index(3), :3][None].astype(float), mtri[i])[0]
+                    d[ir, :2] = island_uv(d[0, :3][None].astype(float), nrm(d, i)[None], mtri[i])[0]
                     ring.append(add_vertex(d, tri[a]))
         cd = blend(m.vertices[tri], np.full(3, 1 / 3), rl)
-        cd[ir, :2] = island_uv(cd[0, :3][None].astype(float), cd[rl.index(3), :3][None].astype(float), mtri[i])[0]
+        cd[ir, :2] = island_uv(cd[0, :3][None].astype(float), nrm(cd, i)[None], mtri[i])[0]
         centre = add_vertex(cd, tri[0])
         for q in range(len(ring)):
             new_tris.append(np.array([centre, ring[q], ring[(q + 1) % len(ring)]]))

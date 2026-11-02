@@ -271,6 +271,8 @@ const PtRow kPlRows[] = {
     {"Look Right", "Patrz w prawo"},
     {"Look Up", "Patrz w górę"},
     {"Cinematic Depth of Field", "Głębia ostrości w scenkach"},
+    {"Distance Depth of Field", "Głębia ostrości w oddali"},
+    {"The far distance, the hills and the horizon, goes softly out of focus.", "Dal, wzgórza i horyzont, delikatnie traci ostrość."},
     {"In the game's own cutscenes the background goes softly out of focus.", "W przerywnikach filmowych gry tło delikatnie traci ostrość."},
     {"Brighter lights, fire and skies on an HDR display, the HUD and text at Windows' SDR brightness. Needs HDR on in Windows' display settings (Direct3D 12).", "Jaśniejsze światła, ogień i niebo na ekranie HDR, a HUD i tekst z jasnością SDR systemu Windows. Wymaga włączonego HDR w ustawieniach ekranu Windows (Direct3D 12)."},
     {"HDR Peak Brightness", "Szczytowa jasność HDR"},

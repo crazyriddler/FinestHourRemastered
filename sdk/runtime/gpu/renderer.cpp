@@ -90,6 +90,12 @@ constexpr uint32_t kTopKey = 0x10000;        // ShadowKey::topo: seen from above
 constexpr uint32_t kTopTreadKey = 0x40000;   // ShadowKey::topo: a tank's tread from below onto the snow's trail (SnowTracks)
 constexpr uint32_t kTopWaterKey = 0x20000;   // ShadowKey::topo: and it is the water (its height), not what crosses it
 constexpr uint32_t kTrailSize = 2048;         // Snow Tracks: the trail's texels a side
+// the tanks' treads (their textures)
+constexpr uint64_t kTreads[] = {0x192f1290bdd4800full, 0x1dc89fc985471111ull, 0x53a8e2aaa11331e9ull, 0x5675103da34a254eull,
+                                0x5c021a5b5a639136ull, 0x5e5b0d9f829934b6ull, 0x95e5d2570ff0db20ull, 0xa76fa46bdc353f32ull,
+                                0xc3553a8bdc2a9d7aull, 0xc46be3a4e120f8daull, 0xcfbfd099f81da66full, 0xd9de6f0a30d8e810ull,
+                                0xe733affca12e920aull, 0xea73e24eee6c79deull, 0xfd41d18ecfcfe896ull};
+bool IsTread(uint64_t id) { return std::find(std::begin(kTreads), std::end(kTreads), id) != std::end(kTreads); }
 constexpr float kTrailCell = 2.5f;            // and a texel's size in the world (cm)
 constexpr uint32_t kWaveSize = 512;          // Water Interaction: the wave field's texels a side
 constexpr float kWaveCell = 6;               // and a texel's size in the world (cm)
@@ -1190,6 +1196,9 @@ private:
     void RecordCaster(const State& s, const Assembled& a, const DrawShaders& sh, const PixelKey& pk, const PsoKey& k,
                       const DrawTextures& stages);
     void GatherLights(const State& s, const Assembled& a, const DrawShaders& sh, const PixelKey& pk);
+    bool ModelToWorld(const State& s, const Assembled& a, const DrawShaders& sh, GuestExtent size, float (&M)[16]);
+    bool TreadRoll(const State& s, const Assembled& a, const DrawShaders& sh, GuestExtent size, uint32_t prim, uint32_t start,
+                   uint32_t count, const uint8_t* indices, uint64_t tex, float& roll);
     // the frame's draws that would change no pixel drawn again (DrawnAlready): their signatures, the frame's
     std::unordered_set<uint64_t, KeyHash> drawn_;
     uint64_t drawn_frame_ = ~0ull;
@@ -1225,6 +1234,9 @@ private:
     // the far cascades (2 and 3): drawn every third time when only the time asked for it (DrawShadowMap)
     float atlas_far_eye_[3] = {}, atlas_far_ahead_[3] = {};
     uint32_t atlas_far_waited_ = 2;  // redraws of the near ones alone since the far ones were drawn
+    // where the frame's casters are in the world, summed (RecordCaster): the far cascades kept only while it stays as
+    // it was when they were drawn (a plane crossing them: its shadow on the ground a third as often)
+    uint64_t casters_place_ = 0, atlas_far_place_ = 0;
     int atlas_level_ = -2;
     uint32_t atlas_quality_ = ~0u;
     // the camera the frame's 3D was drawn with (the fixed function transforms, which the game's own matrices
@@ -1241,6 +1253,19 @@ private:
     rhi::Blob* point_gs_ = nullptr;  // PointSpriteGsHlsl, for the pipelines of kPointSpriteKey
     rhi::Blob *tess_hs_ = nullptr, *tess_ds_ = nullptr;  // TessHlsl, for kTessKey
     KeyMap<uint64_t, TessInfo> tess_rows_;  // by vertex shader key
+    // the tanks' treads rolled (TreadRoll): each tank's place a frame and how far round its tread has gone; a tread's
+    // texture coordinate along its length a unit of its length on its lowest run (where it lies on the ground), by
+    // its texture and its draw's shape (0: none found)
+    struct TreadTrack {
+        float pos[3];
+        float roll;
+        uint64_t frame;
+        uint64_t tex;
+    };
+    std::vector<TreadTrack> tread_tracks_;
+    std::unordered_map<uint64_t, float> tread_rate_;
+    float tread_roll_ = 0;
+    bool tread_on_ = false;
     bool tess_draw_ = false;                            // this draw is tessellated: patches of three
     std::vector<uint32_t> tess_list_;                   // a strip's triangles as a list  // WeaponCullGsHlsl, for the pipelines of kWeaponCullKey
     // the lights of glowing sprites (g_emitter): the frame's, then the ones lighting, each fading once its sprite is
@@ -1305,6 +1330,7 @@ private:
     rhi::Resource* hdr_snap_of_ = nullptr;  // the target the scene's copy is of (this frame's scene), null: none
     float blit_rect_[4] = {};               // where BlitFrame put the frame in the back buffer (x, y, w, h)
     bool dof_cine_ = false;        // it is a cutscene's (Cinematic Depth of Field): p[4].w 2 on
+    bool far_dof_ = false;         // Distance Depth of Field: p[4].w 4 on
     void SceneFinal(Target& rt, const float p[16], bool bloom, bool rays, bool dof);
     // the sky's constants (kSceneCommon's sky[6]), for every scene pass of the frame
     float sky_cb_[24] = {};
@@ -1678,6 +1704,15 @@ private:
     };
     std::vector<CapTex> cap_tex_;
     Ref<rhi::Resource> lut_;
+    // a road's outline (the pack's roadmask_<level>.bin, tools/remaster/road_mask.py): a top view, its tiles faded out
+    // where it is 0 (level 30's road of whole tiles in steps); its corner in the world and 1 / its size
+    Ref<rhi::Resource> road_mask_;
+    Ref<rhi::Resource> road_fill_;  // the road's texture (its colour map in the pack), for its verges' cells inside it
+    DXGI_FORMAT road_fill_fmt_ = DXGI_FORMAT_UNKNOWN;
+    uint32_t road_fill_mips_ = 0;
+    int road_mask_level_ = -1;
+    float road_mask_box_[4] = {};
+    void EnsureRoadMask();
     D3D12_RESOURCE_STATES lut_state_ = D3D12_RESOURCE_STATE_COPY_DEST;
     uint8_t ramp_[768] = {};
     bool ramp_dirty_ = false;
@@ -1833,7 +1868,7 @@ void Renderer::Begin() {
 // t7 for the list: the last shadow mask while it is readable at the scene targets' size, else a null view (the
 // highlights then left as they are: UploadConstants asks for the mask only when bound)
 void Renderer::BindSunVisibility() {
-    uint32_t slot = AllocSrvSlots(3);
+    uint32_t slot = AllocSrvSlots(5);
     constexpr D3D12_RESOURCE_STATES kRead = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
     rhi::Resource* r = sun_vis_ok_ && scene_[kSceneShadow] && scene_state_[kSceneShadow] == kRead ? scene_[kSceneShadow].Get() : nullptr;
     D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
@@ -1854,7 +1889,55 @@ void Renderer::BindSunVisibility() {
     sv.Format = DXGI_FORMAT_R16G16_FLOAT;
     dev_->CreateSrv(tr, &sv, Cpu(rhi::Heap::Srv, slot + 2));
     trail_bound_ = tr != nullptr;
+    // t10: the level's road outline, if it has one; t11: its road's texture
+    EnsureRoadMask();
+    sv.Format = DXGI_FORMAT_R8_UNORM;
+    dev_->CreateSrv(road_mask_.Get(), &sv, Cpu(rhi::Heap::Srv, slot + 3));
+    sv.Format = road_fill_ ? road_fill_fmt_ : DXGI_FORMAT_R8_UNORM;
+    sv.Texture2D.MipLevels = road_fill_ ? road_fill_mips_ : 1;
+    dev_->CreateSrv(road_fill_.Get(), &sv, Cpu(rhi::Heap::Srv, slot + 4));
     cl_->SetTable(4, sun_table_);
+}
+
+// the level's road outline (roadmask_<level>.bin in the pack), read when the level changes
+void Renderer::EnsureRoadMask() {
+    const int level = g_level.load();
+    if (level == road_mask_level_) return;
+    road_mask_level_ = level;
+    if (road_mask_) Release(std::move(road_mask_));
+    if (road_fill_) Release(std::move(road_fill_));
+    std::ifstream f(std::filesystem::path(remaster::Dir()) / ("roadmask_" + std::to_string(level) + ".bin"), std::ios::binary);
+    char magic[4] = {};
+    uint32_t w = 0, h = 0;
+    float x0 = 0, z0 = 0, texel = 0;
+    uint64_t fill = 0;
+    if (!f.read(magic, 4) || std::memcmp(magic, "RMS2", 4) || !f.read(reinterpret_cast<char*>(&w), 4) || !f.read(reinterpret_cast<char*>(&h), 4) ||
+        !f.read(reinterpret_cast<char*>(&x0), 4) || !f.read(reinterpret_cast<char*>(&z0), 4) || !f.read(reinterpret_cast<char*>(&texel), 4) ||
+        !f.read(reinterpret_cast<char*>(&fill), 8) || w == 0 || h == 0 || w > 16384 || h > 16384 || texel <= 0)
+        return;
+    std::vector<uint8_t> px(size_t(w) * h);
+    if (!f.read(reinterpret_cast<char*>(px.data()), std::streamsize(px.size()))) return;
+    D3D12_RESOURCE_DESC td = Texture2DDesc(DXGI_FORMAT_R8_UNORM, w, h);
+    if (!CreateResource(rhi::HeapType::Default, td, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, road_mask_)) return;
+    const uint32_t pitch = UploadPitch(w);
+    Alloc a = Upload(uint64_t(pitch) * h, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
+    for (uint32_t y = 0; y < h; y++) std::memcpy(a.cpu + size_t(y) * pitch, px.data() + size_t(y) * w, w);
+    rhi::CopyLocation dl{road_mask_.Get(), D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX};
+    rhi::CopyLocation sl{a.res, D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT};
+    sl.PlacedFootprint.Offset = a.off;
+    sl.PlacedFootprint.Footprint = {DXGI_FORMAT_R8_UNORM, w, h, 1, pitch};
+    cl_->CopyTexture(dl, 0, 0, 0, sl, nullptr);
+    D3D12_RESOURCE_STATES st = D3D12_RESOURCE_STATE_COPY_DEST;
+    Transition(road_mask_.Get(), st, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    road_mask_box_[0] = x0, road_mask_box_[1] = z0, road_mask_box_[2] = 1.0f / (float(w) * texel), road_mask_box_[3] = 1.0f / (float(h) * texel);
+    remaster::Image im;
+    const std::string fname = remaster::IdName(fill);
+    if (fill && remaster::ReadDds(remaster::Dir() + L"/textures/" + std::wstring(fname.begin(), fname.end()) + L".c.dds", im)) {
+        const remaster::Image* one = &im;
+        road_fill_ = UploadImages(&one, 1);
+        road_fill_fmt_ = im.fmt, road_fill_mips_ = im.mips;
+    }
+    LOGR("road mask: level %d, %u x %u texels of %.0f units", level, w, h, texel);
 }
 
 void Renderer::Submit(bool wait) {
@@ -2634,16 +2717,24 @@ void Renderer::LoadShaderCache() {
                                 "}\n",
                                 "main", "ps_5_0");
     // a tank's tread from below (Snow Tracks): its lowest height (as its negative, the blend keeping the largest) and
-    // its cleats, bars across it every 15 cm fixed in the world (they stay where it pressed them as it rolls on):
-    // across the way its texture's coordinate runs fastest (the pads repeat along the track), the world here in the
-    // trail's texels of 2.5 cm
+    // the print of its links, fixed in the world (they stay where it pressed them as it rolls on), a link every 17.5 cm
+    // (7 of the trail's texels of 2.5 cm) along the tread: its texture's second coordinate's way (the length of every
+    // tank's tread; the first, across it, runs as fast on some: picking the faster one laid the bars along the track),
+    // its first across it, 0 to 1. A chevron grouser a link pressed deepest, the groove of the guide teeth down the
+    // middle, the pins' holes by the edges left shallow (the snow pushed up into them): as cleat, -0.3 to 1
     top_tread_ps_ = FixedShader(kTopTreadId,
                                 "float4 main(float4 pos : SV_Position, float wy : TEXCOORD0, float2 uv : TEXCOORD1) : SV_Target {\n"
-                                "    float2 gu = float2(ddx(uv.x), ddy(uv.x)), gv = float2(ddx(uv.y), ddy(uv.y));\n"
-                                "    float2 g = dot(gu, gu) > dot(gv, gv) ? gu : gv;\n"
-                                "    float2 dir = dot(g, g) > 1e-12 ? normalize(g) : float2(1, 0);\n"
-                                "    float along = dot(pos.xy, dir) / 6;\n"
-                                "    float cleat = smoothstep(0.1, 0.25, frac(along)) * (1 - smoothstep(0.5, 0.65, frac(along)));\n"
+                                "    float2 gv = float2(ddx(uv.y), ddy(uv.y));\n"
+                                "    float2 dir = dot(gv, gv) > 1e-12 ? normalize(gv) : float2(1, 0);\n"
+                                "    float along = dot(pos.xy, dir) / 7;\n"
+                                "    float ax = abs(saturate(uv.x) * 2 - 1);\n"
+                                "    float f = frac(along + 0.35 * ax);\n"
+                                "    float grouser = smoothstep(0.04, 0.12, f) * (1 - smoothstep(0.42, 0.5, f));\n"
+                                "    float plate = 0.35 * (1 - smoothstep(0.85, 0.95, ax));\n"
+                                "    float guide = 1 - smoothstep(0.07, 0.12, ax);\n"
+                                "    float2 hp = float2((ax - 0.8) * 2.5, frac(along) - 0.72);\n"
+                                "    float hole = 1 - smoothstep(0.09, 0.13, length(hp));\n"
+                                "    float cleat = lerp(max(grouser, plate) * (1 - 0.7 * guide), -0.3, hole);\n"
                                 "    return float4(-wy, cleat, 0, 0);\n"
                                 "}\n",
                                 "main", "ps_5_0");
@@ -2651,7 +2742,7 @@ void Renderer::LoadShaderCache() {
     // out what all share (the root signature, the geometry and tessellation shaders): a library made with others is
     // dropped, as its pipelines would never load again nor could be replaced
     // (the shaders' layouts, rhi.h's Layout: a version of them)
-    constexpr uint64_t kLayouts = 0x4C41594F55545331ull;
+    constexpr uint64_t kLayouts = 0x4C41594F55545333ull;  // (3: table 4 to t11, the road mask and its texture)
     uint64_t build = Hash(&kLayouts, 8, Hash(dev_->Name(), std::strlen(dev_->Name())));
     for (uint64_t h : fixed_blobs) build = Hash(&h, 8, build);
     {
@@ -4276,6 +4367,21 @@ void Renderer::UploadConstants(const State& s, const DrawShaders& sh, const PsoK
         std::memcpy(c.mtl[0], c0, 16);
         std::memcpy(c.mtl[1], c1, 16);
         std::memcpy(c.mtl[2], c2, 16);
+        if (m.cell) c.cell[0] = 1;
+        // a road's tiles where the level has its outline (cell.w, by the world's place, wpos rows from view space, in the
+        // mask, its box in fadebox[0]): its own tiles faded out past it (1); within it, its verges' and the ground's snow
+        // layers over it (laid in steps of whole tiles, opaque or faded in by their vertices: polygons of snow cut into the
+        // road) drawn with the road's texture, whole (-1)
+        if ((m.cell || m.road_cover) && road_mask_ && road_mask_level_ == g_level.load() && cam_ok_) {
+            if (wave_inv_frame_ != frame_ && shadow::Invert(cam_view_, wave_inv_)) wave_inv_frame_ = frame_;
+            if (wave_inv_frame_ == frame_) {
+                const float* I = wave_inv_;
+                for (int r = 0; r < 3; r++) c.wpos[r][0] = I[r], c.wpos[r][1] = I[4 + r], c.wpos[r][2] = I[8 + r], c.wpos[r][3] = I[12 + r];
+                std::memcpy(c.fadebox[0], road_mask_box_, sizeof(road_mask_box_));
+                static const bool rdbg = std::getenv("XBE_ROAD_MASK_DEBUG") != nullptr;  // tests: the mask and its place shown
+                c.cell[3] = (m.cell_fade_off || m.road_cover ? -1.0f : 1.0f) * (rdbg ? 2.0f : 1.0f);
+            }
+        }
         static const float debug = [] {
             const char* e = std::getenv("XBE_MATERIAL_DEBUG");
             return e ? float(std::atoi(e)) : 0.0f;
@@ -4331,7 +4437,7 @@ void Renderer::UploadConstants(const State& s, const DrawShaders& sh, const PsoK
         // source alpha blending (D3DBLEND_SRCALPHA): the height mask (cut-outs have no height: pom 0)
         constexpr uint32_t kSrcAlpha = 0x302;
         bool layered = k.blend && k.src == kSrcAlpha;
-        c.mtl[3][3] = set.height_blend && layered && m.pbr && m.pom > 0 ? 1.0f : 0.0f;
+        c.mtl[3][3] = set.height_blend && layered && m.pbr && m.pom > 0 && !m.cell ? 1.0f : 0.0f;  // (a cell of a picture: its own blend, the relief broke its edge up)
         c.mrefl[0] = m.refl;
         c.mrefl[1] = m.metal;
         // water (Water): smooth and reflective, its ripples moving (mrefl.z, negative, the time)
@@ -4403,6 +4509,9 @@ void Renderer::UploadConstants(const State& s, const DrawShaders& sh, const PsoK
             }
         }
     }
+    // a tank's tread rolled as far as the tank went (TreadRoll; the game's own texture matrix for it, which the tanks'
+    // vertex programs leave out, only crawls at one speed, moving or not)
+    if (tread_on_) c.wpos[3][2] = tread_roll_, c.wpos[3][3] = 1;
     if (sh.fixed_transform) {
         FillTransformConstants(s, size, c);
         FillLightConstants(s, sh.fk, c);
@@ -5175,6 +5284,12 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
                     std::ofstream f(app::ExeDir() / "logs" / "near" / name);
                     for (uint32_t v = 0; v < fo.vertex_count; v++)
                         f << "v " << fo.vertices[v * n] << " " << fo.vertices[v * n + 1] << " " << fo.vertices[v * n + 2] << "\n";
+                    // every input register (as "# va <regs> ...": texture coordinates and the rest)
+                    for (uint32_t v = 0; v < fo.vertex_count; v++) {
+                        f << "# va " << fo.regs;
+                        for (size_t k = 0; k < n; k++) f << " " << fo.vertices[v * n + k];
+                        f << "\n";
+                    }
                     std::vector<uint32_t> ix = fo.indices;
                     if (ix.empty())
                         for (uint32_t v = 0; v < fo.vertex_count; v++) ix.push_back(v);
@@ -5260,6 +5375,46 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
             std::ofstream f(app::ExeDir() / "logs" / name);
             f << "// regs " << a.regs << " count " << a.vertex_count << "\n" << VertexProgramHlsl(s.vs->program, a.regs);
             LOGR("skin: dumped %s (%u vertices, regs %04X)", name, a.vertex_count, a.regs);
+        }
+    }
+    // XBE_PROG_DUMP=<texture>: that texture's vertex program, with its constants, to logs/prog_<texture>.hlsl, once
+    static const uint64_t prog_dump = [] {
+        const char* e = std::getenv("XBE_PROG_DUMP");
+        return e ? std::strtoull(e, nullptr, 16) : 0ull;
+    }();
+    if (prog_dump && sh.prog && stages.id[0] == prog_dump) {
+        static bool dumped = false;
+        if (!dumped) {
+            dumped = true;
+            char name[64];
+            std::snprintf(name, sizeof(name), "prog_%016llx.hlsl", (unsigned long long)prog_dump);
+            std::ofstream f(app::ExeDir() / "logs" / name);
+            for (int r = 0; r < 192; r++) {
+                const auto& v = s.vsc[size_t(r)];
+                if (v[0] != 0 || v[1] != 0 || v[2] != 0 || v[3] != 0) f << "// c" << r << " " << v[0] << " " << v[1] << " " << v[2] << " " << v[3] << "\n";
+            }
+            f << "// regs " << a.regs << " count " << a.vertex_count << "\n" << VertexProgramHlsl(s.vs->program, a.regs, a.decode);
+        }
+        // and its vertices' registers as drawn now and then (logs/prog_<texture>_<frame>_<count>.txt, a frame each 2 s)
+        static uint64_t last = 0;
+        static int files = 0;
+        if (files < 24 && (frame_ - last >= 120 || frame_ == last)) {
+            last = frame_;
+            files++;
+            static Assembled fv;
+            if (AssembleFloats(s, prim, start, count, indices, fv)) {
+                char name[96];
+                std::snprintf(name, sizeof(name), "prog_%016llx_%llu_%u.txt", (unsigned long long)prog_dump, (unsigned long long)frame_, count);
+                std::ofstream f(app::ExeDir() / "logs" / name);
+                const size_t n = size_t(std::popcount(unsigned(fv.regs))) * 4;
+                f << "regs " << fv.regs << " vertices " << fv.vertex_count << " strip " << int(fv.strip) << "\n";
+                for (uint32_t v = 0; v < fv.vertex_count; v++) {
+                    for (size_t k = 0; k < n; k++) f << fv.vertices[v * n + k] << (k + 1 < n ? " " : "\n");
+                }
+                f << "indices";
+                for (uint32_t i : fv.indices) f << " " << i;
+                f << "\n";
+            }
         }
     }
     // XBE_LIGHTING_AUDIT: each vertex shader's lighting, once
@@ -5641,6 +5796,10 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
             }
         }
     }
+    // foliage close to the eye fades out (cell.y): a branch the view passes through, a roadside fir's past the tank's
+    // periscope, filled the screen for a frame or two as a dark blot
+    if (!flat && draw_tex0_ && !g_texview.load())
+        if (const remaster::Material* m = remaster::Find(draw_tex0_); m && m->sway >= 1) c.cell[1] = 1;
     // a character's light (Character Lighting)
     if (app::Get().character_light && draw_character_ && sh.prog && !flat && !g_texview.load()) c.mrefl[2] = 1;
     // a glowing sprite: past white in the HDR scene (its bloom), and its light
@@ -5765,6 +5924,7 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
         std::array<float, 16> w = ms.transforms[kTsWorld];
         if (carry(ms.transforms[kTsWorld].data())) world_back.s = &ms, world_back.w = w;
     }
+    tread_on_ = sh.prog && IsTread(stages.id[0]) && TreadRoll(s, a, sh, size, prim, start, count, indices, stages.id[0], tread_roll_);
     UploadConstants(s, sh, k, stages, size, c);
     if (emitter && (glow.light || glow.impact > 0)) CollectEmitter(s, a, sh, glow);
 
@@ -6839,6 +6999,127 @@ rhi::Pipeline* Renderer::EnsureShadowPipeline(const ShadowKey& k) {
     return pso.Get();
 }
 
+// a model's placement in the world (rows: its x, y, z axes and its place, w in M[15]): a program's position rows (to
+// the guest screen, its viewport's offset added) as clip rows times the camera's inverse (the view and projection the
+// game keeps); a fixed function draw's world transform. False: no rows, no camera
+bool Renderer::ModelToWorld(const State& s, const Assembled& a, const DrawShaders& sh, GuestExtent size, float (&M)[16]) {
+    if (!sh.prog) {
+        std::memcpy(M, s.transforms[kTsWorld].data(), sizeof(M));
+        return true;
+    }
+    if (!s.vs || size.w == 0 || size.h == 0) return false;
+    auto it = tess_rows_.find(sh.vkey);
+    if (it == tess_rows_.end()) it = tess_rows_.emplace(sh.vkey, TessRows(s.vs->program, a.regs)).first;
+    const TessInfo& ti = it->second;
+    const float* V = s.transforms[kTsView].data();
+    const float* Pm = s.transforms[kTsProjection].data();
+    if (!ti.ok || !(Pm[11] > 0.99f && Pm[11] < 1.01f && std::fabs(Pm[15]) < 1e-6f) || s.zscale <= 0) return false;
+    const auto &rx = s.vsc[ti.rows[0]], &ry = s.vsc[ti.rows[1]], &rz = s.vsc[ti.rows[2]], &rw = s.vsc[ti.rows[3]];
+    const auto& off = s.vsc[ti.offset];
+    const float W = float(size.w), H = float(size.h);
+    float A[16];
+    for (size_t i = 0; i < 4; i++) {
+        A[i * 4 + 0] = rx[i] * 2 / W + rw[i] * (2 * off[0] / W - 1);
+        A[i * 4 + 1] = -ry[i] * 2 / H + rw[i] * (1 - 2 * off[1] / H);
+        A[i * 4 + 2] = rz[i] / s.zscale + rw[i] * off[2] / s.zscale;
+        A[i * 4 + 3] = rw[i];
+    }
+    float vp[16], inv[16];
+    shadow::Mul(V, Pm, vp);
+    if (!shadow::Invert(vp, inv)) return false;
+    shadow::Mul(A, inv, M);
+    return std::fabs(M[15]) >= 1e-6f;
+}
+
+// a tank's tread rolled by how far the tank went along its length since the frame before: its place in the world
+// from its program's position rows (to the guest screen, its viewport's offset added) and the camera's view and
+// projection the game keeps; the tread's coordinate along it moved against the way the tank went on the lowest run (that
+// run still on the ground, the top one going twice the tank's speed). False: no tread rolled (no rows, no camera)
+bool Renderer::TreadRoll(const State& s, const Assembled& a, const DrawShaders& sh, GuestExtent size, uint32_t prim,
+                         uint32_t start, uint32_t count, const uint8_t* indices, uint64_t tex, float& roll) {
+    // the texture coordinate along the tread a unit of its length (z) on its lowest run, from the game's own vertices
+    const uint64_t shape = tex ^ (uint64_t(count) << 40) ^ (uint64_t(start) << 20);
+    auto rit = tread_rate_.find(shape);
+    if (rit == tread_rate_.end()) {
+        float rate = 0;
+        static Assembled fa;
+        if (AssembleFloats(s, prim, start, count, indices, fa) && (fa.regs & 1) && (fa.regs >> 5 & 1) && fa.vertex_count) {
+            const size_t n = size_t(std::popcount(unsigned(fa.regs))) * 4, t = size_t(std::popcount(unsigned(fa.regs) & 0x1Fu)) * 4;
+            float lo = 1e30f, hi = -1e30f;
+            for (uint32_t v = 0; v < fa.vertex_count; v++) lo = std::min(lo, fa.vertices[v * n + 1]), hi = std::max(hi, fa.vertices[v * n + 1]);
+            std::vector<uint32_t> ix = fa.indices;
+            if (ix.empty())
+                for (uint32_t v = 0; v < fa.vertex_count; v++) ix.push_back(v);
+            std::vector<float> rates;
+            auto tri = [&](uint32_t i0, uint32_t i1, uint32_t i2) {
+                if (i0 == i1 || i1 == i2 || i0 == i2 || std::max({i0, i1, i2}) >= fa.vertex_count) return;
+                const float *p0 = &fa.vertices[i0 * n], *p1 = &fa.vertices[i1 * n], *p2 = &fa.vertices[i2 * n];
+                if ((p0[1] + p1[1] + p2[1]) / 3 > lo + 0.15f * (hi - lo)) return;  // (the lowest run alone)
+                float e1[3], e2[3], nn[3];
+                for (int k = 0; k < 3; k++) e1[k] = p1[k] - p0[k], e2[k] = p2[k] - p0[k];
+                nn[0] = e1[1] * e2[2] - e1[2] * e2[1], nn[1] = e1[2] * e2[0] - e1[0] * e2[2], nn[2] = e1[0] * e2[1] - e1[1] * e2[0];
+                const float n2 = nn[0] * nn[0] + nn[1] * nn[1] + nn[2] * nn[2];
+                if (n2 < 1e-6f) return;
+                // the coordinate's gradient over the triangle, its z: ((v1 - v0) (n x e2) + (v2 - v0) (e1 x n)) / |n|^2
+                const float dv1 = p1[t + 1] - p0[t + 1], dv2 = p2[t + 1] - p0[t + 1];
+                const float gz = (dv1 * (nn[0] * e2[1] - nn[1] * e2[0]) + dv2 * (e1[0] * nn[1] - e1[1] * nn[0])) / n2;
+                if (std::fabs(gz) > 1e-5f) rates.push_back(gz);
+            };
+            if (fa.strip) {
+                for (size_t k = 2; k < ix.size(); k++) tri(ix[k - 2], ix[k - 1], ix[k]);
+            } else {
+                for (size_t k = 0; k + 2 < ix.size(); k += 3) tri(ix[k], ix[k + 1], ix[k + 2]);
+            }
+            if (!rates.empty()) {
+                std::nth_element(rates.begin(), rates.begin() + ptrdiff_t(rates.size() / 2), rates.end());
+                rate = rates[rates.size() / 2];
+            }
+        }
+        static int told = 0;
+        if (told++ < 32) LOGR("tread: %016llx (%u) %.4f a unit of its length", (unsigned long long)tex, count, rate);
+        rit = tread_rate_.emplace(shape, rate).first;
+    }
+    if (rit->second == 0 || !s.vs || size.w == 0 || size.h == 0) return false;
+    float M[16];
+    if (!ModelToWorld(s, a, sh, size, M)) return false;
+    const float pos[3] = {M[12] / M[15], M[13] / M[15], M[14] / M[15]};
+    const float* zx = &M[8];
+    const float z2 = zx[0] * zx[0] + zx[1] * zx[1] + zx[2] * zx[2];
+    if (z2 < 1e-8f) return false;
+    // this tank: the one drawn already this frame there (a second pass), else the nearest of the frames before
+    TreadTrack* best = nullptr;
+    float bd = 1e30f;
+    for (TreadTrack& tr : tread_tracks_) {
+        if (tr.tex != tex) continue;
+        const float d = (tr.pos[0] - pos[0]) * (tr.pos[0] - pos[0]) + (tr.pos[1] - pos[1]) * (tr.pos[1] - pos[1]) +
+                        (tr.pos[2] - pos[2]) * (tr.pos[2] - pos[2]);
+        if (tr.frame == frame_ && d < 4.0f) {
+            roll = tr.roll;
+            return true;
+        }
+        if (tr.frame + 3 >= frame_ && tr.frame != frame_ && d < bd) bd = d, best = &tr;
+    }
+    // (a tank goes a few units a frame: further, another tank of the same model, its roll taken over in a jump)
+    if (!best || bd > 80.0f * 80.0f) {
+        std::erase_if(tread_tracks_, [&](const TreadTrack& tr) { return tr.frame + 60 < frame_; });
+        tread_tracks_.push_back({{pos[0], pos[1], pos[2]}, 0.0f, frame_, tex});
+        roll = 0;
+        return true;
+    }
+    // along its length, in its own units: the way it went on its z axis
+    const float along = ((pos[0] - best->pos[0]) * zx[0] + (pos[1] - best->pos[1]) * zx[1] + (pos[2] - best->pos[2]) * zx[2]) / z2;
+    if (std::isfinite(along) && std::fabs(along) < 200.0f) best->roll = std::fmod(best->roll - along * rit->second, 1.0f);
+    if (!std::isfinite(best->roll)) best->roll = 0;
+    std::memcpy(best->pos, pos, sizeof(pos));
+    best->frame = frame_;
+    roll = best->roll;
+    static const bool tread_log = std::getenv("XBE_TREAD_LOG") != nullptr;
+    if (tread_log)
+        LOGR("tread: frame %llu tex %016llx at %.1f %.1f %.1f along %.2f roll %.4f", (unsigned long long)frame_, (unsigned long long)tex,
+             pos[0], pos[1], pos[2], along, roll);
+    return true;
+}
+
 // the light the game gave the draw, if it is one the shadows can take: a static model's, carried to world space by
 // its world matrix (its world-view-projection times the camera's inverse), or a fixed function draw's D3D lights
 void Renderer::GatherLights(const State& s, const Assembled& a, const DrawShaders& sh, const PixelKey& pk) {
@@ -7164,12 +7445,7 @@ void Renderer::RecordCaster(const State& s, const Assembled& a, const DrawShader
     // a tank's tread (its texture's): seen from below onto the snow's trail
     c.tread = nullptr;
     {
-        constexpr uint64_t kTreads[] = {0x192f1290bdd4800full, 0x1dc89fc985471111ull, 0x53a8e2aaa11331e9ull, 0x5675103da34a254eull,
-                                        0x5c021a5b5a639136ull, 0x5e5b0d9f829934b6ull, 0x95e5d2570ff0db20ull, 0xa76fa46bdc353f32ull,
-                                        0xc3553a8bdc2a9d7aull, 0xc46be3a4e120f8daull, 0xcfbfd099f81da66full, 0xd9de6f0a30d8e810ull,
-                                        0xe733affca12e920aull, 0xea73e24eee6c79deull, 0xfd41d18ecfcfe896ull};
-        if (app::Get().snow_tracks && top_tread_ps_ && frame_ - snow_frame_ < 30 &&
-            std::find(std::begin(kTreads), std::end(kTreads), stages.id[0]) != std::end(kTreads))
+        if (app::Get().snow_tracks && top_tread_ps_ && frame_ - snow_frame_ < 30 && IsTread(stages.id[0]))
             if (uint64_t tv = TopVertexShader(s, a, sh)) {
                 ShadowKey tk = key;
                 tk.vs = tv, tk.ps = top_tread_ps_, tk.topo |= kTopKey | kTopTreadKey;
@@ -7178,6 +7454,15 @@ void Renderer::RecordCaster(const State& s, const Assembled& a, const DrawShader
     }
     c.zmin = v.min_z, c.zmax = v.max_z;
     casters_.push_back(c);
+    // where it is in the world, to 16 units (the far cascades kept while all stay put)
+    {
+        float M[16];
+        if (ModelToWorld(s, a, sh, size, M)) {
+            const int32_t q3[3] = {int32_t(std::lround(M[12] / M[15] / 16)), int32_t(std::lround(M[13] / M[15] / 16)),
+                                   int32_t(std::lround(M[14] / M[15] / 16))};
+            casters_place_ += Hash(q3, sizeof(q3), uint64_t(c.count) | 1);
+        }
+    }
     static const bool list = std::getenv("XBE_SHADOW_CASTERS") != nullptr;
     static const bool every = list && std::string(std::getenv("XBE_SHADOW_CASTERS")) == "all";  // (every 20th frame)
     if (list && (presents_ % 600 == 300 || (every && presents_ % 20 == 0)))
@@ -7307,11 +7592,12 @@ bool Renderer::DrawShadowMap() {
         }
         float far_moved[3] = {m[12] - atlas_far_eye_[0], m[13] - atlas_far_eye_[1], m[14] - atlas_far_eye_[2]};
         static const bool far_always = std::getenv("XBE_SHADOW_FAR_ALWAYS") != nullptr;  // (tests: every cascade each time)
-        near_only = atlas_valid_ && atlas_far_waited_ < 2 && !far_always && q.cascades >= 3 && dot3(light_.dir, atlas_light_) >= 0.99996f &&
+        near_only = atlas_valid_ && atlas_far_waited_ < 2 && !far_always && q.cascades >= 3 && casters_place_ == atlas_far_place_ &&
+                    dot3(light_.dir, atlas_light_) >= 0.99996f &&
                     atlas_level_ == g_level.load() && atlas_quality_ == app::Get().shadow_quality && dot3(m + 8, atlas_far_ahead_) >= 0.9945f &&
                     dot3(far_moved, far_moved) <= (0.5f * mf.units) * (0.5f * mf.units);
         atlas_far_waited_ = near_only ? atlas_far_waited_ + 1 : 0;  // (the far ones every third time)
-        if (!near_only) std::memcpy(atlas_far_eye_, m + 12, 12), std::memcpy(atlas_far_ahead_, m + 8, 12);
+        if (!near_only) std::memcpy(atlas_far_eye_, m + 12, 12), std::memcpy(atlas_far_ahead_, m + 8, 12), atlas_far_place_ = casters_place_;
         atlas_valid_ = true, atlas_time_ = now, atlas_level_ = g_level.load(), atlas_quality_ = app::Get().shadow_quality;
         std::memcpy(atlas_eye_, m + 12, 12), std::memcpy(atlas_ahead_, m + 8, 12), std::memcpy(atlas_light_, light_.dir, 12);
     }
@@ -9794,7 +10080,7 @@ void Renderer::SceneOcclusion() {
     ResolveLight();
     bool shadows = scene_rt_ && scene_ds_ && light_.on && shadow_q_.cascades > 0 && cam_ok_;
     if (!scene_rt_ || !scene_ds_ || (!set.ao && !set.contact_shadows && !shadows)) {
-        casters_.clear();
+        casters_.clear(), casters_place_ = 0;
         sky_marks_.clear();
         return;
     }
@@ -9821,7 +10107,7 @@ void Renderer::SceneOcclusion() {
     MapFrame();
     SnowTracks();
     GpuMark("snow");
-    casters_.clear();
+    casters_.clear(), casters_place_ = 0;
     sky_marks_.clear();
     if (!mask) {
         // no shadows: the mask white (a null view reads 0 whatever its mapping)
@@ -10045,6 +10331,9 @@ void Renderer::ScenePost() {
         dof_ += std::clamp(target - dof_, -dt / 0.15f, dt / 0.15f);
     }
     bool dof = dof_ > 0.01f;
+    // Distance Depth of Field: the far distance out of focus, from the same blurred scene (its switch p4.w's 4)
+    far_dof_ = set.distance_dof;
+    dof |= far_dof_;
     if (rays || dof) {
         Target& ds = *scene_ds_;
         constexpr DXGI_FORMAT kF16 = DXGI_FORMAT_R16G16B16A16_FLOAT, kDepth = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
@@ -10477,7 +10766,8 @@ void Renderer::SceneFinal(Target& rt, const float p[16], bool bloom, bool rays, 
     float now = std::chrono::duration<float>(std::chrono::steady_clock::now() - t0).count();
     shown = std::max(set.damage_shake ? std::clamp(g_hurt.load(), 0.0f, 1.0f) : 0.0f, shown - std::clamp(now - last, 0.0f, 0.1f) / 0.5f);
     last = now;
-    float p4[4] = {std::max(shown, 0.0f), std::fmod(now, 1000.0f), fx_.flash, dof ? dof_ + (dof_cine_ ? 2.0f : 0.0f) : 0.0f};
+    float p4[4] = {std::max(shown, 0.0f), std::fmod(now, 1000.0f), fx_.flash,
+                   (dof && dof_ > 0.01f ? dof_ + (dof_cine_ ? 2.0f : 0.0f) : 0.0f) + (far_dof_ ? 4.0f : 0.0f)};
     float p5[4] = {float(nlights), float(fx_.heats), rays ? 1.0f : 0.0f, set.light_halos ? 1.0f : 0.0f};
     std::memcpy(cb.cpu + 16 * sizeof(float), p4, sizeof(p4));
     std::memcpy(cb.cpu + 20 * sizeof(float), p5, sizeof(p5));
@@ -10559,8 +10849,8 @@ void Renderer::SceneFinal(Target& rt, const float p[16], bool bloom, bool rays, 
     // the lens's dirt at t9, made for the screen's size (LensDirt)
     rhi::Resource* dirt = app::Get().lens_flare ? LensDirt(text, cb.gpu, rt.w, rt.h) : nullptr;
     if (motes_drawn || dirt) {
-        uint32_t mslot = AllocSrvSlots(3);
-        for (uint32_t i = 0; i < 3; i++) {
+        uint32_t mslot = AllocSrvSlots(5);
+        for (uint32_t i = 0; i < 5; i++) {
             D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
             rhi::Resource* r = i == 0 && motes_drawn ? motes_.Get() : i == 2 ? dirt : nullptr;
             sv.Format = !r ? kBgra : i == 0 ? DXGI_FORMAT_R11G11B10_FLOAT : DXGI_FORMAT_R32_FLOAT;
@@ -11679,7 +11969,7 @@ void Renderer::Present(const Surface& front) {
     if (scene_rt_ && !scene_done_) ScenePost();
     ResolveLight();
     light_resolved_ = false;
-    casters_.clear();
+    casters_.clear(), casters_place_ = 0;
     sky_marks_.clear();
     veil_.clear();
     prev_cam_ok_ = cam_ok_;

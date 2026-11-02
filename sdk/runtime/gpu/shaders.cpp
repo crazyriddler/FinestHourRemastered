@@ -91,9 +91,10 @@ const char* kCommonTail = R"(    float4 spread[4];
     row_major float4x4 sunprev;  // the view space now to the frame before's clip space, and to this frame's (sunvis)
     row_major float4x4 sunnow;
     float4 layout2y;  // 2D placed by the game: y * layout2y.x + layout2y.y, console pixels (layout2d.xy for x)
-    float4 wpos[4];  // the world's x, y, z from view space; wpos[3].x 1: a "planar" piece (hide.txt)
+    float4 wpos[4];  // the world's x, y, z from view space; wpos[3].x 1: a "planar" piece (hide.txt); .w 1: a tread rolled by .z
     float4 fadebox[2];  // a "fade<w>" piece (hide.txt): its centre x, z and half extents in its own space; w
     float4 vmove[4];  // a "move" piece (hide.txt): its vertices at x, z given the height y; w 1
+    float4 cell;  // x 1: the material a cell of a picture over many textures (the parallax walk kept in its cell); y 1: foliage, faded close to the eye; w 1 / -1: a road's own tiles / its verges' over it, faded by its outline (t10)
 };
 )";
 
@@ -327,6 +328,7 @@ const char* kVsEpilogue = R"(
     o.b0 = saturate(oB0);
     o.b1 = saturate(oB1);
     o.tc0 = oT0;
+    if (wpos[3].w > 0) o.tc0.y += wpos[3].z;  // a tank's tread rolled (renderer.cpp IsTread)
     o.tc1 = oT1;
     o.tc2 = oT2;
     o.tc3 = oT3;
@@ -1932,19 +1934,40 @@ std::string MaterialSetup(int i, const std::string& uv) {
            // (twice that for a parallax set deeper by hand than any class's, over 0.08: the muddy snowy roads)
            "    float wcap = saturate((mtl[2].y > 0.08 ? 24 : 12) / max(wtx, 1e-3));\n"
            "    walk *= wcap; wpx *= wcap; wtx *= wcap;\n"
+           // a cell of a picture laid over many textures (level 30's road): the walk kept inside its cell (past its
+           // edge the texture wraps round to its own far side, not the next cell's), the relief easing out over the
+           // eighth of the cell before the edge it walks towards (cut short just at the edge, the walk squeezed the
+           // texture into streaks there)
+           "    if (cell.x > 0) {\n"
+           "        float2 f = frac(mUv);\n"
+           "        float2 room = walk > 0 ? 0.996 - f : walk < 0 ? f - 0.004 : 1;\n"
+           "        float kc = smoothstep(0, 0.12, min(room.x, room.y));\n"
+           "        walk *= kc; wpx *= kc; wtx *= kc;\n"
+           "    }\n"
            "    steps = wpx < 0.5 ? 0 : min(64, max(max(6, ceil(wpx * 0.75)), ceil(wtx / 1.5)));\n"
            "    float2 duv = walk / max(steps, 1);\n"
            "    if (steps > 0) {\n"
+           // the snow pressed in (Snow Tracks: a tank's tread, a boot) sinks the relief under it by its depth, a tread's
+           // cleats deepest (half the walk's depth): its edges and cleats read as grooves in the ground's own texture. Its
+           // bumps kept (flattened, a road a column of tanks pressed all across lost its relief everywhere)
+           "    float tsink = 0;\n"
+           "    if (trail[0].w != 0) {\n"
+           "        float4 vp = float4(mP, 1);\n"
+           "        float2 tu = (float2(dot(vp, wave[0]), dot(vp, wave[1])) - trail[0].xy) * trail[0].z;\n"
+           "        float2 tm = abs(tu - 0.5);\n"
+           "        float4 t = trailf.SampleLevel(wavelin, tu, 0);\n"
+           "        tsink = 0.5 * saturate(t.r / 3.4) * saturate(2 - abs(dot(vp, trail[1]) - t.g) / 40) * saturate((0.5 - max(tm.x, tm.y)) * 16);\n"
+           "    }\n"
            "    float hs = 3 * max(1, wtx / 8);\n"
            "    float2 hU1 = mU1 * hs, hU2 = mU2 * hs;\n"
            "    float layer = 1 / steps, d = 0, pd = 0;\n"
            "    float2 cur = mUv, prev = mUv;\n"
-           "    float hd = 1 - mmat.SampleGrad(mtri, cur, hU1, hU2).g, phd = hd;\n"
+           "    float hd = min(tsink + 1 - mmat.SampleGrad(mtri, cur, hU1, hU2).g, 1), phd = hd;\n"
            "    [loop] for (int k = 0; k < 64; k++) {\n"
            "        if (d >= hd || k >= steps) break;\n"
            "        prev = cur; phd = hd; pd = d;\n"
            "        cur += duv; d += layer;\n"
-           "        hd = 1 - mmat.SampleGrad(mtri, cur, hU1, hU2).g;\n"
+           "        hd = min(tsink + 1 - mmat.SampleGrad(mtri, cur, hU1, hU2).g, 1);\n"
            "    }\n"
            "    float a = hd - d, b = phd - pd;\n"
            "    mUv = lerp(cur, prev, saturate(a / (a - b + 1e-5)));\n"
@@ -2128,11 +2151,12 @@ std::string MaterialShade(int i) {
         "                dx += (trailf.SampleLevel(wavelin, tu + float2(2 * te, o), 0).r - trailf.SampleLevel(wavelin, tu + float2(-2 * te, o), 0).r) * 0.5 * w;\n"
         "                dz += (trailf.SampleLevel(wavelin, tu + float2(o, 2 * te), 0).r - trailf.SampleLevel(wavelin, tu + float2(o, -2 * te), 0).r) * 0.5 * w;\n"
         "            }\n"
-        // deeper: the walls steeper, lit and shaded more by the light's side, the pressed snow darker
-        "            mN = normalize(mN + (wave[0].xyz * dx + wave[1].xyz * dz) * abs(trail[0].w) * 1.8 * near);\n"
+        // the relief in light and shade: each wall (a print's edge, a grouser's) lit or shaded by the side it faces the
+        // light from, the pressed snow itself barely darker (darkened by its depth, a tank's prints were dark bands)
+        "            mN = normalize(mN + (wave[0].xyz * dx + wave[1].xyz * dz) * abs(trail[0].w) * 3.0 * near);\n"
         "            float3 sl = (wave[0].xyz * dx + wave[1].xyz * dz) * near;\n"
-        "            float side = clamp(1 + dot(sl, mtl[1].xyz) * 4.5, 0.4, 1.6);\n"
-        "            outc.rgb *= side * (1 - (0.48 * saturate(r) - 0.12 * saturate(-r)) * near);\n"
+        "            float side = clamp(1 + dot(sl, mtl[1].xyz) * 5.5, 0.35, 1.7);\n"
+        "            outc.rgb *= side * (1 - (0.1 * saturate(r) - 0.06 * saturate(-r)) * near);\n"
         "        }\n"
         // XBE_SNOW_DEBUG: pressed red, raised blue, where the height agrees green
         "        if (trail[0].w < 0) outc.rgb = float3(saturate(t.r), near * 0.5, saturate(-t.r) * 2) + 0.02 * tf;\n"
@@ -2249,7 +2273,7 @@ std::string PixelHlsl(const PixelKey& k) {
         s += F("%s tex%d : register(t%d);\n%s smp%d : register(s%d);\n", type, i, i, t.shadow ? "SamplerComparisonState" : "SamplerState", i, i);
     }
     const int mat = MaterialStage(k);
-    if (mat >= 0) s += "Texture2D mnrm : register(t4);\nTexture2D mmat : register(t5);\nTexture2DArray mdet : register(t6);\nTexture2D sunvis : register(t7);\nTexture2D wavef : register(t8);\nTexture2D trailf : register(t9);\nSamplerState wavelin : register(s4);\nSamplerState mtri : register(s5);\nSamplerState mmatsmp : register(s6);\n";
+    if (mat >= 0) s += "Texture2D mnrm : register(t4);\nTexture2D mmat : register(t5);\nTexture2DArray mdet : register(t6);\nTexture2D sunvis : register(t7);\nTexture2D wavef : register(t8);\nTexture2D trailf : register(t9);\nTexture2D<float> roadmask : register(t10);\nTexture2D roadfill : register(t11);\nSamplerState wavelin : register(s4);\nSamplerState mtri : register(s5);\nSamplerState mmatsmp : register(s6);\n";
     else if (k.soft) s += "Texture2D<float> sdepth : register(t6);\n";
     std::string lit = k.lit ? PixelLightingCode(k.lit) : std::string();
     if (!lit.empty()) s += kVsHelpers + lit;
@@ -2406,6 +2430,19 @@ std::string PixelHlsl(const PixelKey& k) {
             "    float2 fd2 = abs(i.pv.xz - fadebox[0].xy) / fadebox[0].zw;\n"
             "    outc.a = 1 - smoothstep(1 - fadebox[1].x, 1, max(fd2.x, fd2.y));\n"
             "}\n";
+    // foliage close to the eye (cell.y): gone nearer than about half a metre, whole from two (the view passing through
+    // a branch: a dark blot over the screen for a frame)
+    body += "if (cell.y > 0) outc.a *= smoothstep(60, 220, i.cpos.w);\n";
+    // a road's tiles (cell.w): its own faded out past its smoothed outline (1), its verges' snow within it (-1) (the
+    // road mask, by the world's place, its box in fadebox[0]; outside the box as drawn)
+    if (mat >= 0)
+        body += "if (cell.w != 0) { float4 rq = float4(mP, 1); float2 rw = float2(dot(rq, wpos[0]), dot(rq, wpos[2]));\n"
+                "  float2 ru = (rw - fadebox[0].xy) * fadebox[0].zw;\n"
+                "  float rm = all(ru > 0) && all(ru < 1) ? roadmask.SampleLevel(wavelin, ru, 0) : (cell.w > 0 ? 1 : 0);\n"
+                "  if (cell.w > 0) outc.a *= rm;\n"
+                // (a verge's cell inside the outline: the road's texture for its own, as lit as it is)
+                + F("  else { float3 rf = roadfill.SampleGrad(mtri, mBu, mBu1, mBu2).rgb; outc.rgb = lerp(outc.rgb, outc.rgb * rf / max(t%d.rgb, 0.04), rm); outc.a = max(outc.a, rm); }\n", mat) +
+                "  if (abs(cell.w) > 1.5) outc = float4(rm, frac(ru * 50), 1); }\n";  // (XBE_ROAD_MASK_DEBUG)
     body += "alphatest(outc.a);\n" + Hooks().Output() +
             "if (layout2d.w > 0) {\n"
             "    // the glow on the sprite's bright fire only: its smoke and dark edges stay as drawn (brightened past\n"

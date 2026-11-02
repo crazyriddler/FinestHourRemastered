@@ -561,11 +561,11 @@ float2 trailstep(O i) : SV_Target {
         if (d > 0) t = float2(max(t.r, d), a.z);
         else if (t.r <= 0 && d < t.r) t = float2(d, a.z);
     }
-    // a tank's tread on the snow (q1.x on): pressed in its width, its cleats deeper, at its lowest run's height
+    // a tank's tread on the snow (q1.x on): pressed in its width, its cleats much deeper, at its lowest run's height
     if (q1.x > 0) {
         float2 tr = tread.Load(int3(p, 0));
         if (tr.r > -1e8) {
-            float d = 1.4 + 1.0 * tr.g;  // (deeper than a boot's: a tank's weight)
+            float d = 1.4 + 2.0 * tr.g;  // (deeper than a boot's: a tank's weight; the cleats marked)
             if (d >= t.r) t = float2(d, -tr.r);
         }
     }
@@ -578,14 +578,19 @@ SamplerState tlin : register(s0);
 float2 trailblur(O i) : SV_Target {
     float2 px = 1.0 / q0.zz;
     float2 uv = (floor(i.pos.xy) + 0.5) * px;
-    float r = 0, g = 0, gw = 0;
+    float r = 0, g = 0, gw = 0, rmin = 1e9;
     [unroll] for (int y = -1; y <= 1; y++)
         [unroll] for (int x = -1; x <= 1; x++) {
             float w = (x == 0 ? 0.5 : 0.25) * (y == 0 ? 0.5 : 0.25);
             float2 t = trail.SampleLevel(tlin, uv + float2(x, y) * 1.5 * px, 0);
             r += t.r * w;
+            rmin = min(rmin, t.r);
             if (t.r != 0) g += t.g * w, gw += w;
         }
+    // inside a print (all about it pressed in, the pins' holes too) as it was pressed: a tread's links, 17.5 cm apart, softened
+    // away with the edges
+    float2 c = trail.SampleLevel(tlin, uv, 0);
+    if (rmin > 0.7) return c;
     return float2(r, gw > 0 ? g / gw : 0);
 }
 )";
@@ -1589,8 +1594,16 @@ float4 CompositeColor(O i, out float3 pre) {
     // aiming: what lies well behind the point aimed at blurs (the weapon in hand and the near stay sharp)
     // the weapon in hand while aiming: out of focus (the eye on the distance), its sights in the middle less so
     // (p[4].w 2 on: a cutscene's, Cinematic Depth of Field: only what lies well behind the middle, softer, no edges)
-    const bool cine = p[4].w >= 1.5;
-    const float dofa = cine ? p[4].w - 2 : p[4].w;
+    // (p[4].w 4 on: Distance Depth of Field, the far distance a little out of focus: from a sixth of the far plane on,
+    // under half its blur past 60% of it; the world alone, not the sky nor the weapon in hand)
+    const bool fardof = p[4].w >= 3.5;
+    const float pw = fardof ? p[4].w - 4 : p[4].w;
+    if (fardof && shadowm.Load(int3(i.pos.xy, 0)).r >= 1) {
+        float d = occ.SampleLevel(pnt, uv, 0);
+        if (d < 0.9999) c = lerp(c, b2.SampleLevel(lin, uv, 0).rgb, smoothstep(0.18, 0.6, ViewZ(d) / p[0].w) * 0.45);
+    }
+    const bool cine = pw >= 1.5;
+    const float dofa = cine ? pw - 2 : pw;
     if (dofa > 0 && !cine && shadowm.Load(int3(i.pos.xy, 0)).r < 1) {
         float2 e = (i.uv - float2(0.5, 0.5)) * float2(p[2].x / p[2].y, 1);
         float coc = smoothstep(0.04, 0.22, length(e)) * 0.85 * dofa;

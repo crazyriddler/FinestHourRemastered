@@ -89,6 +89,7 @@ bool* Effect(const std::string& name) {
         {"sun_shafts", &app::Settings::sun_shafts},
         {"aim_dof", &app::Settings::aim_dof},
         {"cinematic_dof", &app::Settings::cinematic_dof},
+        {"distance_dof", &app::Settings::distance_dof},
         {"explosion_flash", &app::Settings::explosion_flash},
         {"flash_shadows", &app::Settings::flash_shadows},
         {"auto_exposure", &app::Settings::auto_exposure},

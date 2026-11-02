@@ -2,18 +2,26 @@
 # update release's update.json). Only this update's changes: written anew for each update. One section a language
 # ([en] needed; the others fall back to it), its lines as the game shows them. UTF-8.
 [en]
-- Level 5: the prison wall's ends and the faces under its ledges no longer have their bricks drawn out into streaks.
+- Level 1: the near water fades into the far water, no straight line between them.
+- Level 1: the harbour chimney rises in the smoke of the fire under it, a column drifting up into the sky.
 [de]
-- Level 5: die Enden der Gefängnismauer und die Flächen unter ihren Simsen haben keine zu Streifen gezogenen Ziegel mehr.
+- Level 1: das nahe Wasser geht in das ferne über, keine gerade Linie mehr dazwischen.
+- Level 1: der Hafenschornstein steigt im Rauch des Feuers unter ihm auf, eine Säule, die in den Himmel zieht.
 [fr]
-- Niveau 5 : les extrémités du mur de la prison et les faces sous ses corniches n'ont plus leurs briques étirées en traînées.
+- Niveau 1 : l'eau proche se fond dans l'eau lointaine, plus de ligne droite entre elles.
+- Niveau 1 : la cheminée du port s'élève dans la fumée du feu à sa base, une colonne qui monte dans le ciel.
 [it]
-- Livello 5: le estremità del muro della prigione e le facce sotto i cornicioni non hanno più i mattoni stirati in strisce.
+- Livello 1: l'acqua vicina sfuma in quella lontana, nessuna linea dritta tra loro.
+- Livello 1: il camino del porto si alza nel fumo del fuoco alla sua base, una colonna che sale nel cielo.
 [es]
-- Nivel 5: los extremos del muro de la prisión y las caras bajo sus cornisas ya no tienen los ladrillos estirados en rayas.
+- Nivel 1: el agua cercana se funde con la lejana, sin línea recta entre ellas.
+- Nivel 1: la chimenea del puerto se eleva entre el humo del fuego de su base, una columna que sube al cielo.
 [pt]
-- Nível 5: as pontas do muro da prisão e as faces sob as cornijas já não têm os tijolos esticados em riscas.
+- Nível 1: a água próxima funde-se com a distante, sem linha reta entre elas.
+- Nível 1: a chaminé do porto ergue-se no fumo do fogo na sua base, uma coluna que sobe ao céu.
 [ru]
-- Уровень 5: у торцов тюремной стены и граней под её карнизами кирпичи больше не растянуты в полосы.
+- Уровень 1: ближняя вода плавно переходит в дальнюю, без прямой линии между ними.
+- Уровень 1: портовая труба поднимается в дыму от огня у её основания — столб дыма уходит в небо.
 [pl]
-- Poziom 5: końce muru więzienia i ściany pod jego gzymsami nie mają już cegieł rozciągniętych w smugi.
+- Poziom 1: bliska woda przechodzi płynnie w daleką, bez prostej linii między nimi.
+- Poziom 1: komin w porcie wznosi się w dymie ognia u jego podstawy, słup dymu unosi się w niebo.

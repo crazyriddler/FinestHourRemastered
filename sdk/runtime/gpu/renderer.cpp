@@ -956,6 +956,8 @@ private:
     bool draw_character_ = false;  // the draw's program is lit per pixel: a character
     bool draw_planar_ = false;     // a piece hide.txt marks "planar": its texture laid flat where drawn out (UploadConstants)
     float draw_tile_ = 0;          // ... "tile<n>": its textures repeated n times as often (0 none)
+    float draw_fade_ = 0;          // ... "fade<w>": the outer w of its extent fading out (0 none)
+    float draw_fade_box_[4] = {};  // its centre (x, z) and half extents in its own space
     // Shadows (shadows.h). The frame's casters: the 3D drawn to the screen with a depth write before the occlusion,
     // drawn again from the light, once a cascade (instances), into the atlas; their uploads stay in the frame's ring
     struct Caster {
@@ -1082,6 +1084,7 @@ private:
     uint32_t motes_w_ = 0, motes_h_ = 0;
     rhi::View MotesRtv() { return Cpu(rhi::Heap::Rtv, kRtvCount + kFrames + kPostRtvs + kSceneRtvs + 17); }
     bool DrawMotes(rhi::GpuVa cb, uint32_t slot, uint32_t w, uint32_t h);
+    void DrawSmoke(Target& rt, rhi::Resource* depth, const float p[16]);
     Ref<rhi::Resource> wave_state_[2], wave_water_, wave_cover_;
     D3D12_RESOURCE_STATES wave_state_st_[2] = {}, wave_water_st_ = {}, wave_cover_st_ = {};
     int wave_cur_ = 0;
@@ -4334,6 +4337,10 @@ void Renderer::UploadConstants(const State& s, const DrawShaders& sh, const PsoK
         // a piece hide.txt marks "planar": the world's place from view space, the shader laying the texture flat by it
         // on the faces it is drawn out over (a wall's top mapped sideways: streaks)
         if (draw_tile_ > 0) c.wpos[3][1] = draw_tile_;
+        if (draw_fade_ > 0) {
+            for (int a = 0; a < 4; a++) c.fadebox[0][a] = draw_fade_box_[a];
+            c.fadebox[1][0] = draw_fade_;
+        }
         if (draw_planar_ && cam_ok_) {
             if (wave_inv_frame_ != frame_ && shadow::Invert(cam_view_, wave_inv_)) wave_inv_frame_ = frame_;
             if (wave_inv_frame_ == frame_) {
@@ -5021,6 +5028,7 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
     int piece_shift = 0;
     draw_planar_ = false;
     draw_tile_ = 0;
+    draw_fade_ = 0;
     // pieces left undrawn (the pack's hide.txt, "<texture> <level> <count> <print>": the piece's bounds in its own space,
     // its positions decoded, to 4 units, hashed: the one piece; a print of 0 any of that count, for tests): fixes of one
     // place alone, a layer of the ground drawn over the one that should cover it (level 15's mud under the tyre tracks,
@@ -5078,7 +5086,8 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
                 char act[16] = {};
                 if (!line.empty() && line[0] != '#' && std::sscanf(line.c_str(), "%llx %d %u %llx %15s", &t, &lv, &c, &pr, act) >= 4)
                     out.push_back({t, lv, c, pr, std::string(act) == "back" ? 1 : std::string(act) == "front" ? -1 : std::string(act) == "planar" ? 2 :
-                                   std::strncmp(act, "tile", 4) == 0 ? 3 : 0, std::strncmp(act, "tile", 4) == 0 ? float(std::atof(act + 4)) : 0.0f});
+                                   std::strncmp(act, "tile", 4) == 0 ? 3 : std::strncmp(act, "fade", 4) == 0 ? 4 : 0,
+                                   std::strncmp(act, "tile", 4) == 0 || std::strncmp(act, "fade", 4) == 0 ? float(std::atof(act + 4)) : 0.0f});
             }
             if (!out.empty()) LOGR("hide: %zu pieces", out.size());
             hides = std::move(out);
@@ -5091,10 +5100,23 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
         };
         for (const Hide& h : hides) {
             // (a count of 0: any piece of that texture in the level)
-            if (h.level == g_level.load() && (!h.count || h.count == count) && has(h.tex) && (!h.print || h.print == piece_print())) {
+            // (a texture of 0: any, the piece told by its count and print alone: an animated texture's every frame)
+            if (h.level == g_level.load() && (!h.count || h.count == count) && (!h.tex ? h.print != 0 : has(h.tex)) &&
+                (!h.print || h.print == piece_print())) {
                 if (!h.shift) return;
                 if (h.shift == 2) draw_planar_ = true;  // ("planar": its faces the texture is drawn out over laid flat)
                 else if (h.shift == 3) draw_tile_ = h.tile;
+                // ("fade<w>": its outer part, the last w of its own extent each way, fading out over what is behind:
+                // the edge of a patch, level 1's near water over the far)
+                else if (h.shift == 4) {
+                    if (!h.print) piece_print();
+                    draw_fade_ = h.tile;
+                    for (int a = 0; a < 2; a++) {
+                        const int ax = a == 0 ? 0 : 2;
+                        draw_fade_box_[a] = (bounds[ax] + bounds[3 + ax]) * 0.5f;
+                        draw_fade_box_[2 + a] = std::max((bounds[3 + ax] - bounds[ax]) * 0.5f, 1.0f);
+                    }
+                }
                 else piece_shift = h.shift;
             }
         }
@@ -5107,6 +5129,21 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
             const uint64_t pr = piece_print();
             if (told.insert(pr ^ count ^ (uint64_t(g_level.load()) << 56)).second)
                 LOGR("hide: tex %016llx level %d count %u print %016llx from %.0f %.0f %.0f to %.0f %.0f %.0f", (unsigned long long)counted,
+                     g_level.load(), count, (unsigned long long)pr, bounds[0], bounds[1], bounds[2], bounds[3], bounds[4], bounds[5]);
+        }
+        // (tests, XBE_PIECES_NEAR="x y z r": every piece, any texture, whose bounds come within r of that place, once)
+        static const std::array<float, 4> pieces_near = [] {
+            std::array<float, 4> p{0, 0, 0, -1};
+            if (const char* e = std::getenv("XBE_PIECES_NEAR")) std::sscanf(e, "%f %f %f %f", &p[0], &p[1], &p[2], &p[3]);
+            return p;
+        }();
+        if (pieces_near[3] > 0 && stages.id[0]) {
+            static std::unordered_set<uint64_t> told_near;
+            const uint64_t pr = piece_print();
+            float d = 0;
+            for (int k3 = 0; k3 < 3; k3++) d += std::pow(std::max({bounds[k3] - pieces_near[k3], 0.0f, pieces_near[k3] - bounds[3 + k3]}), 2.0f);
+            if (pr && d <= pieces_near[3] * pieces_near[3] && told_near.insert(pr ^ stages.id[0] ^ count).second)
+                LOGR("near: tex %016llx level %d count %u print %016llx from %.0f %.0f %.0f to %.0f %.0f %.0f", (unsigned long long)stages.id[0],
                      g_level.load(), count, (unsigned long long)pr, bounds[0], bounds[1], bounds[2], bounds[3], bounds[4], bounds[5]);
         }
     }
@@ -5349,6 +5386,11 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
     // a piece hide.txt sets behind or in front ("back", "front"): two surfaces laid one on the other fought as the view
     // moved; one wins where they meet
     if (piece_shift) k.zbias += piece_shift * 3000, k.zslope += float(piece_shift);
+    // a piece hide.txt fades at its edge ("fade<w>"): blended over what is behind, by the alpha the shader gives it
+    if (draw_fade_ > 0) {
+        constexpr uint32_t kFadeSrc = 0x302, kFadeDst = 0x303, kFadeAdd = 0x8006;  // source alpha, its inverse, add
+        k.blend = true, k.src = kFadeSrc, k.dst = kFadeDst, k.op = kFadeAdd;
+    }
     // the game's shading laid over the world (a mesh of its own, no texture, its colour's alpha the shade: level 5's
     // metal beams): drawn after the surface it shades, its points the same but not to the bit, it lost the depth test
     // to the surface every other half degree the view turned, a flicker; pulled a hair towards the eye it wins as
@@ -9765,6 +9807,68 @@ void Renderer::SceneOcclusion() {
     Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 }
 
+// Columns of smoke the game has none of (the pack's smoke.txt, "<level> <x> <y> <z> <radius> <height> <spread>
+// <density>"): marched through on the screen up to the world's depth (kSmokeHlsl), premultiplied over the scene,
+// lit by a fire's glow at the foot. Level 1's harbour chimney: its back, never modelled, seen from the boat and the
+// quay, hidden in the smoke of the fire under it. Drawn after the sky (SkyPass), its depth readable then.
+void Renderer::DrawSmoke(Target& rt, rhi::Resource* depth, const float p[16]) {
+    struct Column {
+        int level;
+        float x, y, z, r0, h, r1, dens;
+    };
+    static const std::vector<Column> columns = [] {
+        std::vector<Column> out;
+        std::ifstream in(std::filesystem::path(remaster::Dir()) / "smoke.txt");
+        std::string line;
+        while (std::getline(in, line)) {
+            Column c{};
+            if (!line.empty() && line[0] != '#' &&
+                std::sscanf(line.c_str(), "%d %f %f %f %f %f %f %f", &c.level, &c.x, &c.y, &c.z, &c.r0, &c.h, &c.r1, &c.dens) == 8)
+                out.push_back(c);
+        }
+        if (!out.empty()) LOGR("smoke: %zu columns", out.size());
+        return out;
+    }();
+    if (columns.empty() || !cam_ok_ || !app::Get().lit_smoke) return;
+    float inv[16];
+    if (!shadow::Invert(cam_view_, inv)) return;
+    for (const Column& col : columns) {
+        if (col.level != g_level.load()) continue;
+        float q[32] = {inv[0], inv[4], inv[8], inv[12],  inv[1], inv[5], inv[9], inv[13],  inv[2], inv[6], inv[10], inv[14],
+                       p[0], p[1], p[2], p[3],
+                       col.x, col.y, col.z, col.r0,
+                       col.h, col.r1, std::fmod(Seconds(), 3600.0f), col.dens,
+                       0.45f, 0.17f, 0.05f, 140.0f,
+                       0.085f, 0.084f, 0.092f, 0};
+        // (only the pixels its bounds cover on the screen, a scissor: its bounding cylinder's rims projected; none
+        // drawn when it is off the screen, the whole screen when the eye is about it)
+        {
+            const float lean = std::sqrt(0.22f * 0.22f + 0.09f * 0.09f) * col.h, rb = col.r1 * 1.3f + lean;
+            float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+            bool behind = false;
+            for (int k = 0; k < 32 && !behind; k++) {
+                const float ang = float(k % 16) * 0.3927f, wy = col.y + (k < 16 ? 0.0f : col.h);
+                const float wx = col.x + rb * std::cos(ang), wz = col.z + rb * std::sin(ang);
+                const float* M = cam_view_;
+                const float vx = wx * M[0] + wy * M[4] + wz * M[8] + M[12], vy = wx * M[1] + wy * M[5] + wz * M[9] + M[13],
+                            vz = wx * M[2] + wy * M[6] + wz * M[10] + M[14];
+                if (vz < p[2]) { behind = true; break; }
+                const float sx = (vx / (vz * p[0]) * 0.5f + 0.5f) * float(rt.w), sy = (0.5f - vy / (vz * p[1]) * 0.5f) * float(rt.h);
+                x0 = std::min(x0, sx), x1 = std::max(x1, sx), y0 = std::min(y0, sy), y1 = std::max(y1, sy);
+            }
+            if (!behind) {
+                if (x1 < 0 || y1 < 0 || x0 > float(rt.w) || y0 > float(rt.h)) continue;
+                pass_rect_ = {LONG(std::max(0.0f, x0 - 2)), LONG(std::max(0.0f, y0 - 2)), LONG(std::min(float(rt.w), x1 + 2)),
+                              LONG(std::min(float(rt.h), y1 + 2))};
+            }
+        }
+        rhi::Resource* srcs[3] = {depth, nullptr, nullptr};
+        DXGI_FORMAT fmts[3] = {DXGI_FORMAT_R24_UNORM_X8_TYPELESS, kBgra, kBgra};
+        pass_floats_ = 32;
+        Pass(kSmokeHlsl, "smoke", rt.fmt, Cpu(rhi::Heap::Rtv, rt.view), rt.w, rt.h, srcs, fmts, q, -2);
+    }
+}
+
 // Bloom and the highlights' roll off on the 3D, before the 2D is drawn over it
 void Renderer::ScenePost() {
     scene_done_ = true;
@@ -10104,6 +10208,8 @@ void Renderer::SkyPass(Target& rt, const float p[16]) {
     cl_->SetTargets(1, &rh, nullptr);
     SetFullViewport(rt.w, rt.h);
     DrawFullScreen(pso, cb.gpu, slot);
+    // the smoke the game has none of, after the sky (its clouds and level 1's oil smoke were laid over it, behind)
+    DrawSmoke(rt, depth, p);
     Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
     bound_rt_ = bound_ds_ = nullptr;
 }

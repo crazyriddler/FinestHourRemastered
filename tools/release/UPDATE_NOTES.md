@@ -320,6 +320,9 @@ The version installed is in `version.txt` beside the game. Unattended:
   wall no longer flickers between two looks as you move.
 - Level 5 (the tractor factory): the prison wall's ends and the faces under its ledges, whose bricks were drawn out
   into streaks, show their stones.
+- Level 1 (the crossing of the Volga): the near water no longer ends in a straight line over the far water, it fades
+  into it; the harbour chimney, never modelled at its back (seen from the boat and the quay), now rises in the smoke
+  of the fire under it, a column drifting up into the sky (Lit Smoke turns it off).
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

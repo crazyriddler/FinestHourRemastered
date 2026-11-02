@@ -92,6 +92,7 @@ const char* kCommonTail = R"(    float4 spread[4];
     row_major float4x4 sunnow;
     float4 layout2y;  // 2D placed by the game: y * layout2y.x + layout2y.y, console pixels (layout2d.xy for x)
     float4 wpos[4];  // the world's x, y, z from view space; wpos[3].x 1: a "planar" piece (hide.txt)
+    float4 fadebox[2];  // a "fade<w>" piece (hide.txt): its centre x, z and half extents in its own space; w
 };
 )";
 
@@ -2394,6 +2395,12 @@ std::string PixelHlsl(const PixelKey& k) {
     // the light eases off (a face turned to the lamp, the sheet's top bend and its foot, hit the old cap at 0.7 and
     // showed as flat white patches, its streaks gone)
     body += "if (flow.x > 0) { float wl = dot(outc.rgb, 0.333), fl = wl * flow.z; fl = fl < 0.3 ? fl : 0.3 + 0.18 * (1 - exp(-(fl - 0.3) / 0.18)); outc.rgb = float3(0.96, 1.0, 0.94) * fl + smoothstep(0.05, 0.12, wl) * float3(0.02, 0.022, 0.017); outc.a = saturate(outc.a * flow.w); }\n";
+    // a "fade<w>" piece (hide.txt, fadebox): opaque inside, its outer w of each half extent fading out over what is
+    // behind (its own space: a program's position)
+    body += "if (fadebox[1].x > 0 && i.pv.w == 2) {\n"
+            "    float2 fd2 = abs(i.pv.xz - fadebox[0].xy) / fadebox[0].zw;\n"
+            "    outc.a = 1 - smoothstep(1 - fadebox[1].x, 1, max(fd2.x, fd2.y));\n"
+            "}\n";
     body += "alphatest(outc.a);\n" + Hooks().Output() +
             "if (layout2d.w > 0) {\n"
             "    // the glow on the sprite's bright fire only: its smoke and dark edges stay as drawn (brightened past\n"

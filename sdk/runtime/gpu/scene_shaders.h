@@ -292,6 +292,103 @@ float4 bright(O i) : SV_Target {
 // dry texels hold nothing, waves end at the shores.
 // q0: the move in texels, the speed (c dt / dx squared), the damping; q1: the push's gain, the size in texels, the
 // most a step pushes (cm), the cover of something standing 10 cm out of the water
+// A column of smoke rising from a place in the world (the pack's smoke.txt, d3d12.cpp DrawSmoke): marched through
+// along each pixel's ray up to the world's depth, premultiplied over the scene. q[0..2] the view's rows to the world
+// (w the eye), q[3] view window xy, near, far, q[4] the column's foot xyz and radius there, q[5] its height, the
+// radius it spreads to, seconds, density; q[6] the fire's glow at its foot (rgb, reach), q[7] the light about (rgb)
+inline constexpr char kSmokeHlsl[] = R"(
+cbuffer P : register(b1) { float4 q[8]; };
+Texture2D<float> depth : register(t0);
+SamplerState lin : register(s0);
+SamplerState pnt : register(s1);
+struct O { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
+O vs(uint id : SV_VertexID) {
+    O o;
+    float2 t = float2((id << 1) & 2, id & 2);
+    o.pos = float4(t * float2(2, -2) + float2(-1, 1), 0, 1);
+    o.uv = t;
+    return o;
+}
+float Hs(float3 c) { return frac(sin(dot(c, float3(12.9898, 78.233, 37.719))) * 43758.5453); }
+float N3(float3 x) {
+    float3 i = floor(x), f = frac(x);
+    f = f * f * (3 - 2 * f);
+    return lerp(lerp(lerp(Hs(i), Hs(i + float3(1, 0, 0)), f.x), lerp(Hs(i + float3(0, 1, 0)), Hs(i + float3(1, 1, 0)), f.x), f.y),
+                lerp(lerp(Hs(i + float3(0, 0, 1)), Hs(i + float3(1, 0, 1)), f.x), lerp(Hs(i + float3(0, 1, 1)), Hs(i + 1), f.x), f.y), f.z);
+}
+float F3(float3 x) { return 0.55 * N3(x) + 0.3 * N3(x * 2.1 + 3.7) + 0.15 * N3(x * 4.3 + 8.1); }
+float4 smoke(O i) : SV_Target {
+    float d = depth.SampleLevel(pnt, i.uv, 0);
+    float n = q[3].z, f = q[3].w;
+    float z = n * f / max(f - d * (f - n), 1e-6);
+    float3 v = float3((i.uv.x * 2 - 1) * q[3].x, (1 - i.uv.y * 2) * q[3].y, 1);
+    float tmax = d >= 0.99999 ? 1e9 : z;  // (along v, its z 1: the distance in view z)
+    float3 eye = float3(q[0].w, q[1].w, q[2].w);
+    float3 dir = float3(dot(v, q[0].xyz), dot(v, q[1].xyz), dot(v, q[2].xyz));  // per unit of view z
+    // the plume's bounds: a cylinder about its foot wide enough for its widest and its lean, from its foot to its top
+    float3 foot = q[4].xyz;
+    float r0 = q[4].w, h = q[5].x, r1 = q[5].y, time = q[5].z, dens = q[5].w;
+    const float2 wind = float2(0.22, 0.09);  // (the lean a unit of rise: the wind carrying it off as it climbs)
+    float rb = r1 * 1.3 + length(wind) * h;
+    float2 o = eye.xz - foot.xz, dd = dir.xz;
+    float a = dot(dd, dd), b = dot(o, dd), c = dot(o, o) - rb * rb;
+    float disc = b * b - a * c;
+    if (disc <= 0 || a < 1e-12) return 0;
+    float sq = sqrt(disc);
+    float t0 = max((-b - sq) / a, 0), t1 = min((-b + sq) / a, tmax);
+    if (abs(dir.y) > 1e-9) {
+        float ty0 = (foot.y - eye.y) / dir.y, ty1 = (foot.y + h - eye.y) / dir.y;
+        t0 = max(t0, min(ty0, ty1)); t1 = min(t1, max(ty0, ty1));
+    }
+    if (t1 <= t0) return 0;
+    const int STEPS = 28;
+    float dt = (t1 - t0) / STEPS;
+    float jit = frac(sin(dot(i.pos.xy, float2(12.9898, 78.233))) * 43758.5453);
+    float3 col = 0; float alpha = 0;
+    float seg = dt * length(dir);  // world units a step
+    for (int k = 0; k < STEPS; k++) {
+        float t = t0 + (k + jit) * dt;
+        float3 w = eye + dir * t;
+        float rise = w.y - foot.y;
+        float y = saturate(rise / h);
+        // (it widens as it climbs and the wind takes it, leaning further the higher it is)
+        float r = lerp(r0, r1, pow(y, 0.6));
+        float2 axis = foot.xz + wind * rise * y;
+        float2 rel = w.xz - axis;
+        float rad2 = dot(rel, rel) / (r * r);
+        if (rad2 > 2.2) continue;
+        // (turbulence carried up with the smoke: its eddies grow with it, the noise's field warped by another, no
+        // shape repeating, nothing turning about an axis)
+        // (rising: its height in the noise the integral of 1 / sc, so the eddies are as tall as they are wide at
+        // every height, round; by rise / sc they were drawn out upward the more the higher)
+        float sc = 70 + rise * 0.18;
+        float3 nq = float3(rel.x / sc, log(sc) / 0.18 - time * 1.1, rel.y / sc);
+        // (the warp a single octave each: its fine detail never showed through the second warp)
+        float3 warp = float3(N3(nq * 0.55 + float3(0, time * 0.08, 3.1)), N3(nq * 0.55 + float3(5.2, 1.3, time * 0.06)),
+                             N3(nq * 0.55 + float3(9.7, time * 0.07, 2.4))) - 0.5;
+        // (a finer grain over it, the rolls' texture: as the smoke behind the level, a little less marked)
+        float fine = N3(nq * 5.1 + warp * 0.8 + float3(0, time * 0.5, 0));
+        float body = F3(nq + warp * 1.6);
+        float turb = body * 0.62 + N3(nq * 2.4 + warp) * 0.23 + fine * 0.15;
+        // (thick in the middle, thinning out to its edge as a soft fall, not a wall; and fading away as it rises,
+        // gone well before its top)
+        float core = exp(-rad2 * 2.2);
+        float fade = smoothstep(0, 0.05, y) * (1 - smoothstep(0.25, 1, y)) * lerp(1, 0.45, y);
+        float den = saturate(turb * 1.7 - 0.55 + core * 0.55) * core * fade;
+        float sa = 1 - exp(-den * dens * seg / 100);
+        float3 glow = q[6].rgb * exp(-rise / max(q[6].w, 1));
+        // (lit from above, the night's light on its rolls' tops: lighter where the smoke above is thinner)
+        float above = N3(nq + warp * 1.6 + float3(0, 0.5, 0));
+        float top = saturate(0.55 + (body - above) * 3.0);
+        float3 lit = q[7].rgb * (0.28 + 1.35 * top) * (0.72 + 0.56 * fine) + glow * (0.5 + 0.5 * turb);
+        col += (1 - alpha) * sa * lit;
+        alpha += (1 - alpha) * sa;
+        if (alpha > 0.98) break;
+    }
+    return float4(col, alpha);
+}
+)";
+
 inline constexpr char kWaveHlsl[] = R"(
 cbuffer P : register(b1) { float4 q0; float4 q1; float4 drops[8]; };
 Texture2D<float4> state : register(t0);

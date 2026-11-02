@@ -203,6 +203,7 @@ struct DrawConstants {
     float sunrp[2][16];
     float layout_y[4];   // 2D placed by the game (g_layout_2d): y times layout_y.x plus layout_y.y, console pixels
     float wpos[4][4];    // the world's x, y, z from view space (rows); wpos[3].x 1: a "planar" piece (hide.txt)
+    float fadebox[2][4]; // a "fade<w>" piece (hide.txt): its centre x, z and half extents in its own space; w (0 none)
 };
 
 }  // namespace gpu

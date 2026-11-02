@@ -957,6 +957,7 @@ private:
     bool draw_planar_ = false;     // a piece hide.txt marks "planar": its texture laid flat where drawn out (UploadConstants)
     float draw_tile_ = 0;          // ... "tile<n>": its textures repeated n times as often (0 none)
     float draw_fade_ = 0;          // ... "fade<w>": the outer w of its extent fading out (0 none)
+    const float* draw_move_ = nullptr;  // ... "move": its vertices at x, z given the height y (4 x, z, y, 1; null none)
     float draw_fade_box_[4] = {};  // its centre (x, z) and half extents in its own space
     // Shadows (shadows.h). The frame's casters: the 3D drawn to the screen with a depth write before the occlusion,
     // drawn again from the light, once a cascade (instances), into the atlas; their uploads stay in the frame's ring
@@ -4341,6 +4342,7 @@ void Renderer::UploadConstants(const State& s, const DrawShaders& sh, const PsoK
             for (int a = 0; a < 4; a++) c.fadebox[0][a] = draw_fade_box_[a];
             c.fadebox[1][0] = draw_fade_;
         }
+        if (draw_move_) std::memcpy(c.vmove, draw_move_, sizeof(c.vmove));
         if (draw_planar_ && cam_ok_) {
             if (wave_inv_frame_ != frame_ && shadow::Invert(cam_view_, wave_inv_)) wave_inv_frame_ = frame_;
             if (wave_inv_frame_ == frame_) {
@@ -5029,6 +5031,7 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
     draw_planar_ = false;
     draw_tile_ = 0;
     draw_fade_ = 0;
+    draw_move_ = nullptr;
     // pieces left undrawn (the pack's hide.txt, "<texture> <level> <count> <print>": the piece's bounds in its own space,
     // its positions decoded, to 4 units, hashed: the one piece; a print of 0 any of that count, for tests): fixes of one
     // place alone, a layer of the ground drawn over the one that should cover it (level 15's mud under the tyre tracks,
@@ -5043,6 +5046,7 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
             uint64_t print;
             int shift;  // "back" or "front" after it: drawn a little behind or in front (two surfaces laid one on the other, fighting)
             float tile;  // "tile<n>" (shift 3): its textures repeated n times as often (a small texture drawn out over a long face)
+            std::array<float, 16> move;  // "move x z y ..." (shift 5): up to 4 of its vertices, at x z, given the height y
         };
         float bounds[6] = {};
         auto piece_print = [&]() -> uint64_t {
@@ -5084,10 +5088,16 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
                 unsigned c = 0;
                 unsigned long long pr = 0;
                 char act[16] = {};
-                if (!line.empty() && line[0] != '#' && std::sscanf(line.c_str(), "%llx %d %u %llx %15s", &t, &lv, &c, &pr, act) >= 4)
-                    out.push_back({t, lv, c, pr, std::string(act) == "back" ? 1 : std::string(act) == "front" ? -1 : std::string(act) == "planar" ? 2 :
-                                   std::strncmp(act, "tile", 4) == 0 ? 3 : std::strncmp(act, "fade", 4) == 0 ? 4 : 0,
-                                   std::strncmp(act, "tile", 4) == 0 || std::strncmp(act, "fade", 4) == 0 ? float(std::atof(act + 4)) : 0.0f});
+                int used = 0;
+                if (line.empty() || line[0] == '#' || std::sscanf(line.c_str(), "%llx %d %u %llx %15s%n", &t, &lv, &c, &pr, act, &used) < 4) continue;
+                const std::string a(act);
+                out.push_back({t, lv, c, pr, a == "back" ? 1 : a == "front" ? -1 : a == "planar" ? 2 : a.starts_with("tile") ? 3 : a.starts_with("fade") ? 4 : a == "move" ? 5 : 0,
+                               a.starts_with("tile") || a.starts_with("fade") ? float(std::atof(act + 4)) : 0.0f, {}});
+                if (a == "move") {
+                    std::istringstream rest(line.substr(size_t(used)));
+                    for (int k = 0; k < 4 && rest >> out.back().move[size_t(k) * 4] >> out.back().move[size_t(k) * 4 + 1] >> out.back().move[size_t(k) * 4 + 2]; k++)
+                        out.back().move[size_t(k) * 4 + 3] = 1;
+                }
             }
             if (!out.empty()) LOGR("hide: %zu pieces", out.size());
             hides = std::move(out);
@@ -5106,6 +5116,9 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
                 if (!h.shift) return;
                 if (h.shift == 2) draw_planar_ = true;  // ("planar": its faces the texture is drawn out over laid flat)
                 else if (h.shift == 3) draw_tile_ = h.tile;
+                // ("move x z y ...": those of its vertices given the height y, a mound's corner that stood up off the road
+                // laid on it, no lip with a shadow under it; up to 4)
+                else if (h.shift == 5) draw_move_ = h.move.data();
                 // ("fade<w>": its outer part, the last w of its own extent each way, fading out over what is behind:
                 // the edge of a patch, level 1's near water over the far)
                 else if (h.shift == 4) {
@@ -5142,9 +5155,32 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
             const uint64_t pr = piece_print();
             float d = 0;
             for (int k3 = 0; k3 < 3; k3++) d += std::pow(std::max({bounds[k3] - pieces_near[k3], 0.0f, pieces_near[k3] - bounds[3 + k3]}), 2.0f);
-            if (pr && d <= pieces_near[3] * pieces_near[3] && told_near.insert(pr ^ stages.id[0] ^ count).second)
+            if (pr && d <= pieces_near[3] * pieces_near[3] && told_near.insert(pr ^ stages.id[0] ^ count).second) {
                 LOGR("near: tex %016llx level %d count %u print %016llx from %.0f %.0f %.0f to %.0f %.0f %.0f", (unsigned long long)stages.id[0],
                      g_level.load(), count, (unsigned long long)pr, bounds[0], bounds[1], bounds[2], bounds[3], bounds[4], bounds[5]);
+                // (XBE_PIECES_OBJ as well: its triangles to logs/near/<texture>_<count>_<print>.obj)
+                static const bool obj = std::getenv("XBE_PIECES_OBJ") != nullptr;
+                static Assembled fo;
+                if (obj && AssembleFloats(s, prim, start, count, indices, fo) && (fo.regs & 1)) {
+                    const size_t n = size_t(std::popcount(unsigned(fo.regs))) * 4;
+                    std::filesystem::create_directories(app::ExeDir() / "logs" / "near");
+                    char name[96];
+                    std::snprintf(name, sizeof(name), "%016llx_%u_%016llx.obj", (unsigned long long)stages.id[0], count, (unsigned long long)pr);
+                    std::ofstream f(app::ExeDir() / "logs" / "near" / name);
+                    for (uint32_t v = 0; v < fo.vertex_count; v++)
+                        f << "v " << fo.vertices[v * n] << " " << fo.vertices[v * n + 1] << " " << fo.vertices[v * n + 2] << "\n";
+                    std::vector<uint32_t> ix = fo.indices;
+                    if (ix.empty())
+                        for (uint32_t v = 0; v < fo.vertex_count; v++) ix.push_back(v);
+                    f << "# topology " << int(fo.topology) << " strip " << int(fo.strip) << "\n";
+                    if (fo.strip) {
+                        for (size_t k = 2; k < ix.size(); k++)
+                            if (ix[k - 2] != ix[k - 1] && ix[k - 1] != ix[k] && ix[k - 2] != ix[k])
+                                f << "f " << ix[k - 2] + 1 << " " << ix[k - 1] + 1 << " " << ix[k] + 1 << "\n";
+                    } else
+                        for (size_t k = 0; k + 2 < ix.size(); k += 3) f << "f " << ix[k] + 1 << " " << ix[k + 1] + 1 << " " << ix[k + 2] + 1 << "\n";
+                }
+            }
         }
     }
     // the HUD drawn by the game (before the settings hide it): play, not a cutscene

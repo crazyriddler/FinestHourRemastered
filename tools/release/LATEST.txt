@@ -2,26 +2,18 @@
 # update release's update.json). Only this update's changes: written anew for each update. One section a language
 # ([en] needed; the others fall back to it), its lines as the game shows them. UTF-8.
 [en]
-- Level 1: the near water fades into the far water, no straight line between them.
-- Level 1: the harbour chimney rises in the smoke of the fire under it, a column drifting up into the sky.
+- Level 36: the dirt heaped over the road into Remagen meets the cobbles flush, no raised lip with a shadow under it.
 [de]
-- Level 1: das nahe Wasser geht in das ferne über, keine gerade Linie mehr dazwischen.
-- Level 1: der Hafenschornstein steigt im Rauch des Feuers unter ihm auf, eine Säule, die in den Himmel zieht.
+- Level 36: die Erde auf der Straße nach Remagen schließt bündig mit dem Pflaster ab, ohne erhöhte Kante mit Schatten darunter.
 [fr]
-- Niveau 1 : l'eau proche se fond dans l'eau lointaine, plus de ligne droite entre elles.
-- Niveau 1 : la cheminée du port s'élève dans la fumée du feu à sa base, une colonne qui monte dans le ciel.
+- Niveau 36 : la terre amassée sur la route de Remagen rejoint les pavés à niveau, sans rebord surélevé ni ombre dessous.
 [it]
-- Livello 1: l'acqua vicina sfuma in quella lontana, nessuna linea dritta tra loro.
-- Livello 1: il camino del porto si alza nel fumo del fuoco alla sua base, una colonna che sale nel cielo.
+- Livello 36: la terra ammucchiata sulla strada per Remagen si unisce a filo al selciato, senza bordo rialzato né ombra sotto.
 [es]
-- Nivel 1: el agua cercana se funde con la lejana, sin línea recta entre ellas.
-- Nivel 1: la chimenea del puerto se eleva entre el humo del fuego de su base, una columna que sube al cielo.
+- Nivel 36: la tierra amontonada sobre la carretera a Remagen queda a ras de los adoquines, sin borde levantado ni sombra debajo.
 [pt]
-- Nível 1: a água próxima funde-se com a distante, sem linha reta entre elas.
-- Nível 1: a chaminé do porto ergue-se no fumo do fogo na sua base, uma coluna que sobe ao céu.
+- Nível 36: a terra amontoada na estrada para Remagen fica rente às pedras da calçada, sem rebordo levantado nem sombra por baixo.
 [ru]
-- Уровень 1: ближняя вода плавно переходит в дальнюю, без прямой линии между ними.
-- Уровень 1: портовая труба поднимается в дыму от огня у её основания — столб дыма уходит в небо.
+- Уровень 36: земля, насыпанная на дорогу в Ремаген, лежит вровень с брусчаткой, без приподнятого края и тени под ним.
 [pl]
-- Poziom 1: bliska woda przechodzi płynnie w daleką, bez prostej linii między nimi.
-- Poziom 1: komin w porcie wznosi się w dymie ognia u jego podstawy, słup dymu unosi się w niebo.
+- Poziom 36: ziemia usypana na drodze do Remagen leży równo z brukiem, bez uniesionej krawędzi z cieniem pod spodem.

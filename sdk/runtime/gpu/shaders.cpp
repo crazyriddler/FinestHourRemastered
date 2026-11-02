@@ -93,6 +93,7 @@ const char* kCommonTail = R"(    float4 spread[4];
     float4 layout2y;  // 2D placed by the game: y * layout2y.x + layout2y.y, console pixels (layout2d.xy for x)
     float4 wpos[4];  // the world's x, y, z from view space; wpos[3].x 1: a "planar" piece (hide.txt)
     float4 fadebox[2];  // a "fade<w>" piece (hide.txt): its centre x, z and half extents in its own space; w
+    float4 vmove[4];  // a "move" piece (hide.txt): its vertices at x, z given the height y; w 1
 };
 )";
 
@@ -1777,6 +1778,10 @@ std::string FixedVertexHlsl(uint16_t regs, bool pretransformed, uint64_t decode,
         s += "    oPos = float4(rhw.xy, rhw.z / surf.z, w);\n";
     } else {
         s += "    float4 ip = float4(" + v(0, "float4(0,0,0,1)") + ".xyz, 1);\n";
+        // (a "move" piece, hide.txt: a vertex or few given another height, a mound's corner that stood up off the
+        // road laid on it)
+        s += "    [unroll] for (int mv = 0; mv < 4; mv++)\n"
+             "        if (vmove[mv].w > 0 && all(abs(ip.xz - vmove[mv].xy) < 0.5)) ip.y = vmove[mv].z;\n";
         s += "    float4 cp = mul(ip, wvp);\n";
         s += "    float3 vp = mul(ip, wv).xyz;\n";
         s += "    float3 vn = mul(float4(" + v(2, "float4(0,0,0,0)") + ".xyz, 0), wvn).xyz;\n";

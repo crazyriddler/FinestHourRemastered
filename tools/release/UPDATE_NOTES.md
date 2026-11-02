@@ -323,6 +323,8 @@ The version installed is in `version.txt` beside the game. Unattended:
 - Level 1 (the crossing of the Volga): the near water no longer ends in a straight line over the far water, it fades
   into it; the harbour chimney, never modelled at its back (seen from the boat and the quay), now rises in the smoke
   of the fire under it, a column drifting up into the sky (Lit Smoke turns it off).
+- Level 36 (the road into Remagen): the dirt heaped over the road meets the cobbles flush, no longer a raised
+  lip with a shadow under it.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

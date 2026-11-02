@@ -954,6 +954,8 @@ private:
     KeyMap<uint64_t, OverrideTex> overrides_;
     void PumpOverrides();
     bool draw_character_ = false;  // the draw's program is lit per pixel: a character
+    bool draw_planar_ = false;     // a piece hide.txt marks "planar": its texture laid flat where drawn out (UploadConstants)
+    float draw_tile_ = 0;          // ... "tile<n>": its textures repeated n times as often (0 none)
     // Shadows (shadows.h). The frame's casters: the 3D drawn to the screen with a depth write before the occlusion,
     // drawn again from the light, once a cascade (instances), into the atlas; their uploads stay in the frame's ring
     struct Caster {
@@ -4329,6 +4331,17 @@ void Renderer::UploadConstants(const State& s, const DrawShaders& sh, const PsoK
             LOGR("snow: ground draw tex %016llx ok %d bound %d cam %d character %d", (unsigned long long)draw_tex0_, int(trail_ok_),
                  int(trail_bound_), int(cam_ok_), int(draw_character_));
         if (m.snow && !draw_character_) snow_frame_ = frame_;
+        // a piece hide.txt marks "planar": the world's place from view space, the shader laying the texture flat by it
+        // on the faces it is drawn out over (a wall's top mapped sideways: streaks)
+        if (draw_tile_ > 0) c.wpos[3][1] = draw_tile_;
+        if (draw_planar_ && cam_ok_) {
+            if (wave_inv_frame_ != frame_ && shadow::Invert(cam_view_, wave_inv_)) wave_inv_frame_ = frame_;
+            if (wave_inv_frame_ == frame_) {
+                const float* I = wave_inv_;
+                for (int r = 0; r < 3; r++) c.wpos[r][0] = I[r], c.wpos[r][1] = I[4 + r], c.wpos[r][2] = I[8 + r], c.wpos[r][3] = I[12 + r];
+                c.wpos[3][0] = 1;
+            }
+        }
         if (m.snow && set.snow_tracks && trail_ok_ && trail_bound_ && cam_ok_ && !draw_character_) {
             if (wave_inv_frame_ != frame_ && shadow::Invert(cam_view_, wave_inv_)) wave_inv_frame_ = frame_;
             if (wave_inv_frame_ == frame_) {
@@ -5006,6 +5019,8 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
             for (int st = 0; st < 4; st++)
                 if (stages.id[st] && hidden.load() == stages.id[st]) return;
     int piece_shift = 0;
+    draw_planar_ = false;
+    draw_tile_ = 0;
     // pieces left undrawn (the pack's hide.txt, "<texture> <level> <count> <print>": the piece's bounds in its own space,
     // its positions decoded, to 4 units, hashed: the one piece; a print of 0 any of that count, for tests): fixes of one
     // place alone, a layer of the ground drawn over the one that should cover it (level 15's mud under the tyre tracks,
@@ -5019,6 +5034,7 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
             uint32_t count;
             uint64_t print;
             int shift;  // "back" or "front" after it: drawn a little behind or in front (two surfaces laid one on the other, fighting)
+            float tile;  // "tile<n>" (shift 3): its textures repeated n times as often (a small texture drawn out over a long face)
         };
         float bounds[6] = {};
         auto piece_print = [&]() -> uint64_t {
@@ -5061,7 +5077,8 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
                 unsigned long long pr = 0;
                 char act[16] = {};
                 if (!line.empty() && line[0] != '#' && std::sscanf(line.c_str(), "%llx %d %u %llx %15s", &t, &lv, &c, &pr, act) >= 4)
-                    out.push_back({t, lv, c, pr, std::string(act) == "back" ? 1 : std::string(act) == "front" ? -1 : 0});
+                    out.push_back({t, lv, c, pr, std::string(act) == "back" ? 1 : std::string(act) == "front" ? -1 : std::string(act) == "planar" ? 2 :
+                                   std::strncmp(act, "tile", 4) == 0 ? 3 : 0, std::strncmp(act, "tile", 4) == 0 ? float(std::atof(act + 4)) : 0.0f});
             }
             if (!out.empty()) LOGR("hide: %zu pieces", out.size());
             hides = std::move(out);
@@ -5076,7 +5093,9 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
             // (a count of 0: any piece of that texture in the level)
             if (h.level == g_level.load() && (!h.count || h.count == count) && has(h.tex) && (!h.print || h.print == piece_print())) {
                 if (!h.shift) return;
-                piece_shift = h.shift;
+                if (h.shift == 2) draw_planar_ = true;  // ("planar": its faces the texture is drawn out over laid flat)
+                else if (h.shift == 3) draw_tile_ = h.tile;
+                else piece_shift = h.shift;
             }
         }
         static const uint64_t counted = [] {

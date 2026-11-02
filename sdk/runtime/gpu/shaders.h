@@ -202,6 +202,7 @@ struct DrawConstants {
     // space now to the clip space of the frame before, and to this frame's (rows; its pixel moved by the difference)
     float sunrp[2][16];
     float layout_y[4];   // 2D placed by the game (g_layout_2d): y times layout_y.x plus layout_y.y, console pixels
+    float wpos[4][4];    // the world's x, y, z from view space (rows); wpos[3].x 1: a "planar" piece (hide.txt)
 };
 
 }  // namespace gpu

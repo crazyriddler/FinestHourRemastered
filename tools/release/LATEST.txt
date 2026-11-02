@@ -2,34 +2,18 @@
 # update release's update.json). Only this update's changes: written anew for each update. One section a language
 # ([en] needed; the others fall back to it), its lines as the game shows them. UTF-8.
 [en]
-- Detail textures: the world's small textures get detail as fine as the larger ones; a painted wooden window side gets its wood detail.
-- Characters: skin pores on bare arms as fine as on faces.
-- Level 15: the stepped mud by the mortar's sandbags is gone, and a floor no longer flickers as you move.
+- Level 5: the prison wall's ends and the faces under its ledges no longer have their bricks drawn out into streaks.
 [de]
-- Detailtexturen: die kleinen Texturen der Welt bekommen so feine Details wie die größeren; eine bemalte hölzerne Fensterlaibung bekommt ihr Holzdetail.
-- Figuren: Hautporen auf nackten Armen so fein wie im Gesicht.
-- Level 15: der stufige Schlamm an den Sandsäcken des Mörsers ist weg, und ein Boden flackert beim Bewegen nicht mehr.
+- Level 5: die Enden der Gefängnismauer und die Flächen unter ihren Simsen haben keine zu Streifen gezogenen Ziegel mehr.
 [fr]
-- Textures de détail : les petites textures du monde ont un détail aussi fin que les grandes ; un côté de fenêtre en bois peint a son détail de bois.
-- Personnages : les pores de la peau sur les bras nus aussi fins que sur les visages.
-- Niveau 15 : la boue en escalier près des sacs de sable du mortier a disparu, et un sol ne scintille plus quand vous bougez.
+- Niveau 5 : les extrémités du mur de la prison et les faces sous ses corniches n'ont plus leurs briques étirées en traînées.
 [it]
-- Texture di dettaglio: le piccole texture del mondo hanno un dettaglio fine come le più grandi; un lato di finestra in legno dipinto ha il suo dettaglio di legno.
-- Personaggi: i pori della pelle sulle braccia nude fini come sui volti.
-- Livello 15: il fango a gradini vicino ai sacchi del mortaio è sparito, e un pavimento non sfarfalla più mentre ti muovi.
+- Livello 5: le estremità del muro della prigione e le facce sotto i cornicioni non hanno più i mattoni stirati in strisce.
 [es]
-- Texturas de detalle: las texturas pequeñas del mundo tienen un detalle tan fino como las grandes; el lateral de una ventana de madera pintada tiene su detalle de madera.
-- Personajes: los poros de la piel en los brazos desnudos tan finos como en las caras.
-- Nivel 15: el barro escalonado junto a los sacos del mortero ha desaparecido, y un suelo ya no parpadea al moverte.
+- Nivel 5: los extremos del muro de la prisión y las caras bajo sus cornisas ya no tienen los ladrillos estirados en rayas.
 [pt]
-- Texturas de detalhe: as texturas pequenas do mundo têm um detalhe tão fino como as grandes; o lado de uma janela de madeira pintada tem o seu detalhe de madeira.
-- Personagens: os poros da pele nos braços nus tão finos como nos rostos.
-- Nível 15: a lama em degraus junto aos sacos do morteiro desapareceu, e um chão já não pisca quando te moves.
+- Nível 5: as pontas do muro da prisão e as faces sob as cornijas já não têm os tijolos esticados em riscas.
 [ru]
-- Детальные текстуры: у мелких текстур мира детали такие же мелкие, как у крупных; у крашеного деревянного откоса окна появилась фактура дерева.
-- Персонажи: поры кожи на голых руках такие же мелкие, как на лицах.
-- Уровень 15: исчезла ступенчатая грязь у мешков миномёта, и пол больше не мерцает при движении.
+- Уровень 5: у торцов тюремной стены и граней под её карнизами кирпичи больше не растянуты в полосы.
 [pl]
-- Tekstury detali: małe tekstury świata mają detal tak drobny jak duże; malowany drewniany bok okna ma swój detal drewna.
-- Postacie: pory skóry na gołych rękach tak drobne jak na twarzach.
-- Poziom 15: zniknęło schodkowe błoto przy workach z piaskiem moździerza, a podłoga nie migocze już przy ruchu.
+- Poziom 5: końce muru więzienia i ściany pod jego gzymsami nie mają już cegieł rozciągniętych w smugi.

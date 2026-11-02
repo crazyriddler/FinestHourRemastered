@@ -91,6 +91,7 @@ const char* kCommonTail = R"(    float4 spread[4];
     row_major float4x4 sunprev;  // the view space now to the frame before's clip space, and to this frame's (sunvis)
     row_major float4x4 sunnow;
     float4 layout2y;  // 2D placed by the game: y * layout2y.x + layout2y.y, console pixels (layout2d.xy for x)
+    float4 wpos[4];  // the world's x, y, z from view space; wpos[3].x 1: a "planar" piece (hide.txt)
 };
 )";
 
@@ -1943,7 +1944,43 @@ std::string MaterialSetup(int i, const std::string& uv) {
            "    mUv = lerp(cur, prev, saturate(a / (a - b + 1e-5)));\n"
            "    }\n"
            "}\n");
-    s += F("float4 t%d = tex%d.SampleGrad(smp%d, mUv, mU1, mU2);\n", i, i, i);
+    // a "planar" piece (hide.txt, wpos[3].x): on its faces the texture is drawn out over (the game's own mapping
+    // sideways, a wall's top: streaks, or no change at all one way), the texture laid flat by the world's place, as many
+    // texels a unit as it has along its good axis. The mapping's two rates over the surface from its basis (its
+    // gradients taken for every pixel, then chosen: derivatives in a branch some pixels skip are undefined)
+    // ("tile<n>", wpos[3].y: the texture and its maps repeated n times as often)
+    s += "if (wpos[3].y > 0) mUv *= wpos[3].y, mU1 *= wpos[3].y, mU2 *= wpos[3].y;\n";
+    s += "float2 mBu = mUv, mBu1 = mU1, mBu2 = mU2;\n"
+         "if (wpos[3].x > 0) {\n"
+         "    float3 e1 = normalize(mDx + 1e-12), e2 = normalize(cross(mN0, e1) + 1e-12);\n"
+         "    float a11 = dot(mDx, e1), a12 = dot(mDy, e1), a21 = dot(mDx, e2), a22 = dot(mDy, e2);\n"
+         "    float ad = a11 * a22 - a12 * a21;\n"
+         "    float2 r1 = (mU1 * a22 - mU2 * a21) / (abs(ad) > 1e-20 ? ad : 1e-20);\n"   // uv per unit along e1
+         "    float2 r2 = (mU2 * a11 - mU1 * a12) / (abs(ad) > 1e-20 ? ad : 1e-20);\n"   // along e2
+         "    float sa = dot(r1, r1) + dot(r2, r2), sd = r1.x * r2.y - r1.y * r2.x;\n"
+         "    float sq = sqrt(max(sa * sa - 4 * sd * sd, 0));\n"
+         "    float smax = sqrt(max((sa + sq) * 0.5, 0)), smin = sqrt(max((sa - sq) * 0.5, 0));\n"
+         "    float4 vp = float4(mP, 1);\n"
+         "    float3 w = float3(dot(vp, wpos[0]), dot(vp, wpos[1]), dot(vp, wpos[2]));\n"
+         "    float3 wn = abs(cross(ddx(w), ddy(w)));\n"
+         // (its density to a power of two: worked out from the screen's derivatives it wavered as the view moved, the
+         // texture swimming and flickering over the face)
+         "    smax = exp2(round(log2(max(smax, 1e-12))));\n"
+         "    float2 pw = (wn.x > wn.y && wn.x > wn.z ? w.zy : wn.y > wn.z ? w.xz : w.xy) * smax;\n"
+         "    float2 pw1 = ddx(pw), pw2 = ddy(pw);\n"
+         // (the remastered maps read there as well, the cavity, the highlight and the detail: drawn out, they striped the
+         // face still)
+         "    if (smin * 4 < smax) {\n"
+         "        mBu = pw, mBu1 = pw1, mBu2 = pw2, mUv = pw, mU1 = pw1, mU2 = pw2;\n"
+         // (its tangent frame again, by the new mapping: the old one, along the streaks, turned the normal map's relief
+         // and the highlight sideways, a metal's sheen)
+         "        mT = mDyP * mU1.x + mDxP * mU2.x, mB = mDyP * mU1.y + mDxP * mU2.y;\n"
+         "        float ti = rsqrt(max(max(dot(mT, mT), dot(mB, mB)), 1e-30));\n"
+         "        mT *= ti; mB *= ti;\n"
+         "        mFlat = 1;\n"
+         "    }\n"
+         "}\n";
+    s += F("float4 t%d = tex%d.SampleGrad(smp%d, mBu, mBu1, mBu2);\n", i, i, i);
     s += F("float3 mBase = t%d.rgb;\nfloat mAlpha = t%d.a;\n", i, i);
     // (half a level softer, as the relief's normal: the cavity's cracks and the gloss finer than a pixel flickered)
     s += "float4 mMat = mmat.SampleGrad(" + MatSampler(i) + ", mUv, mU1 * 1.5, mU2 * 1.5);\n";

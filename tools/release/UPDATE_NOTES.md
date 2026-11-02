@@ -318,6 +318,8 @@ The version installed is in `version.txt` beside the game. Unattended:
 - Walls and floors lit for a moment by a flash or a blast keep their own detail and relief.
 - Level 15: the mud laid in steps over the tyre tracks by the mortar's sandbags is gone, and the floor by the houses'
   wall no longer flickers between two looks as you move.
+- Level 5 (the tractor factory): the prison wall's ends and the faces under its ledges, whose bricks were drawn out
+  into streaks, show their stones.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

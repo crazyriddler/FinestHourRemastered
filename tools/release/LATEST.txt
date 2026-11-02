@@ -2,34 +2,34 @@
 # update release's update.json). Only this update's changes: written anew for each update. One section a language
 # ([en] needed; the others fall back to it), its lines as the game shows them. UTF-8.
 [en]
-- Shadows: trees, soldiers and buildings just off the screen now cast their shadows into view.
-- Flags: much finer cloth detail; flags and the medkit's red cross no longer get skin pores.
-- First-person arms and weapons: no more stretched or patchy textures on the stocks, bodies and hands; the line on the thumb is gone.
+- Detail textures: the world's small textures get detail as fine as the larger ones; a painted wooden window side gets its wood detail.
+- Characters: skin pores on bare arms as fine as on faces.
+- Level 15: the stepped mud by the mortar's sandbags is gone, and a floor no longer flickers as you move.
 [de]
-- Schatten: Bäume, Soldaten und Gebäude knapp außerhalb des Bildes werfen jetzt ihre Schatten ins Bild.
-- Flaggen: viel feineres Stoffdetail; Flaggen und das rote Kreuz des Verbandskastens haben keine Hautporen mehr.
-- Arme und Waffen in der Ego-Ansicht: keine gestreckten oder fleckigen Texturen mehr an Schäften, Gehäusen und Händen; die Linie am Daumen ist weg.
+- Detailtexturen: die kleinen Texturen der Welt bekommen so feine Details wie die größeren; eine bemalte hölzerne Fensterlaibung bekommt ihr Holzdetail.
+- Figuren: Hautporen auf nackten Armen so fein wie im Gesicht.
+- Level 15: der stufige Schlamm an den Sandsäcken des Mörsers ist weg, und ein Boden flackert beim Bewegen nicht mehr.
 [fr]
-- Ombres : les arbres, les soldats et les bâtiments juste hors de l'écran projettent maintenant leur ombre dans la vue.
-- Drapeaux : détail de tissu bien plus fin ; les drapeaux et la croix rouge de la trousse de soins n'ont plus de pores de peau.
-- Bras et armes à la première personne : plus de textures étirées ou en taches sur les crosses, les corps et les mains ; la ligne sur le pouce a disparu.
+- Textures de détail : les petites textures du monde ont un détail aussi fin que les grandes ; un côté de fenêtre en bois peint a son détail de bois.
+- Personnages : les pores de la peau sur les bras nus aussi fins que sur les visages.
+- Niveau 15 : la boue en escalier près des sacs de sable du mortier a disparu, et un sol ne scintille plus quand vous bougez.
 [it]
-- Ombre: alberi, soldati ed edifici appena fuori dallo schermo ora proiettano la loro ombra nella vista.
-- Bandiere: dettaglio del tessuto molto più fine; le bandiere e la croce rossa del kit medico non hanno più i pori della pelle.
-- Braccia e armi in prima persona: niente più texture stirate o a chiazze su calci, corpi e mani; la linea sul pollice è sparita.
+- Texture di dettaglio: le piccole texture del mondo hanno un dettaglio fine come le più grandi; un lato di finestra in legno dipinto ha il suo dettaglio di legno.
+- Personaggi: i pori della pelle sulle braccia nude fini come sui volti.
+- Livello 15: il fango a gradini vicino ai sacchi del mortaio è sparito, e un pavimento non sfarfalla più mentre ti muovi.
 [es]
-- Sombras: los árboles, los soldados y los edificios justo fuera de la pantalla proyectan ahora su sombra en la vista.
-- Banderas: detalle de tela mucho más fino; las banderas y la cruz roja del botiquín ya no tienen poros de piel.
-- Brazos y armas en primera persona: sin texturas estiradas o a parches en culatas, cuerpos y manos; la línea del pulgar ha desaparecido.
+- Texturas de detalle: las texturas pequeñas del mundo tienen un detalle tan fino como las grandes; el lateral de una ventana de madera pintada tiene su detalle de madera.
+- Personajes: los poros de la piel en los brazos desnudos tan finos como en las caras.
+- Nivel 15: el barro escalonado junto a los sacos del mortero ha desaparecido, y un suelo ya no parpadea al moverte.
 [pt]
-- Sombras: as árvores, os soldados e os edifícios logo fora do ecrã projetam agora a sua sombra na vista.
-- Bandeiras: detalhe do tecido muito mais fino; as bandeiras e a cruz vermelha do kit médico já não têm poros de pele.
-- Braços e armas na primeira pessoa: sem texturas esticadas ou com manchas nas coronhas, corpos e mãos; a linha no polegar desapareceu.
+- Texturas de detalhe: as texturas pequenas do mundo têm um detalhe tão fino como as grandes; o lado de uma janela de madeira pintada tem o seu detalhe de madeira.
+- Personagens: os poros da pele nos braços nus tão finos como nos rostos.
+- Nível 15: a lama em degraus junto aos sacos do morteiro desapareceu, e um chão já não pisca quando te moves.
 [ru]
-- Тени: деревья, солдаты и здания сразу за краем экрана теперь отбрасывают тени в кадр.
-- Флаги: гораздо более мелкая фактура ткани; у флагов и красного креста аптечки больше нет пор кожи.
-- Руки и оружие от первого лица: больше нет растянутых или пятнистых текстур на прикладах, корпусах и руках; линия на большом пальце исчезла.
+- Детальные текстуры: у мелких текстур мира детали такие же мелкие, как у крупных; у крашеного деревянного откоса окна появилась фактура дерева.
+- Персонажи: поры кожи на голых руках такие же мелкие, как на лицах.
+- Уровень 15: исчезла ступенчатая грязь у мешков миномёта, и пол больше не мерцает при движении.
 [pl]
-- Cienie: drzewa, żołnierze i budynki tuż poza ekranem rzucają teraz cienie w kadr.
-- Flagi: znacznie drobniejszy detal tkaniny; flagi i czerwony krzyż apteczki nie mają już porów skóry.
-- Ręce i broń w widoku z pierwszej osoby: koniec z rozciągniętymi lub plamistymi teksturami na kolbach, korpusach i dłoniach; linia na kciuku zniknęła.
+- Tekstury detali: małe tekstury świata mają detal tak drobny jak duże; malowany drewniany bok okna ma swój detal drewna.
+- Postacie: pory skóry na gołych rękach tak drobne jak na twarzach.
+- Poziom 15: zniknęło schodkowe błoto przy workach z piaskiem moździerza, a podłoga nie migocze już przy ruchu.

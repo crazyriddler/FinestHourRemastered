@@ -311,6 +311,13 @@ The version installed is in `version.txt` beside the game. Unattended:
 - First-person arms and weapons: the remastered models' textures now follow the originals' (projected onto them), so
   the stocks, the weapons' bodies and the hands are no longer stretched or patchy; the line along the thumb on the PPSh
   is gone.
+- Detail textures on the world's small textures (under 256 pixels, most of the levels' walls, floors and edges) are
+  as fine as on the larger ones, no longer a few huge blotches; a window's side of painted wood in Stalingrad has its
+  wood detail.
+- Characters: the skin's pores are as large on a bare arm as on a face (Tanya's forearm had them giant).
+- Walls and floors lit for a moment by a flash or a blast keep their own detail and relief.
+- Level 15: the mud laid in steps over the tyre tracks by the mortar's sandbags is gone, and the floor by the houses'
+  wall no longer flickers between two looks as you move.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

@@ -105,6 +105,10 @@ inline std::atomic<int> g_frame_stats{0};  // 1 recording, 2 the report due
 inline std::atomic<int> g_draw_times{0};  // tests: "drawtimes": the next frame's draws timed one by one (Renderer::DrawTimesBegin)
 inline char g_frame_stats_label[64];  // tests: each draw in its texture's own colour (logged), to tell what is where
 inline std::atomic<uint64_t> g_hidden_tex[256]{};
+// tests (control line "hidepieces <file>"): a file read as more of the pack's hide.txt, in place of the last one
+inline std::mutex g_hide_file_lock;
+inline std::string g_hide_file;
+inline std::atomic<int> g_hide_file_version{0};
 // the game's: textures whose draws its settings hide (the HUD's pieces), by their content ids, 0 ends the list
 inline std::atomic<uint64_t> g_game_hidden_tex[32]{};
 // tests: a shot's flash held steady at a place (world x y z, radius; radius 0 none): its light and shadows

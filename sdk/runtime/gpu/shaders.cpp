@@ -1976,6 +1976,14 @@ std::string MaterialShade(int i) {
         // and strength, the pores' -mtl[3].y, the weave's 0.8)
         "    const bool mixed = dtl.z < 0;\n"
         "    float tz = abs(dtl.z), tw = floor(tz / 100), tp = mixed ? tz - tw * 100 : tz;\n"
+        // (the pores as large in the world as on a face, its texture about 0.3 m: a bare arm painted in a body's
+        // texture, three or four times the world a texture, had them three or four times as large; the weave as on a
+        // soldier's uniform, about 1.2 m, finer only where a texture spreads wider still, the simple soldiers far off)
+        "    {\n"
+        "        float duv = length(ddx(mUv)) + length(ddy(mUv)), dpw = length(ddx(mP)) + length(ddy(mP));\n"
+        "        float wpu = dpw / max(duv, 1e-7) / mtl[3].z;\n"
+        "        tp *= clamp(wpu / 0.3, 1, 8), tw *= clamp(wpu / 1.2, 1, 8);\n"
+        "    }\n"
         // (skin's hue, its green over its red from the blue: the faces' and hands' 0.15 to 0.5, khaki and olive cloth's
         // 0.4 to 0.7: up to 0.5 in a texture of skin, mtl[2].w 6; in one of cloth, 2, a hand painted in it alone, under
         // 0.32: a tan uniform's hue is a face's)

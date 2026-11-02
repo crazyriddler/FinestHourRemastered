@@ -73,6 +73,8 @@ SURFACES.update({rid: "fabric" for rid in (
 )})
 # weapons' textures taken for skin (the Grease Gun's back, the mounted MG42's): an atlas, as the others (pores on a gun)
 SURFACES.update({"7d02195d666f7ad2": "atlas", "79b7601760051594": "atlas"})
+# paintpeeled2: a window's side of painted wood (level 2), taken for an atlas: no detail at all on it; wood's, no parallax
+SURFACES["184b0add6d2c9e35"] = "wood"
 # the cacti (Tunisia): foliage sways in the wind, a cactus stands firm; their maps kept, not swaying
 SURFACES.update({rid: "atlas" for rid in (
     "0541f938dfe5123e", "6db9e7e32caec00e",  # cactus1
@@ -102,6 +104,7 @@ NO_DETAIL = {"glass", "effect", "sky", "ui", "foliage", "paper"}
 # parallax depths set by hand (the user's F9 marks)
 POM_SET = {
     "41b121db8b47d5ab": 0.015,  # _RegDirtGround (Matmata's ground, level 14): its gravel stood up in lumps
+    "184b0add6d2c9e35": 0.0,  # paintpeeled2, a window's side (SURFACES)
 }
 # the snowy roads that are mostly mud (3_3_road_snowhalf, under 20% snow: level 30): "mud" in snow.txt, their
 # footprints kept but the ground's relief, detail and parallax, deeper than the ground's own (0.1: their ruts and

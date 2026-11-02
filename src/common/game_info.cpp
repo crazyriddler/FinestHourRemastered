@@ -550,6 +550,12 @@ void Command(const std::string& line_in) {
                     break;
                 }
         // a file of texture ids, one a line (tests: many hidden at once)
+        if (line.rfind("hidepieces ", 0) == 0) {
+            std::lock_guard<std::mutex> l(gpu::g_hide_file_lock);
+            gpu::g_hide_file = line.substr(11);
+            gpu::g_hide_file_version++;
+            LOGR("hide: pieces from %s", gpu::g_hide_file.c_str());
+        }
         if (line.rfind("hidelist ", 0) == 0)
             if (FILE* f = std::fopen(line.substr(9).c_str(), "r")) {
                 size_t slot = 0;

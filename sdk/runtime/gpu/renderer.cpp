@@ -13,6 +13,7 @@
 #include <mutex>
 #include <optional>
 #include <fstream>
+#include <sstream>
 #include <functional>
 #include <thread>
 #include <iterator>
@@ -4301,8 +4302,14 @@ void Renderer::UploadConstants(const State& s, const DrawShaders& sh, const PsoK
         if (draw_character_ && c.mtl[3][1] < 0 && m.flag)
             c.mtl[3][1] = c.mtl[2][3] == 6 ? -1.7f : -0.8f, c.dtl[2] = (c.mtl[2][3] == 6 ? 5.5f : 3.0f) * m.detail_scale;
         // a surface's own detail (mtl[3].y > 0): its tiling times the texture's own (detail_scale.txt), in dtl.z
-        if (c.mtl[3][1] > 0) c.dtl[2] = m.detail_scale;
-        c.dtl[3] = (draw_character_ && !m.flag ? 400.0f : m.cloth ? 110.0f : 160.0f) / m.detail_scale;
+        // (a small texture, under 256 texels, drawn out over a surface as large as any: its detail as fine as a 256's
+        // would be, the grain a tile per so many of its texels coming out huge on it otherwise. The world's alone; a
+        // texture in detail_scale.txt its own)
+        float scale = m.detail_scale;
+        if (!m.flag && !draw_character_ && c.texsize[0][0] > 0)
+            scale = std::clamp(256.0f / std::max(c.texsize[0][0], c.texsize[0][1]), 1.0f, 8.0f);
+        if (c.mtl[3][1] > 0) c.dtl[2] = scale;
+        c.dtl[3] = (draw_character_ && !m.flag ? 400.0f : m.cloth ? 110.0f : 160.0f) / scale;
         // (not on skin: its own pores, Character Detail; clothes and the weapon in hand stronger, their textures
         // spread over large parts)
         if (set.detail && details_ && m.grain >= 0 && m.grain < int(details_count_) && m.grain != 7 + 11 && !g_texview.load()) {
@@ -4998,6 +5005,92 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
         for (const auto& hidden : g_hidden_tex)
             for (int st = 0; st < 4; st++)
                 if (stages.id[st] && hidden.load() == stages.id[st]) return;
+    int piece_shift = 0;
+    // pieces left undrawn (the pack's hide.txt, "<texture> <level> <count> <print>": the piece's bounds in its own space,
+    // its positions decoded, to 4 units, hashed: the one piece; a print of 0 any of that count, for tests): fixes of one
+    // place alone, a layer of the ground drawn over the one that should cover it (level 15's mud under the tyre tracks,
+    // cut off in steps). (Not its vertices' bytes: packed, with lit colours that change as the level plays.) Tests:
+    // XBE_TEX_COUNTS=<texture> logs each piece drawn with that texture (its count, print and bounds), once; control
+    // "hidepieces <file>": that file as more of hide.txt
+    {
+        struct Hide {
+            uint64_t tex;
+            int level;
+            uint32_t count;
+            uint64_t print;
+            int shift;  // "back" or "front" after it: drawn a little behind or in front (two surfaces laid one on the other, fighting)
+        };
+        float bounds[6] = {};
+        auto piece_print = [&]() -> uint64_t {
+            static Assembled fa;
+            if (!AssembleFloats(s, prim, start, count, indices, fa) || !(fa.regs & 1) || !fa.vertex_count) return 0;
+            const size_t n = size_t(std::popcount(unsigned(fa.regs))) * 4;
+            float lo[3] = {1e30f, 1e30f, 1e30f}, hi[3] = {-1e30f, -1e30f, -1e30f};
+            for (uint32_t v = 0; v < fa.vertex_count; v++)
+                for (int k = 0; k < 3; k++) lo[k] = std::min(lo[k], fa.vertices[v * n + size_t(k)]), hi[k] = std::max(hi[k], fa.vertices[v * n + size_t(k)]);
+            uint64_t h = 1469598103934665603ull;
+            for (int k = 0; k < 3; k++) {
+                bounds[k] = lo[k], bounds[3 + k] = hi[k];
+                const int32_t q[2] = {int32_t(std::lround(lo[k] / 4)), int32_t(std::lround(hi[k] / 4))};
+                const uint8_t* b = reinterpret_cast<const uint8_t*>(q);
+                for (int i = 0; i < 8; i++) h = (h ^ b[i]) * 1099511628211ull;
+            }
+            return h;
+        };
+        static int hides_version = -1;
+        static std::vector<Hide> hides;
+        if (hides_version != g_hide_file_version.load()) {
+            hides_version = g_hide_file_version.load();
+            std::vector<Hide> out;
+            std::stringstream in;
+            // (a file not there read as nothing: streaming its empty buffer would put the stream in error)
+            auto add = [&](const std::filesystem::path& p) {
+                std::ifstream f(p);
+                if (f.is_open()) in << f.rdbuf() << "\n";
+            };
+            add(std::filesystem::path(remaster::Dir()) / "hide.txt");
+            {
+                std::lock_guard<std::mutex> l(g_hide_file_lock);
+                if (!g_hide_file.empty()) add(g_hide_file);
+            }
+            std::string line;
+            while (std::getline(in, line)) {
+                unsigned long long t = 0;
+                int lv = 0;
+                unsigned c = 0;
+                unsigned long long pr = 0;
+                char act[16] = {};
+                if (!line.empty() && line[0] != '#' && std::sscanf(line.c_str(), "%llx %d %u %llx %15s", &t, &lv, &c, &pr, act) >= 4)
+                    out.push_back({t, lv, c, pr, std::string(act) == "back" ? 1 : std::string(act) == "front" ? -1 : 0});
+            }
+            if (!out.empty()) LOGR("hide: %zu pieces", out.size());
+            hides = std::move(out);
+        }
+        // (its texture on any stage: a layer can carry it after a first)
+        auto has = [&](uint64_t t) {
+            for (int st = 0; st < 4; st++)
+                if (stages.id[st] == t) return true;
+            return false;
+        };
+        for (const Hide& h : hides) {
+            // (a count of 0: any piece of that texture in the level)
+            if (h.level == g_level.load() && (!h.count || h.count == count) && has(h.tex) && (!h.print || h.print == piece_print())) {
+                if (!h.shift) return;
+                piece_shift = h.shift;
+            }
+        }
+        static const uint64_t counted = [] {
+            const char* e = std::getenv("XBE_TEX_COUNTS");
+            return e ? std::strtoull(e, nullptr, 16) : 0ull;
+        }();
+        if (counted && has(counted)) {
+            static std::unordered_set<uint64_t> told;
+            const uint64_t pr = piece_print();
+            if (told.insert(pr ^ count ^ (uint64_t(g_level.load()) << 56)).second)
+                LOGR("hide: tex %016llx level %d count %u print %016llx from %.0f %.0f %.0f to %.0f %.0f %.0f", (unsigned long long)counted,
+                     g_level.load(), count, (unsigned long long)pr, bounds[0], bounds[1], bounds[2], bounds[3], bounds[4], bounds[5]);
+        }
+    }
     // the HUD drawn by the game (before the settings hide it): play, not a cutscene
     for (const auto& hud : g_hud_tex) {
         uint64_t id = hud.load(std::memory_order_relaxed);
@@ -5234,6 +5327,9 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
         if (k.blend && !flat && !in_order && std::find(std::begin(kSheets), std::end(kSheets), draw_tex0_) != std::end(kSheets))
             k.zbias -= bias, k.zslope -= 1.0f;
     }
+    // a piece hide.txt sets behind or in front ("back", "front"): two surfaces laid one on the other fought as the view
+    // moved; one wins where they meet
+    if (piece_shift) k.zbias += piece_shift * 3000, k.zslope += float(piece_shift);
     // the game's shading laid over the world (a mesh of its own, no texture, its colour's alpha the shade: level 5's
     // metal beams): drawn after the surface it shades, its points the same but not to the bit, it lost the depth test
     // to the surface every other half degree the view turned, a flicker; pulled a hair towards the eye it wins as
@@ -5417,6 +5513,13 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
     draw_character_ = (sh.prog && pk.lit) || (sh.fixed_transform && (sh.fk.light & 1));
     // (not the water: level 1's Volga is a skinned mesh its bones heave, lit by its program, but water all the same)
     if (stages.mat && stages.mat->m && stages.mat->m->water) draw_character_ = false;
+    // (nor the world's surfaces lit by the game's lights for a frame, a flash or a blast close by: stone, brick, concrete,
+    // ground, roof, plaster, snow. They took a character's detail, its size and strength, and lost their relief, the
+    // frames a light reached them: level 15's floors flickered between two looks through a fight)
+    if (draw_character_ && !sh.prog && stages.mat && stages.mat->m) {
+        const int g = stages.mat->m->grain - 7;
+        if (g == 0 || g == 1 || g == 2 || g == 6 || g == 7 || g == 10 || g == 12) draw_character_ = false;
+    }
     // wind (Wind): foliage and flags (the remaster's classes; not the cloth characters wear), cut out by their alpha,
     // sway; their reach at the texture's top in the world (6 units, about 15 cm; cloth half), as pixels at depth 1
     // through the camera's projection (the vertex shader divides by the depth), and the time. (It was 4% of the

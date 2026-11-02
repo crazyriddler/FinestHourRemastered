@@ -325,6 +325,13 @@ The version installed is in `version.txt` beside the game. Unattended:
   of the fire under it, a column drifting up into the sky (Lit Smoke turns it off).
 - Level 36 (the road into Remagen): the dirt heaped over the road meets the cobbles flush, no longer a raised
   lip with a shadow under it.
+- Last Bridge Standing: no more black lines coming and going over the far hills. The level draws them as part of
+  its sky, close enough for the shadows and the haze's light shafts of the bridge to fall on them; the sky is
+  now left out of both, and casts no shadow of its own.
+- Uniforms: the blue and white stripe along some seams (a sleeve's edge, Church's among them) is gone: the
+  artists' checker between the texture's pieces is filled with the cloth's own colours.
+- Russian, Polish and Portuguese: the American missions' objectives and failure messages are translated (they
+  showed in English); the Russian reviewer's corrections are in ("Задание провалено" and more).
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

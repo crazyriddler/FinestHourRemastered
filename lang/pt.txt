@@ -1254,3 +1254,57 @@ _Yes_No	$ms$ Sim  $mc$ Não
 @12adf4f4df8366cc	Sd. Jeffrey Peterson: Elimine aquele metralhador!
 @fbcbd76845146375	Sd. Jeffrey Peterson: Derrube o atirador naquela torre!
 @31aeddc5de00643a	Sgt. Bob Starkey: Vamos ter que nos separar. Eu vou pela esquerda, você fica pela direita.
+@132f4f17fe747ce2	Reagrupe-se com a coluna de tanques.{Coluna de tanques localizada.
+@5c738c2db4f71fb0	Missão fracassada - O M12 foi destruído.
+@418485ebbb34cb6f	Missão fracassada - O M12 foi destruído.
+@d248d8f4d09b1605	Escolte a coluna de tanques até o teatro. (O M12 precisa sobreviver){O M12 chegou ao teatro.
+@8df7bbd3ae4f01f9	Neutralize os antitanques no segundo andar.{Antitanques neutralizados.
+@c5ca160f2fc7ddd9	Reagrupe-se com a coluna de tanques e peça um ataque de artilharia.{Ataque de artilharia concluído.
+@23e02b7cc22ae4c2	Proteja a coluna de tanques dos antitanques nos portões da cidade.{Antitanques neutralizados.
+@8891a63f1ef925d8	Proteja a coluna de tanques dos antitanques na rua.{Antitanques neutralizados.
+@00cf1e8cbd899708	Neutralize os antitanques no terceiro andar.{Antitanques neutralizados.
+@5ccb32a2df2319b4	Limpe o túnel subterrâneo de inimigos.{Túnel subterrâneo limpo.
+@1fd01cc250c1707e	Proteja a coluna de tanques dos antitanques.{Antitanques neutralizados.
+@2058def1bcf55da7	O inimigo ainda tem acesso às escadas atrás de você.
+@b7b2e4d554614cd2	Suba esta escada para continuar.
+@ba9b76c56796afc6	Cumpra seus objetivos, soldado!
+@0e7a90a0ab4a0eed	Os alemães ainda têm acesso à superfície. Destrua todas as escadas dos bueiros.
+@600299aed28296dd	Os alemães ainda têm acesso aos bueiros. Destrua todas as escadas.
+@8ade1f251bd75803	Impeça os alemães de usar os esgotos.{Alemães isolados dos esgotos.
+@e5714b3b1f86f8ac	Destrua todas as escadas que levam aos bueiros. (Restam # de 5){Todas as escadas dos bueiros destruídas.}Restam # de 5 escadas.
+@83f3ff7d90dcb988	Neutralize o inimigo no ninho de metralhadora.{Metralhador inimigo neutralizado.
+@aa679776a648920d	Encontre um caminho para a superfície.{Caminho para a superfície encontrado.
+@d6a9ecd4bd6fcda7	Saia do túnel para se reagrupar com a coluna de tanques.{Saída do túnel encontrada.
+@1f8e682f5b17b459	Destrua a posição dos Panzers.{Posição dos Panzers destruída.}Restam # de 2 Panzers.
+@56c89a5e1400e501	Proteja os aliados próximos. (1º Batalhão){1º Batalhão protegido.
+@c668c40443dc8386	Encontre a saída para a rua e reagrupe-se com o M12.{M12 localizado.
+@092a0ddf9add6b7e	Neutralize os antitanques no 2º andar. (O M12 precisa sobreviver){Antitanques neutralizados.}Restam # de 2 antitanques.
+@f746fdfee0d65949	Escolte a coluna de tanques até a praça da cidade. (O M12 precisa sobreviver){O M12 chegou à praça da cidade.
+@8a31766e20c7e1b4	Encontre um jeito de flanquear a posição dos Panzers.{Caminho de flanco encontrado.
+@d8c0b6a953e0ba47	Derrote os tanques na entrada da 3ª parte da cidade. (Restam # de 4){Tanques derrotados.}Restam # de 4 tanques.
+@c3a14f1506491d7c	Destrua todos os Flak 88 na 2ª parte da cidade. (Restam # de 3){Flak 88 destruídos.}Restam # de 3 Flak 88.
+@5b343841413a61a9	Estacione o tanque e limpe o prédio dos antitanques. (Restam # de 3){Antitanques eliminados.}Restam # de 3 soldados antitanque.
+@93217d2e07ab43c8	Use a Panzerschreck para repelir o ataque de tanques alemão.{Ataque de tanques repelido.
+@1e2062938ba2e4f9	Volte ao tanque e siga para a 3ª parte da cidade.{Chegou à 3ª parte da cidade.
+@704726b2f490406c	Encontre e destrua os tanques que patrulham a 3ª parte da cidade. (Restam # de 4){Tanques de patrulha destruídos.}Restam # de 4 tanques.
+@fb0c78cf451aab32	Vá até a igreja no outro extremo da cidade.{Chegou à igreja.
+@45ddfa16a1a2d4d5	Escolte os M12 até a área de posicionamento.{Os M12 chegaram à área de posicionamento.
+@f60a7b462f09eae1	Proteja os M12 do ataque.{Ataque alemão repelido.
+@456c90c161c7784d	Siga para Tillet.{Chegou a Tillet.
+@9cceedf900f6b38c	Destrua todos os Flak 88 na 1ª parte da cidade. (Restam # de 3){Flak 88 destruídos.}Restam # de 3 Flak 88.
+@c27ef4431a7a210d	Estacione o tanque e limpe o prédio dos metralhadores. (Restam # de 3){Metralhadores eliminados.}Restam # de 3 metralhadores.
+@eb31b5c663102e6b	Volte ao tanque e siga para a 2ª parte da cidade.{Chegou à 2ª parte da cidade.
+@4037bf9da0291bc4	Verifique a situação da ponte.{A ponte está intacta.
+@1833ffc1558aece5	Proteja a ponte.{Ponte assegurada.
+@23b07f602db25f31	Encontre as armas antitanque dentro da prefeitura.{Armas antitanque encontradas.
+@a9715f6c2d3fc5fd	Destrua os tanques Tiger.{Tanques Tiger destruídos.
+@ef5dd85d19b48796	Missão fracassada - O Sherman Scoop foi destruído.
+@5ba48ded9b906ccd	Missão fracassada - O Sherman Scoop foi destruído.
+@74db707f9fa82bc8	Escolte os Shermans até a ponte. (O Scoop precisa sobreviver){O Scoop chegou à ponte.
+@f976c829ec41bdd1	Desarme as minas na rua. (Restam # de 5){Minas desarmadas.}Restam # de 5 minas.
+@033cb39454ad90b4	Encontre outro caminho para contornar o monte de terra.{Caminho ao redor do monte de terra encontrado.
+@d93453ef07844029	tanque
+@594a20a35b1db04b	Neutralize o ninho de metralhadora no alto da Torre Sul.{Ninho de metralhadora neutralizado.
+@cc9dc571ac123bea	Neutralize o ninho de metralhadora no fim da ponte.{Ninho de metralhadora neutralizado.
+@7ae69a71597d6c7e	Use o canhão antiaéreo para repelir o ataque dos Stukas.{Ataque dos Stukas repelido.
+@177d4594c79286ec	Atravesse a ponte.{Ponte atravessada.

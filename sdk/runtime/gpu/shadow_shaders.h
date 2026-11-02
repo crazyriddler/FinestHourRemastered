@@ -24,7 +24,7 @@ cbuffer P : register(b1) {
 Texture2D<float> depth : register(t0);
 Texture2D<float> atlas : register(t1);
 Texture2D scene : register(t2);
-Texture2D<float> chars : register(t3);  // 1 on the characters
+Texture2D<float> chars : register(t3);  // 1 on the characters, 0.25 on the sky box's faces (not at the far plane)
 SamplerState lin : register(s0);
 SamplerState pnt : register(s1);
 struct O { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
@@ -132,6 +132,9 @@ float4 fog(O i) : SV_Target {
     float d = D(i.uv);
     float3 P = d >= 0.99999 ? ViewPos(i.uv, 0.5) : ViewPos(i.uv, d);
     float len = d >= 0.99999 ? 12000 : min(length(P), 12000);
+    // (the sky box's faces, about the camera: no shafts of what stands near there cast on them)
+    float skyc = chars.Load(int3(i.uv * p2.xy, 0));
+    bool skyb = skyc > 0.1 && skyc < 0.5;
     float3 dir = normalize(P);
     float3 up = p10.xyz;
     float jitter = frac(52.9829189 * frac(dot(i.pos.xy, float2(0.06711056, 0.00583715))));
@@ -147,7 +150,7 @@ float4 fog(O i) : SV_Target {
         float h = dot(X, up) - p9.y;  // height over the ground
         float dens = p9.x * (0.35 + 0.65 * exp(-max(h, 0) / 600));
         float a = 1 - exp(-dens * stepl);
-        float lit = p3.x > 0 && X.z < p3.w ? SunAt(X) : 1;
+        float lit = p3.x > 0 && X.z < p3.w && !skyb ? SunAt(X) : 1;
         sun += trans * a * lit;
         trans *= 1 - a;
     }
@@ -156,6 +159,9 @@ float4 fog(O i) : SV_Target {
 float4 mask(O i) : SV_Target {
     float d = D(i.uv);
     if (d >= 0.99999) return float4(1, 1, 0, 0);  // the sky
+    // (and the sky box's faces where they are not at the far plane, Last Bridge Standing's hills)
+    float skyc = chars.Load(int3(i.pos.xy, 0));
+    if (skyc > 0.1 && skyc < 0.5) return float4(1, 1, 0, 0);
     float3 P = ViewPos(i.uv, d);
     if (P.z <= 0 || P.z >= p3.w) return float4(1, 1, 1, 0);
     // the normal from the nearer of each pair of neighbours, so edges keep their own side

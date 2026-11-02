@@ -2,18 +2,34 @@
 # update release's update.json). Only this update's changes: written anew for each update. One section a language
 # ([en] needed; the others fall back to it), its lines as the game shows them. UTF-8.
 [en]
-- Level 36: the dirt heaped over the road into Remagen meets the cobbles flush, no raised lip with a shadow under it.
+- Last Bridge Standing: no more black lines coming and going over the far hills.
+- Uniforms: no more blue and white stripe along some seams (Church's sleeve among them).
+- Russian, Polish and Portuguese: the American missions' objectives are translated.
 [de]
-- Level 36: die Erde auf der Straße nach Remagen schließt bündig mit dem Pflaster ab, ohne erhöhte Kante mit Schatten darunter.
+- Last Bridge Standing: keine schwarzen Linien mehr, die über den fernen Hügeln auftauchen und verschwinden.
+- Uniformen: kein blau-weißer Streifen mehr an manchen Nähten (darunter Churchs Ärmel).
+- Russisch, Polnisch und Portugiesisch: die Missionsziele der amerikanischen Kampagne sind übersetzt.
 [fr]
-- Niveau 36 : la terre amassée sur la route de Remagen rejoint les pavés à niveau, sans rebord surélevé ni ombre dessous.
+- Last Bridge Standing : plus de lignes noires qui apparaissent et disparaissent sur les collines lointaines.
+- Uniformes : plus de bande bleue et blanche le long de certaines coutures (la manche de Church entre autres).
+- Russe, polonais et portugais : les objectifs des missions américaines sont traduits.
 [it]
-- Livello 36: la terra ammucchiata sulla strada per Remagen si unisce a filo al selciato, senza bordo rialzato né ombra sotto.
+- Last Bridge Standing: niente più linee nere che compaiono e scompaiono sulle colline lontane.
+- Uniformi: niente più striscia blu e bianca lungo alcune cuciture (tra cui la manica di Church).
+- Russo, polacco e portoghese: gli obiettivi delle missioni americane sono tradotti.
 [es]
-- Nivel 36: la tierra amontonada sobre la carretera a Remagen queda a ras de los adoquines, sin borde levantado ni sombra debajo.
+- Last Bridge Standing: ya no aparecen y desaparecen líneas negras sobre las colinas lejanas.
+- Uniformes: ya no hay una franja azul y blanca en algunas costuras (entre ellas la manga de Church).
+- Ruso, polaco y portugués: los objetivos de las misiones americanas están traducidos.
 [pt]
-- Nível 36: a terra amontoada na estrada para Remagen fica rente às pedras da calçada, sem rebordo levantado nem sombra por baixo.
+- Last Bridge Standing: já não aparecem e desaparecem linhas pretas sobre as colinas distantes.
+- Uniformes: já não há uma faixa azul e branca em algumas costuras (entre elas a manga de Church).
+- Russo, polonês e português: os objetivos das missões americanas estão traduzidos.
 [ru]
-- Уровень 36: земля, насыпанная на дорогу в Ремаген, лежит вровень с брусчаткой, без приподнятого края и тени под ним.
+- Last Bridge Standing: над далёкими холмами больше не появляются и не исчезают чёрные линии.
+- Форма: больше нет сине-белой полосы вдоль некоторых швов (в том числе на рукаве Чёрча).
+- Русский, польский и португальский: задания американских миссий переведены, внесены правки рецензента.
 [pl]
-- Poziom 36: ziemia usypana na drodze do Remagen leży równo z brukiem, bez uniesionej krawędzi z cieniem pod spodem.
+- Last Bridge Standing: nad odległymi wzgórzami nie pojawiają się już i nie znikają czarne linie.
+- Mundury: nie ma już niebiesko-białego paska wzdłuż niektórych szwów (m.in. na rękawie Churcha).
+- Rosyjski, polski i portugalski: cele misji amerykańskich są przetłumaczone.

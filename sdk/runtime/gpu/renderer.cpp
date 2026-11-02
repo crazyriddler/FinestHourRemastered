@@ -982,6 +982,10 @@ private:
         float zmin, zmax;             // its viewport's depth range
     };
     std::vector<Caster> casters_;
+    // the sky box's faces (its class sky) drawn with a depth write: their pixels marked as the sky's in the screen's
+    // mask (CharacterMask, 0.25), the shadows and the haze leaving them out (screen alone: no pso)
+    std::vector<Caster> sky_marks_;
+    uint64_t sky_gen_ = 0;
     // The veil (DrawVeil): the world's see-through draws (smoke, dust: blended over, no depth write) again, before
     // the occlusion is laid on the scene: where they cover it the occlusion fades, the corners' shade is behind them
     struct VeilDraw {
@@ -1157,6 +1161,7 @@ private:
     rhi::Resource* LensDirt(const std::string& text, rhi::GpuVa cb, uint32_t w, uint32_t h);
     uint64_t ring_gen_ = 0;     // the frame's uploads so far went (Submit(true), a wrapped descriptor ring)
     uint64_t casters_gen_ = 0;  // ring_gen_ the casters were recorded in
+    bool chars_marked_ = false;  // the screen's mask (scene_[2]) drawn this frame: characters 1, the sky box 0.25
     // the sun's reach on the screen for the materials' highlights: the last shadow mask (scene_[kSceneShadow], its
     // visibility in g), at t7 (root table 4) for the whole frame
     bool sun_vis_ok_ = false;     // a mask (or the white of no shadows) was made at the scene targets' size
@@ -1647,7 +1652,7 @@ private:
         return it == stable_of_.end() ? h : it->second;
     }
     uint64_t FixedShader(uint64_t id, const std::string& src, const char* entry, const char* profile);
-    uint64_t shadow_alpha_ps_[4] = {}, mask_ps_ = 0;  // [blended * 2 + projected]
+    uint64_t shadow_alpha_ps_[4] = {}, mask_ps_ = 0, sky_mask_ps_ = 0;  // [blended * 2 + projected]
     std::unordered_set<uint64_t> passes_known_;  // passes.bin's
     void PassDesc(rhi::Blob* vs, rhi::Blob* ps, DXGI_FORMAT rtv, float blend, rhi::PipelineDesc& d) const;
     KeyMap<uint64_t, uint32_t> samplers_;
@@ -2404,7 +2409,7 @@ enum : uint8_t { kVariantMain, kVariantShadow, kVariantGuard, kVariantTop };
 uint64_t VertexRecipeId(uint64_t vkey, uint8_t variant) { return variant ? Hash(&variant, 1, vkey) : vkey; }
 // the fixed shaders' ids
 constexpr uint64_t kShadowAlphaId[4] = {0x5AD0A1FA00000000ull, 0x5AD0A1FA00000001ull, 0x5AD0A1FA00000007ull, 0x5AD0A1FA00000008ull};
-constexpr uint64_t kMaskId = 0x5AD0A1FA00000002ull, kVeilId = 0x5AD0A1FA00000003ull;
+constexpr uint64_t kMaskId = 0x5AD0A1FA00000002ull, kVeilId = 0x5AD0A1FA00000003ull, kSkyMaskId = 0x5AD0A1FA00000009ull;
 constexpr uint64_t kTopWaterId = 0x5AD0A1FA00000004ull, kTopCoverId = 0x5AD0A1FA00000005ull, kTopTreadId = 0x5AD0A1FA00000006ull;
 
 constexpr uint32_t kVertexTag = 'V', kPixelTag = 'P', kBuildTag = 'B', kPassTag = 'S';
@@ -2613,6 +2618,7 @@ void Renderer::LoadShaderCache() {
     for (int k = 0; k < 4; k++)
         shadow_alpha_ps_[k] = FixedShader(kShadowAlphaId[k], ShadowAlphaHlsl((k & 1) != 0, k >= 2), "main", "ps_5_0");
     mask_ps_ = FixedShader(kMaskId, "float4 main(float4 pos : SV_Position) : SV_Target { return 1; }", "main", "ps_5_0");
+    sky_mask_ps_ = FixedShader(kSkyMaskId, "float4 main(float4 pos : SV_Position) : SV_Target { return 0.25; }", "main", "ps_5_0");
     veil_ps_ = FixedShader(kVeilId, VeilPixelHlsl(), "main", "ps_5_0");
     // the top view's (Water Interaction): the water's height; what crosses it, how far up the slab about the water's
     // height (tdp.x below, tdp.y above) it reaches
@@ -7017,6 +7023,38 @@ void Renderer::RecordCaster(const State& s, const Assembled& a, const DrawShader
     GuestExtent size;
     SurfaceSize(s.rt, size.w, size.h);
     if (v.x != 0 || v.y != 0 || v.w != size.w || v.h != size.h) return;
+    // nor the sky's box: its faces not at the far plane (Last Bridge Standing's), flattened onto the cascades' near
+    // end they shaded the whole street, and came and went as the view turned. Their pixels are marked instead: in
+    // the shadows' reach (the box about the camera), the shadows and the haze's shafts of whatever stood near
+    // there in the world fell on its far hills, black lines coming and going (issue #49)
+    // (its class from the pack's list: a sky texture has no material maps, no stages.mat)
+    const remaster::Material* sky_of = stages.id[0] && remaster::Active() ? remaster::Find(stages.id[0]) : nullptr;
+    if (sky_of && sky_of->sky) {
+        static const bool sky_log = std::getenv("XBE_SKY_LOG") != nullptr;  // tests: each sky box texture marked, once
+        static std::unordered_set<uint64_t> sky_told;
+        if (sky_log && sky_told.insert(stages.id[0]).second)
+            LOGR("sky: marked tex %016llx count %u z %.4f..%.4f", (unsigned long long)stages.id[0], a.index_count ? a.index_count : a.draw_count, v.min_z, v.max_z);
+        if (!sky_mask_ps_ || tess_draw_ || sky_marks_.size() >= 256) return;
+        if (sky_marks_.empty()) sky_gen_ = ring_gen_;
+        if (sky_gen_ != ring_gen_) return;
+        ShadowKey mk{};
+        mk.vs = sh.vh, mk.ps = sky_mask_ps_, mk.regs = k.regs, mk.topo = (k.topo & 0xFF) | kShadowScreenKey;
+        std::memcpy(mk.elements, k.elements, sizeof(mk.elements));
+        if (rhi::Pipeline* pso = EnsureShadowPipeline(mk)) {
+            Caster c{};
+            c.screen = pso;
+            c.vb_count = a.buffer_count;
+            std::memcpy(c.vb, last_vbv_, sizeof(D3D12_VERTEX_BUFFER_VIEW) * a.buffer_count);
+            c.indexed = a.index_count != 0;
+            c.ib = last_ibv_;
+            c.count = a.index_count ? a.index_count : a.draw_count;
+            c.base = a.base_vertex;
+            c.topo = PrimitiveTopology(a);
+            c.vc = last_vc_, c.dc = last_dc_;
+            sky_marks_.push_back(c);
+        }
+        return;
+    }
     bool alpha_test = SimpleState(s, kMAlphaTestEnable) != 0 || (pk.alphakill & 1);
     if (k.blend && !alpha_test) return;
     // nor the effects' sprites (the dust, smoke and sparks of a shot's impact, tracers, flashes: the game's table,
@@ -7024,9 +7062,6 @@ void Renderer::RecordCaster(const State& s, const Assembled& a, const DrawShader
     {
         constexpr uint32_t kOne = 0x1;
         if (draw_emitter_) return;
-        // nor the sky's box: its faces not at the far plane (Last Bridge Standing's), flattened onto the cascades' near
-        // end they shaded the whole street, and came and went as the view turned
-        if (stages.mat && stages.mat->m && stages.mat->m->sky) return;
         if (k.blend && k.dst == kOne) return;
     }
     bool alpha = alpha_test && stages.info[0].kind == kTex2D;
@@ -8518,7 +8553,8 @@ rhi::Resource* Renderer::DrawGuard(uint32_t w, uint32_t h) {
 bool Renderer::CharacterMask(Target& rt, Target& ds) {
     bool any = false;
     for (const Caster& c : casters_) any |= c.screen != nullptr;
-    if (!any) return false;
+    const bool sky = !sky_marks_.empty() && sky_gen_ == ring_gen_;
+    if (!any && !sky) return false;
     Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_DEPTH_WRITE);
     Transition(scene_[2].Get(), scene_state_[2], D3D12_RESOURCE_STATE_RENDER_TARGET);
     rhi::View rh = SceneRtv(2), dh = Cpu(rhi::Heap::Dsv, ds.view);
@@ -8527,18 +8563,21 @@ bool Renderer::CharacterMask(Target& rt, Target& ds) {
     cl_->SetTargets(1, &rh, &dh);
     SetFullViewport(rt.w, rt.h);
     rhi::Pipeline* bound = nullptr;
-    for (const Caster& c : casters_) {
-        if (!c.screen) continue;
-        if (c.screen != bound) SetPso(bound = c.screen);
-        cl_->SetCbv(0, c.vc);
-        cl_->SetCbv(1, c.dc);
-        cl_->SetVertexBuffers(0, c.vb_count, c.vb);
-        SetTopology(c.tess ? D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST : c.topo);
-        if (c.indexed) {
-            cl_->SetIndexBuffer(&c.ib);
-            cl_->DrawIndexed(c.count, 1, 0, c.base, 0);
-        } else {
-            cl_->Draw(c.count, 1, 0, 0);
+    for (const std::vector<Caster>* list : {&casters_, &sky_marks_}) {
+        if (list == &sky_marks_ && !sky) break;
+        for (const Caster& c : *list) {
+            if (!c.screen) continue;
+            if (c.screen != bound) SetPso(bound = c.screen);
+            cl_->SetCbv(0, c.vc);
+            cl_->SetCbv(1, c.dc);
+            cl_->SetVertexBuffers(0, c.vb_count, c.vb);
+            SetTopology(c.tess ? D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST : c.topo);
+            if (c.indexed) {
+                cl_->SetIndexBuffer(&c.ib);
+                cl_->DrawIndexed(c.count, 1, 0, c.base, 0);
+            } else {
+                cl_->Draw(c.count, 1, 0, 0);
+            }
         }
     }
     Transition(scene_[2].Get(), scene_state_[2], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
@@ -8554,6 +8593,7 @@ rhi::Resource* Renderer::ShadowMask(Target& rt, Target& ds) {
     Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     uint32_t slot = AllocSrvSlots(7);
     bool chars = CharacterMask(rt, ds);
+    chars_marked_ = chars;
     Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     std::pair<rhi::Resource*, DXGI_FORMAT> src[4] = {
         {ds.res.Get(), DXGI_FORMAT_R24_UNORM_X8_TYPELESS}, {shadow_atlas_.Get(), DXGI_FORMAT_R32_FLOAT}, {scene_[0].Get(), rt.fmt},
@@ -8621,15 +8661,17 @@ void Renderer::FogPass(Target& rt, Target& ds) {
     if (!pso) return;
     Transition(ds.res.Get(), ds.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     uint32_t slot = AllocSrvSlots(7);
-    std::pair<rhi::Resource*, DXGI_FORMAT> src[2] = {{ds.res.Get(), DXGI_FORMAT_R24_UNORM_X8_TYPELESS},
-                                                      {shadow_atlas_.Get(), DXGI_FORMAT_R32_FLOAT}};
+    // (the screen's mask too: the sky box's pixels, no shafts on them)
+    std::pair<rhi::Resource*, DXGI_FORMAT> src[4] = {{ds.res.Get(), DXGI_FORMAT_R24_UNORM_X8_TYPELESS},
+                                                      {shadow_atlas_.Get(), DXGI_FORMAT_R32_FLOAT}, {nullptr, kBgra},
+                                                      {chars_marked_ ? scene_[2].Get() : nullptr, DXGI_FORMAT_R8_UNORM}};
     for (uint32_t i = 0; i < 7; i++) {
         D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
-        sv.Format = i < 2 ? src[i].second : kBgra;
+        sv.Format = i < 4 ? src[i].second : kBgra;
         sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         sv.Texture2D.MipLevels = 1;
-        dev_->CreateSrv(i < 2 ? src[i].first : nullptr, &sv, Cpu(rhi::Heap::Srv, slot + i));
+        dev_->CreateSrv(i < 4 ? src[i].first : nullptr, &sv, Cpu(rhi::Heap::Srv, slot + i));
     }
     constexpr size_t kMaskFloats = sizeof(mask_params_) / sizeof(float);
     float P[kMaskFloats + 8];
@@ -9753,6 +9795,7 @@ void Renderer::SceneOcclusion() {
     bool shadows = scene_rt_ && scene_ds_ && light_.on && shadow_q_.cascades > 0 && cam_ok_;
     if (!scene_rt_ || !scene_ds_ || (!set.ao && !set.contact_shadows && !shadows)) {
         casters_.clear();
+        sky_marks_.clear();
         return;
     }
     Target& rt = *scene_rt_;
@@ -9779,6 +9822,7 @@ void Renderer::SceneOcclusion() {
     SnowTracks();
     GpuMark("snow");
     casters_.clear();
+    sky_marks_.clear();
     if (!mask) {
         // no shadows: the mask white (a null view reads 0 whatever its mapping)
         Transition(scene_[kSceneShadow].Get(), scene_state_[kSceneShadow], D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -11636,6 +11680,7 @@ void Renderer::Present(const Surface& front) {
     ResolveLight();
     light_resolved_ = false;
     casters_.clear();
+    sky_marks_.clear();
     veil_.clear();
     prev_cam_ok_ = cam_ok_;
     if (cam_ok_) std::memcpy(prev_view_, cam_view_, sizeof(prev_view_)), std::memcpy(prev_proj_, cam_proj_, sizeof(prev_proj_));

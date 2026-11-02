@@ -1267,3 +1267,57 @@ $PS2_ProgressiveTestOK	OK
 $XBX_MCOK	OK
 $NGC_MCOK	OK
 $MCOK	OK
+@132f4f17fe747ce2	Dołącz do kolumny czołgów.{Kolumna czołgów odnaleziona.
+@5c738c2db4f71fb0	Misja nieudana - M12 został zniszczony.
+@418485ebbb34cb6f	Misja nieudana - M12 został zniszczony.
+@d248d8f4d09b1605	Eskortuj kolumnę czołgów do teatru. (M12 musi przetrwać){M12 dotarł do teatru.
+@8df7bbd3ae4f01f9	Zneutralizuj obronę przeciwpancerną na drugim piętrze.{Obrona przeciwpancerna zneutralizowana.
+@c5ca160f2fc7ddd9	Dołącz do kolumny czołgów i wezwij ostrzał artyleryjski.{Ostrzał artyleryjski zakończony.
+@23e02b7cc22ae4c2	Chroń kolumnę czołgów przed obroną przeciwpancerną przy bramie miasta.{Obrona przeciwpancerna zneutralizowana.
+@8891a63f1ef925d8	Chroń kolumnę czołgów przed obroną przeciwpancerną na ulicy.{Obrona przeciwpancerna zneutralizowana.
+@00cf1e8cbd899708	Zneutralizuj obronę przeciwpancerną na trzecim piętrze.{Obrona przeciwpancerna zneutralizowana.
+@5ccb32a2df2319b4	Oczyść podziemny tunel z wrogów.{Podziemny tunel oczyszczony.
+@1fd01cc250c1707e	Chroń kolumnę czołgów przed obroną przeciwpancerną.{Obrona przeciwpancerna zneutralizowana.
+@2058def1bcf55da7	Wróg wciąż ma dostęp do drabin za tobą.
+@b7b2e4d554614cd2	Wejdź po tej drabinie, aby kontynuować.
+@ba9b76c56796afc6	Wykonaj swoje zadania, żołnierzu!
+@0e7a90a0ab4a0eed	Niemcy wciąż mają dostęp do powierzchni. Zniszcz wszystkie drabiny do włazów.
+@600299aed28296dd	Niemcy wciąż mają dostęp do włazów. Zniszcz wszystkie drabiny.
+@8ade1f251bd75803	Nie pozwól Niemcom korzystać z kanałów.{Niemcy odcięci od kanałów.
+@e5714b3b1f86f8ac	Zniszcz wszystkie drabiny prowadzące do włazów. (Pozostało: # z 5){Wszystkie drabiny do włazów zniszczone.}Pozostało drabin: # z 5.
+@83f3ff7d90dcb988	Zneutralizuj wroga w gnieździe karabinu maszynowego.{Wrogi strzelec karabinu maszynowego zneutralizowany.
+@aa679776a648920d	Znajdź drogę na powierzchnię.{Droga na powierzchnię odnaleziona.
+@d6a9ecd4bd6fcda7	Wyjdź z tunelu i dołącz do kolumny czołgów.{Wyjście z tunelu odnalezione.
+@1f8e682f5b17b459	Zniszcz stanowisko Panzerów.{Stanowisko Panzerów zniszczone.}Pozostało Panzerów: # z 2.
+@56c89a5e1400e501	Chroń pobliskich sojuszników. (1. batalion){1. batalion obroniony.
+@c668c40443dc8386	Znajdź wyjście na ulicę i dołącz do M12.{M12 odnaleziony.
+@092a0ddf9add6b7e	Zneutralizuj obronę przeciwpancerną na 2. piętrze. (M12 musi przetrwać){Obrona przeciwpancerna zneutralizowana.}Pozostało stanowisk przeciwpancernych: # z 2.
+@f746fdfee0d65949	Eskortuj kolumnę czołgów na rynek. (M12 musi przetrwać){M12 dotarł na rynek.
+@8a31766e20c7e1b4	Znajdź drogę, by oskrzydlić stanowisko Panzerów.{Droga oskrzydlenia odnaleziona.
+@d8c0b6a953e0ba47	Pokonaj czołgi przy wjeździe do 3. części miasta. (Pozostało: # z 4){Czołgi pokonane.}Pozostało czołgów: # z 4.
+@c3a14f1506491d7c	Zniszcz wszystkie Flak 88 w 2. części miasta. (Pozostało: # z 3){Flak 88 zniszczone.}Pozostało Flak 88: # z 3.
+@5b343841413a61a9	Zaparkuj czołg i oczyść budynek z żołnierzy przeciwpancernych. (Pozostało: # z 3){Żołnierze przeciwpancerni zlikwidowani.}Pozostało żołnierzy przeciwpancernych: # z 3.
+@93217d2e07ab43c8	Użyj Panzerschrecka, by odeprzeć niemiecki atak czołgów.{Atak czołgów odparty.
+@1e2062938ba2e4f9	Wsiądź z powrotem do czołgu i jedź do 3. części miasta.{Dotarłeś do 3. części miasta.
+@704726b2f490406c	Znajdź i zniszcz czołgi patrolujące 3. część miasta. (Pozostało: # z 4){Patrolujące czołgi zniszczone.}Pozostało czołgów: # z 4.
+@fb0c78cf451aab32	Dotrzyj do kościoła na drugim końcu miasta.{Dotarłeś do kościoła.
+@45ddfa16a1a2d4d5	Eskortuj M12 do strefy rozmieszczenia.{M12 dotarły do strefy rozmieszczenia.
+@f60a7b462f09eae1	Chroń M12 przed szturmem.{Niemiecki szturm odparty.
+@456c90c161c7784d	Jedź do Tillet.{Dotarłeś do Tillet.
+@9cceedf900f6b38c	Zniszcz wszystkie Flak 88 w 1. części miasta. (Pozostało: # z 3){Flak 88 zniszczone.}Pozostało Flak 88: # z 3.
+@c27ef4431a7a210d	Zaparkuj czołg i oczyść budynek z karabinierów maszynowych. (Pozostało: # z 3){Karabinierzy maszynowi zlikwidowani.}Pozostało karabinierów: # z 3.
+@eb31b5c663102e6b	Wsiądź z powrotem do czołgu i jedź do 2. części miasta.{Dotarłeś do 2. części miasta.
+@4037bf9da0291bc4	Zbadaj stan mostu.{Most jest nienaruszony.
+@1833ffc1558aece5	Zabezpiecz most.{Most zabezpieczony.
+@23b07f602db25f31	Znajdź broń przeciwpancerną w ratuszu.{Broń przeciwpancerna odnaleziona.
+@a9715f6c2d3fc5fd	Zniszcz czołgi Tygrys.{Czołgi Tygrys zniszczone.
+@ef5dd85d19b48796	Misja nieudana - Sherman "Scoop" został zniszczony.
+@5ba48ded9b906ccd	Misja nieudana - Sherman "Scoop" został zniszczony.
+@74db707f9fa82bc8	Eskortuj Shermany do mostu. ("Scoop" musi przetrwać){"Scoop" dotarł do mostu.
+@f976c829ec41bdd1	Rozbrój miny na ulicy. (Pozostało: # z 5){Miny rozbrojone.}Pozostało min: # z 5.
+@033cb39454ad90b4	Znajdź inną drogę wokół nasypu ziemi.{Droga wokół nasypu odnaleziona.
+@d93453ef07844029	czołg
+@594a20a35b1db04b	Zneutralizuj gniazdo karabinu maszynowego na szczycie południowej wieży.{Gniazdo karabinu maszynowego zneutralizowane.
+@cc9dc571ac123bea	Zneutralizuj gniazdo karabinu maszynowego na końcu mostu.{Gniazdo karabinu maszynowego zneutralizowane.
+@7ae69a71597d6c7e	Użyj działa przeciwlotniczego, by odeprzeć atak Stuk.{Atak Stuk odparty.
+@177d4594c79286ec	Przejdź przez most.{Most przekroczony.

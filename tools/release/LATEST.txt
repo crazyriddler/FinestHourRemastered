@@ -2,34 +2,58 @@
 # update release's update.json). Only this update's changes: written anew for each update. One section a language
 # ([en] needed; the others fall back to it), its lines as the game shows them. UTF-8.
 [en]
-- Last Bridge Standing: no more black lines coming and going over the far hills.
-- Uniforms: no more blue and white stripe along some seams (Church's sleeve among them).
-- Russian, Polish and Portuguese: the American missions' objectives are translated.
+- New effect, Distance Depth of Field (PC Settings, Effects): the far distance goes softly out of focus.
+- Tanks: their tracks roll as they drive and their links are no longer stretched; the T-34's periscope frame no longer smears.
+- Tank tracks in the snow: a real tread pattern pressed in, sunk into the ground and lit, no longer dark bands.
+- Level 30: the road is whole, its edge a smooth line, with no polygons of snow cut into it or seams between its tiles.
+- Branches passing right in front of the camera (a tank's periscope by the roadside firs) no longer cover the screen.
+- Planes' shadows on the ground move smoothly.
 [de]
-- Last Bridge Standing: keine schwarzen Linien mehr, die über den fernen Hügeln auftauchen und verschwinden.
-- Uniformen: kein blau-weißer Streifen mehr an manchen Nähten (darunter Churchs Ärmel).
-- Russisch, Polnisch und Portugiesisch: die Missionsziele der amerikanischen Kampagne sind übersetzt.
+- Neuer Effekt, Tiefenschärfe in der Ferne: die Ferne wird weich unscharf.
+- Panzer: ihre Ketten laufen beim Fahren mit und ihre Glieder sind nicht mehr verzerrt; der Sehschlitzrahmen des T-34 ist nicht mehr verschmiert.
+- Panzerspuren im Schnee: ein echtes Kettenprofil, in den Boden gedrückt und beleuchtet, keine dunklen Streifen mehr.
+- Level 30: die Straße ist durchgehend, ihr Rand eine glatte Linie, ohne eingeschnittene Schneepolygone oder Nähte zwischen den Kacheln.
+- Äste direkt vor der Kamera (das Sehrohr eines Panzers an den Tannen am Straßenrand) verdecken nicht mehr den Bildschirm.
+- Die Schatten der Flugzeuge auf dem Boden bewegen sich flüssig.
 [fr]
-- Last Bridge Standing : plus de lignes noires qui apparaissent et disparaissent sur les collines lointaines.
-- Uniformes : plus de bande bleue et blanche le long de certaines coutures (la manche de Church entre autres).
-- Russe, polonais et portugais : les objectifs des missions américaines sont traduits.
+- Nouvel effet, Profondeur de champ lointaine (Options PC, Effets) : le lointain devient légèrement flou.
+- Chars : leurs chenilles tournent quand ils roulent et leurs maillons ne sont plus étirés ; le cadre du périscope du T-34 n'est plus étalé.
+- Traces de chars dans la neige : une vraie empreinte de chenille, enfoncée dans le sol et éclairée, plus de bandes sombres.
+- Niveau 30 : la route est continue, son bord une ligne douce, sans polygones de neige taillés dedans ni joints entre ses dalles.
+- Les branches qui passent juste devant la caméra (le périscope d'un char près des sapins du bord de la route) ne couvrent plus l'écran.
+- Les ombres des avions sur le sol bougent sans à-coups.
 [it]
-- Last Bridge Standing: niente più linee nere che compaiono e scompaiono sulle colline lontane.
-- Uniformi: niente più striscia blu e bianca lungo alcune cuciture (tra cui la manica di Church).
-- Russo, polacco e portoghese: gli obiettivi delle missioni americane sono tradotti.
+- Nuovo effetto, Profondità di campo in lontananza (Opzioni PC, Effetti): la lontananza si sfoca leggermente.
+- Carri armati: i cingoli girano mentre si muovono e le maglie non sono più stirate; la cornice del periscopio del T-34 non è più sbavata.
+- Tracce dei carri nella neve: una vera impronta del cingolo, affondata nel terreno e illuminata, non più strisce scure.
+- Livello 30: la strada è continua, il bordo una linea morbida, senza poligoni di neve ritagliati né giunture tra le piastrelle.
+- I rami che passano proprio davanti alla telecamera (il periscopio di un carro vicino agli abeti a bordo strada) non coprono più lo schermo.
+- Le ombre degli aerei sul terreno si muovono in modo fluido.
 [es]
-- Last Bridge Standing: ya no aparecen y desaparecen líneas negras sobre las colinas lejanas.
-- Uniformes: ya no hay una franja azul y blanca en algunas costuras (entre ellas la manga de Church).
-- Ruso, polaco y portugués: los objetivos de las misiones americanas están traducidos.
+- Nuevo efecto, Profundidad de campo lejana (Ajustes de PC, Efectos): la lejanía se desenfoca suavemente.
+- Tanques: sus orugas giran al avanzar y sus eslabones ya no se ven estirados; el marco del periscopio del T-34 ya no se ve emborronado.
+- Huellas de tanque en la nieve: un dibujo de oruga de verdad, hundido en el suelo e iluminado, ya no bandas oscuras.
+- Nivel 30: la carretera es continua, su borde una línea suave, sin polígonos de nieve recortados ni cortes entre sus losas.
+- Las ramas que pasan justo delante de la cámara (el periscopio de un tanque junto a los abetos de la cuneta) ya no tapan la pantalla.
+- Las sombras de los aviones en el suelo se mueven con fluidez.
 [pt]
-- Last Bridge Standing: já não aparecem e desaparecem linhas pretas sobre as colinas distantes.
-- Uniformes: já não há uma faixa azul e branca em algumas costuras (entre elas a manga de Church).
-- Russo, polonês e português: os objetivos das missões americanas estão traduzidos.
+- Novo efeito, Profundidade de campo à distância (Opções do PC, Efeitos): ao longe fica suavemente desfocado.
+- Tanques: as lagartas giram ao andar e os elos já não aparecem esticados; a moldura do periscópio do T-34 já não está borrada.
+- Marcas de tanque na neve: um desenho de lagarta de verdade, afundado no chão e iluminado, já não faixas escuras.
+- Nível 30: a estrada é contínua, a borda uma linha suave, sem polígonos de neve recortados nem juntas entre as placas.
+- Os galhos que passam bem na frente da câmera (o periscópio de um tanque junto aos pinheiros da beira da estrada) já não cobrem a tela.
+- As sombras dos aviões no chão se movem suavemente.
 [ru]
-- Last Bridge Standing: над далёкими холмами больше не появляются и не исчезают чёрные линии.
-- Форма: больше нет сине-белой полосы вдоль некоторых швов (в том числе на рукаве Чёрча).
-- Русский, польский и португальский: задания американских миссий переведены, внесены правки рецензента.
+- Новый эффект, ГРИП вдали (Настройки ПК, Эффекты): даль мягко размывается.
+- Танки: гусеницы крутятся при движении, траки больше не растянуты; рамка перископа Т-34 больше не размазана.
+- Следы танков на снегу: настоящий рисунок гусениц, вдавленный в землю и освещённый, а не тёмные полосы.
+- Уровень 30: дорога сплошная, её край — плавная линия, без вырезанных снежных многоугольников и швов между плитками.
+- Ветки прямо перед камерой (перископ танка у придорожных елей) больше не закрывают экран.
+- Тени самолётов на земле движутся плавно.
 [pl]
-- Last Bridge Standing: nad odległymi wzgórzami nie pojawiają się już i nie znikają czarne linie.
-- Mundury: nie ma już niebiesko-białego paska wzdłuż niektórych szwów (m.in. na rękawie Churcha).
-- Rosyjski, polski i portugalski: cele misji amerykańskich są przetłumaczone.
+- Nowy efekt, Głębia ostrości w oddali (Opcje PC, Efekty): dal delikatnie traci ostrość.
+- Czołgi: gąsienice obracają się podczas jazdy, a ogniwa nie są już rozciągnięte; rama peryskopu T-34 nie jest już rozmazana.
+- Ślady czołgów na śniegu: prawdziwy wzór gąsienicy, wciśnięty w ziemię i oświetlony, a nie ciemne pasy.
+- Poziom 30: droga jest ciągła, jej brzeg to gładka linia, bez wyciętych wielokątów śniegu i szwów między płytami.
+- Gałęzie tuż przed kamerą (peryskop czołgu przy przydrożnych jodłach) nie zasłaniają już ekranu.
+- Cienie samolotów na ziemi poruszają się płynnie.

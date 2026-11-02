@@ -5800,6 +5800,10 @@ void Renderer::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t coun
     // periscope, filled the screen for a frame or two as a dark blot
     if (!flat && draw_tex0_ && !g_texview.load())
         if (const remaster::Material* m = remaster::Find(draw_tex0_); m && m->sway >= 1) c.cell[1] = 1;
+    // a character in the third person (cell.z): where the game's mapping draws its texture out (a uniform's back and
+    // shoulders, level 30's snow suits) the remastered colour softened, its fine grain drawn out read as patches of
+    // streaks; its cloth's weave laid over the model itself
+    if (draw_character_ && sh.prog && !flat && !occlusion_done_) c.cell[2] = 1;
     // a character's light (Character Lighting)
     if (app::Get().character_light && draw_character_ && sh.prog && !flat && !g_texview.load()) c.mrefl[2] = 1;
     // a glowing sprite: past white in the HDR scene (its bloom), and its light

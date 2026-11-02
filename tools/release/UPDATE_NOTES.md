@@ -332,6 +332,19 @@ The version installed is in `version.txt` beside the game. Unattended:
   artists' checker between the texture's pieces is filled with the cloth's own colours.
 - Russian, Polish and Portuguese: the American missions' objectives and failure messages are translated (they
   showed in English); the Russian reviewer's corrections are in ("Задание провалено" and more).
+- New effect, Distance Depth of Field (PC Settings, Effects; on in the Very High and High presets): the far
+  distance, the hills and the horizon, goes softly out of focus.
+- Tanks: their tracks roll as they drive, as far as the tank goes (the game's own animation for them only crawled
+  at one speed, and was never drawn); the remodelled tracks' links are no longer drawn out into chevrons, and the
+  T-34's periscope frame no longer smears at its corners.
+- Tank tracks in the snow: each tread presses its links in (a grouser a link, the guide teeth's groove, the pins'
+  holes), sunk into the ground's relief and lit by the side they face, no longer a dark band.
+- Level 30: the road is whole. Its tiles are stitched where they meet (colour, relief and height), the parallax
+  stays within each tile, and its outline is a smooth line: no more steps of whole tiles, nor polygons of snow cut
+  into it.
+- Branches passing right in front of the camera (a tank's periscope by the roadside firs) fade out instead of
+  covering the screen with a dark blot for a frame.
+- Shadows of what moves far off (planes over the ground) are drawn as often as the near ones.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

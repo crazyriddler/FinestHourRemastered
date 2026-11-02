@@ -55,6 +55,7 @@ struct VOut {
     float4 pn : TEXCOORD7;    // the normal, for per pixel lighting (PixelLightingId, FixedLightingId)
     float4 pv : TEXCOORD8;    // w 1: view space position (fixed function), w 2: a program's own position
     float psize : TEXCOORD9;  // a point's size in console pixels (PointSpriteGsHlsl)
+    float4 bp : TEXCOORD11;   // w 1: a program's position as it came in (a character's own, before its bones move it)
 };
 cbuffer VC : register(b0) { float4 c[192]; };
 cbuffer DC : register(b1) {
@@ -1041,6 +1042,8 @@ std::string VertexProgramHlsl(const std::vector<uint32_t>& prog, uint16_t regs, 
     }
     std::string tail = kVsEpilogue;
     tail.replace(tail.rfind("    return o;"), 0, "    o.pn = pN;\n    o.pv = pP;\n");
+    // (the position it came in with: a character's cloth woven over it, not over its texture's mapping)
+    if (regs & 1) tail.replace(tail.rfind("    return o;"), 0, "    o.bp = float4(i.v0.xyz, 1);\n");
     return s + tail;
 }
 
@@ -1453,7 +1456,7 @@ VOut ds(PnPatch pt, float3 uvw : SV_DomainLocation, const OutputPatch<VOut, 3> v
 #define LERP3(f) (v[0].f * u + v[1].f * w0 + v[2].f * w1)
     o.pos = LERP3(pos); o.d0 = LERP3(d0); o.d1 = LERP3(d1); o.b0 = LERP3(b0); o.b1 = LERP3(b1);
     o.tc0 = LERP3(tc0); o.tc1 = LERP3(tc1); o.tc2 = LERP3(tc2); o.tc3 = LERP3(tc3);
-    o.fogamt = LERP3(fogamt); o.cpos = LERP3(cpos); o.pn = LERP3(pn); o.pv = LERP3(pv); o.psize = v[0].psize;
+    o.fogamt = LERP3(fogamt); o.cpos = LERP3(cpos); o.pn = LERP3(pn); o.pv = LERP3(pv); o.bp = LERP3(bp); o.psize = v[0].psize;
     if (pt.usable > 0) {
         float u2 = u * u, v2 = w0 * w0, w2 = w1 * w1;
         float3 P = v[0].pv.xyz * u2 * u + v[1].pv.xyz * v2 * w0 + v[2].pv.xyz * w2 * w1 +
@@ -1901,7 +1904,8 @@ std::string MaterialSetup(int i, const std::string& uv) {
          // and the area between them)
          "float mSs = dot(mPu, mPu) + dot(mPv, mPv), mSa = length(cross(mPu, mPv));\n"
          "float mSq = sqrt(max(mSs * mSs - 4 * mSa * mSa, 0));\n"
-         "float mFlat = abs(mJd) > 1e-20 ? 1 - smoothstep(2, 4, sqrt((mSs + mSq) / max(mSs - mSq, 1e-30 * mSs + 1e-30))) : 1;\n";
+         "float mStr = abs(mJd) > 1e-20 ? sqrt((mSs + mSq) / max(mSs - mSq, 1e-30 * mSs + 1e-30)) : 1;\n"
+         "float mFlat = 1 - smoothstep(2, 4, mStr);\n";
     s += "float3 mV = normalize(-mP);\n";
     // parallax occlusion: the view walks into the height field, nearer surfaces only
     // (from 14 m on the walk moves nothing: skipped). Its taps (and the soft height below) through s5, trilinear:
@@ -2009,6 +2013,9 @@ std::string MaterialSetup(int i, const std::string& uv) {
          "        mFlat = 1;\n"
          "    }\n"
          "}\n";
+    // a character's colour where its texture is drawn out (cell.z): read as coarse as it is long, the remastered grain
+    // drawn out over it read as patches of streaks on a uniform's back and shoulders
+    s += "if (cell.z > 0 && mFlat < 1) { float ks = 1 + (min(mStr, 6) - 1) * (1 - mFlat) * 0.6; mBu1 *= ks; mBu2 *= ks; }\n";
     s += F("float4 t%d = tex%d.SampleGrad(smp%d, mBu, mBu1, mBu2);\n", i, i, i);
     s += F("float3 mBase = t%d.rgb;\nfloat mAlpha = t%d.a;\n", i, i);
     // (half a level softer, as the relief's normal: the cavity's cracks and the gloss finer than a pixel flickered)
@@ -2059,14 +2066,33 @@ std::string MaterialShade(int i) {
         "        fd = saturate(1.6 - mP.z / (200 * mtl[3].z)) * lerp(0.8, -mtl[3].y, sk);\n"
         "    }\n"
         "    else if (mtl[2].w != 6) fd *= 1 - sk;\n"
+        // (a third person's cloth, cell.z: the weave over the model itself, from its three sides (about 36 cm a tile,
+        // as over the textures' mapping), not over that mapping: drawn out with it where the game's stretches the
+        // texture, streaks, and faded out there, smooth patches on the weave about them. Any other detail none there)
+        "    const bool woven = cell.z > 0 && i.bp.w > 0.5 && (mixed || mtl[2].w == 2);\n"
+        "    if (!woven) fd *= mFlat;\n"
         "    if (fd > 0) {\n"
         "        float2 dn = mdet.SampleGrad(" + MatSampler(i) + ", float3(frac(mUv * tp), mixed ? 6 : mtl[2].w), mU1 * tp, mU2 * tp).rg * 2 - 1;\n"
-        "        if (mixed) {\n"
-        "            float2 dw = mdet.SampleGrad(" + MatSampler(i) + ", float3(frac(mUv * tw), 2), mU1 * tw, mU2 * tw).rg * 2 - 1;\n"
-        "            dn = lerp(dw, dn, sk);\n"
-        "        }\n"
         "        float3 sT = normalize(mT - mNs * dot(mT, mNs) + 1e-12), sB = normalize(mB - mNs * dot(mB, mNs) + 1e-12);\n"
-        "        float3 dN = normalize(mNs + (sT * dn.x + sB * dn.y) * 0.6);\n"
+        "        float3 dv = sT * dn.x + sB * dn.y, dw = 0;\n"
+        "        if (woven) {\n"
+        "            float3 bq = i.bp.xyz / (0.36 * mtl[3].z), bx = ddx(bq), by = ddy(bq);\n"
+        "            float3 nb = abs(cross(bx, by)); nb *= nb; nb *= nb; nb /= max(nb.x + nb.y + nb.z, 1e-30);\n"
+        "            [unroll] for (int ax = 0; ax < 3; ax++) {\n"
+        "                float2 q = ax == 0 ? bq.yz : ax == 1 ? bq.zx : bq.xy;\n"
+        "                float2 q1 = ax == 0 ? bx.yz : ax == 1 ? bx.zx : bx.xy, q2 = ax == 0 ? by.yz : ax == 1 ? by.zx : by.xy;\n"
+        "                float2 d = mdet.SampleGrad(" + MatSampler(i) + ", float3(frac(q), 2), q1, q2).rg * 2 - 1;\n"
+        "                float3 qT = mDyP * q1.x + mDxP * q2.x, qB = mDyP * q1.y + mDxP * q2.y;\n"
+        "                qT = normalize(qT - mNs * dot(qT, mNs) + 1e-12), qB = normalize(qB - mNs * dot(qB, mNs) + 1e-12);\n"
+        "                dw += (qT * d.x + qB * d.y) * nb[ax];\n"
+        "            }\n"
+        "        } else if (mixed) {\n"
+        "            float2 d = mdet.SampleGrad(" + MatSampler(i) + ", float3(frac(mUv * tw), 2), mU1 * tw, mU2 * tw).rg * 2 - 1;\n"
+        "            dw = sT * d.x + sB * d.y;\n"
+        "        }\n"
+        "        if (mixed) dv = lerp(dw, dv, sk);\n"
+        "        else if (woven) dv = dw;\n"
+        "        float3 dN = normalize(mNs + dv * 0.6);\n"
         "        float3 L = mtl[1].xyz;\n"
         "        float shade = 1 + (dot(dN, L) - dot(mNs, L)) * 0.35 * fd;\n"
         "        float3 H = normalize(L + mV);\n"

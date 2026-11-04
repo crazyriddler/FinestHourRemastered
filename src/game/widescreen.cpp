@@ -31,22 +31,30 @@ float F(uint32_t va) {
 }
 void SetF(uint32_t va, float f) { std::memcpy(HostPtr(va), &f, 4); }
 
-// the screen camera and its view window's x as the game set it (4:3) and as widened
+// the screen camera and its view window's x as the game set it (4:3) and as widened, and the Field of View's scale
 uint32_t g_narrow[1] = {0};
-float g_narrow_x = 0, g_wide_x = 0;
-int g_own_projection = 0;  // inside one of the game's passes that make their own projection
+float g_narrow_x = 0, g_wide_x = 0, g_fov_k = 1.0f;
+int g_own_projection = 0;    // inside one of the game's passes that make their own projection
+float g_own_fov_k = 1.0f;    // the Field of View's scale for that pass's projection
 
 // The game's own passes for some models (lit static ones: buildings around a scene, props; and a second set of
 // three matrices) make their projection with D3DXMatrixPerspectiveFovLH from the camera's view window x, as a 4:3
 // field of view and a 4/3 aspect. Widened, that x made the models' view too tall, squashed and sliding against the
-// rest as the view turned. The passes see the 4:3 x, and their 4/3 aspect becomes the screen's.
+// rest as the view turned. The passes see the game's own 4:3 x, and their 4/3 aspect becomes the screen's. A Field of
+// View is put on their projection afterwards (D3DXMatrixPerspectiveFovLH below): the passes turn x into an angle by an
+// approximation that holds near the game's own (1.5% off there, as on the console) but drifts as x grows (5% at 95
+// degrees), and the lamp-lit buildings they draw slid out from under the darker level around them, lit panels showing
+// at the screen's sides (Issue #48).
 void OwnProjection(X86Context& ctx, uint8_t* base, X86Func* pass) {
     uint32_t cam = R32(0x3E25C4);
     bool swap = cam && cam == g_narrow[0] && g_narrow_x > 0 && std::fabs(F(cam + 0x68) - g_wide_x) < 1e-5f;
     if (swap) SetF(cam + 0x68, g_narrow_x);
+    const float k = g_own_fov_k;
+    g_own_fov_k = swap ? g_fov_k : 1.0f;
     g_own_projection++;
     pass(ctx, base);
     g_own_projection--;
+    g_own_fov_k = k;
     if (swap) SetF(cam + 0x68, g_wide_x);
 }
 
@@ -64,15 +72,16 @@ X86_FUNC(sub_001C6A20) {
     if (screen) {
         cod::wide::SetCamera(camera);
         static uint32_t wide = mem::AllocSystem(8);
-        float k = (cod::wide::FrontEnd() ? 1.0f : cod::wide::Widen()) * cod::wide::FovScale(x);
+        const float fov = cod::wide::FovScale(x);
+        float k = (cod::wide::FrontEnd() ? 1.0f : cod::wide::Widen()) * fov;
         SetF(wide, x * k);
-        SetF(wide + 4, y * cod::wide::FovScale(x));
+        SetF(wide + 4, y * fov);
         W32(ctx.esp + 8, wide);  // the argument, the caller's own view window is left as it is
-        cod::wide::SetViewWindow(x * k, y * cod::wide::FovScale(x));
+        cod::wide::SetViewWindow(x * k, y * fov);
         __imp__sub_001C6A20(ctx, base);
         static const char* const watch = std::getenv("XBE_WATCH");
         if (watch && !cod::wide::FrontEnd()) cod::watch::Arm(camera + uint32_t(std::strtoul(watch, nullptr, 16)), 4);
-        g_narrow[0] = camera, g_narrow_x = x * cod::wide::FovScale(x), g_wide_x = x * k;
+        g_narrow[0] = camera, g_narrow_x = x, g_wide_x = x * k, g_fov_k = fov;
         return;
     }
     static int n = 0;
@@ -281,13 +290,15 @@ X86_FUNC(sub_000D9E30) { OwnProjection(ctx, base, __imp__sub_000D9E30); }
 X86_EXTERN_FUNC(__imp__sub_0012E5E0);
 X86_FUNC(sub_0012E5E0) { OwnProjection(ctx, base, __imp__sub_0012E5E0); }
 
-// D3DXMatrixPerspectiveFovLH(out, fovy, aspect, near, far)
+// D3DXMatrixPerspectiveFovLH(out, fovy, aspect, near, far): in the game's own passes, the screen's aspect and the
+// Field of View (its scale on the half extents at distance 1, the angle's tangent)
 X86_EXTERN_FUNC(__imp__sub_00232EED);
 X86_FUNC(sub_00232EED) {
     if (g_own_projection) {
         float aspect = F(ctx.esp + 12);
         float widen = cod::Get().widescreen && !cod::wide::FrontEnd() ? cod::wide::Widen() : 1.0f;
         if (std::fabs(aspect - 4.0f / 3.0f) < 1e-3f && widen > 1.0f) SetF(ctx.esp + 12, aspect * widen);
+        if (g_own_fov_k != 1.0f) SetF(ctx.esp + 8, 2.0f * std::atan(std::tan(F(ctx.esp + 8) * 0.5f) * g_own_fov_k));
     }
     __imp__sub_00232EED(ctx, base);
 }

@@ -345,6 +345,12 @@ The version installed is in `version.txt` beside the game. Unattended:
 - Branches passing right in front of the camera (a tank's periscope by the roadside firs) fade out instead of
   covering the screen with a dark blot for a frame.
 - Shadows of what moves far off (planes over the ground) are drawn as often as the near ones.
+- Soldiers' uniforms (level 30's snow suits most of all): no more patches of stretched texture on the back,
+  shoulders and sleeves. The cloth's weave is laid over the model itself, even all over, and the colour is softened
+  where the game's own mapping draws the texture out.
+- A wider Field of View no longer lights up buildings at the sides of the screen (Mission: Matmata's lamp-lit
+  houses glowed through the night there, issue #48): the game's own projection for its lit buildings now takes the
+  Field of View exactly, as the rest of the level does.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

@@ -23,7 +23,7 @@ struct Settings {
     bool vsync = true;
     uint32_t renderer = 0;           // the graphics API: 0 Direct3D 12, 1 Vulkan (from the next start)
     uint32_t speakers = 0;           // the sound: 0 stereo, 1 5.1 surround (from the next start)
-    uint32_t volume = 100;           // percent: all the sound (Issue #51)
+    uint32_t volume = 70;            // percent: all the sound (Issue #51: at 100 the game's mix is loud)
     uint32_t volume_music = 100;     // percent of that: the music, the voices and the effects (Issue #56)
     uint32_t volume_voices = 100;
     uint32_t volume_effects = 100;

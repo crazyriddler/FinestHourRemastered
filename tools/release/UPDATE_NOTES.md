@@ -359,6 +359,8 @@ The version installed is in `version.txt` beside the game. Unattended:
 - God Mode turned off in a mission takes effect at once (issue #50): the player could not be hurt until the next one.
 - A crash just after finishing a mission (Airfield Ambush, issue #55): a frame left behind in RenderWare's list of
   frames to update, its memory freed with the level, is now dropped from the list instead of being read.
+- The sound is quieter by default (issue #51): Volume starts at 70%, about 6 dB under the game's own mix; a
+  Volume set by hand is kept.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

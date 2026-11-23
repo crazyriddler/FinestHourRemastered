@@ -2,42 +2,18 @@
 # update release's update.json). Only this update's changes: written anew for each update. One section a language
 # ([en] needed; the others fall back to it), its lines as the game shows them. UTF-8.
 [en]
-- Volume settings (PC Settings, General): Volume, Music, Voices and Effects.
-- Remastered Interface (PC Settings, Graphics): the HUD, menus and text on their own, apart from the world's Remastered Textures.
-- God Mode turned off takes effect at once, not at the next mission.
-- A crash just after finishing a mission (Airfield Ambush) is gone.
+- The sound is quieter by default: Volume (PC Settings, General) starts at 70%. If you had set it yourself, your setting is kept.
 [de]
-- Lautstärke-Einstellungen (PC-Einstellungen, Allgemein): Lautstärke, Musik, Stimmen und Effekte.
-- Remasterte Oberfläche (PC-Einstellungen, Grafik): HUD, Menüs und Text für sich, getrennt von den remasterten Texturen der Welt.
-- Ein ausgeschalteter Gott-Modus wirkt sofort, nicht erst in der nächsten Mission.
-- Ein Absturz direkt nach dem Abschluss einer Mission (Airfield Ambush) ist behoben.
+- Der Ton ist standardmäßig leiser: Die Lautstärke (PC-Einstellungen, Allgemein) beginnt bei 70 %. Wer sie selbst eingestellt hat, behält seinen Wert.
 [fr]
-- Réglages du volume (Options PC, Général) : Volume, Musique, Voix et Effets.
-- Interface remastérisée (Options PC, Graphismes) : le HUD, les menus et le texte à part, séparés des textures remastérisées du monde.
-- Le mode Dieu désactivé prend effet tout de suite, et non à la mission suivante.
-- Un plantage juste après la fin d'une mission (Airfield Ambush) est corrigé.
+- Le son est moins fort par défaut : le Volume (Options PC, Général) commence à 70 %. Si vous l'aviez réglé vous-même, votre réglage est conservé.
 [it]
-- Impostazioni del volume (Opzioni PC, Generale): Volume, Musica, Voci ed Effetti.
-- Interfaccia rimasterizzata (Opzioni PC, Grafica): l'HUD, i menu e il testo a parte, separati dalle texture rimasterizzate del mondo.
-- La modalità Dio disattivata ha effetto subito, non alla missione successiva.
-- Un crash subito dopo la fine di una missione (Airfield Ambush) è stato risolto.
+- L'audio è più basso di base: il Volume (Opzioni PC, Generale) parte dal 70%. Se l'avevi regolato tu, la tua impostazione resta.
 [es]
-- Ajustes de volumen (Ajustes de PC, General): Volumen, Música, Voces y Efectos.
-- Interfaz remasterizada (Ajustes de PC, Gráficos): el HUD, los menús y el texto por separado de las texturas remasterizadas del mundo.
-- El modo Dios desactivado surte efecto al momento, no en la misión siguiente.
-- Se ha corregido un cierre justo después de terminar una misión (Airfield Ambush).
+- El sonido es más bajo por defecto: el Volumen (Ajustes de PC, General) empieza en el 70 %. Si lo habías cambiado tú, se mantiene tu ajuste.
 [pt]
-- Definições de volume (Opções do PC, Geral): Volume, Música, Vozes e Efeitos.
-- Interface remasterizada (Opções do PC, Gráficos): o HUD, os menus e o texto à parte, separados das texturas remasterizadas do mundo.
-- O modo Deus desligado tem efeito de imediato, não na missão seguinte.
-- Foi corrigido um fecho do jogo logo após terminar uma missão (Airfield Ambush).
+- O som é mais baixo por predefinição: o Volume (Opções do PC, Geral) começa nos 70%. Se o tinha ajustado, a sua definição mantém-se.
 [ru]
-- Настройки громкости (Настройки ПК, Общие): громкость, музыка, голоса и эффекты.
-- Интерфейс ремастера (Настройки ПК, Графика): HUD, меню и текст отдельно от текстур ремастера для мира.
-- Выключенный режим бога действует сразу, а не со следующей миссии.
-- Исправлен вылет сразу после завершения миссии (Airfield Ambush).
+- Звук по умолчанию тише: громкость (Настройки ПК, Общие) начинается с 70%. Если вы меняли её сами, ваша настройка сохраняется.
 [pl]
-- Ustawienia głośności (Opcje PC, Ogólne): głośność, muzyka, głosy i efekty.
-- Interfejs remastera (Opcje PC, Grafika): HUD, menu i tekst osobno, niezależnie od tekstur remastera świata.
-- Wyłączony tryb boga działa od razu, a nie dopiero od następnej misji.
-- Naprawiono awarię tuż po ukończeniu misji (Airfield Ambush).
+- Dźwięk jest domyślnie cichszy: głośność (Opcje PC, Ogólne) zaczyna się od 70%. Jeśli była ustawiona ręcznie, ustawienie zostaje.

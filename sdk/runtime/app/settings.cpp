@@ -70,7 +70,10 @@ void Load() {
     s.vsync = t["vsync"].value_or(s.vsync);
     s.renderer = t["renderer"].value_or(std::string(s.renderer ? "vulkan" : "d3d12")) == "vulkan" ? 1 : 0;
     s.speakers = t["speakers"].value_or(std::string(s.speakers ? "5.1" : "stereo")) == "5.1" ? 1 : 0;
-    s.volume = std::clamp<uint32_t>(t["volume"].value_or(s.volume), 0, 100);
+    // the sound's volume, saved as sound_volume: the first update with the volumes saved "volume = 100" for every
+    // player who had not touched it; that one's 100 is taken for the default now (70), any other value kept
+    if (auto v = t["sound_volume"].value<int64_t>()) s.volume = uint32_t(std::clamp<int64_t>(*v, 0, 100));
+    else if (auto old = t["volume"].value<int64_t>(); old && *old != 100) s.volume = uint32_t(std::clamp<int64_t>(*old, 0, 100));
     s.volume_music = std::clamp<uint32_t>(t["volume_music"].value_or(s.volume_music), 0, 100);
     s.volume_voices = std::clamp<uint32_t>(t["volume_voices"].value_or(s.volume_voices), 0, 100);
     s.volume_effects = std::clamp<uint32_t>(t["volume_effects"].value_or(s.volume_effects), 0, 100);
@@ -165,7 +168,7 @@ toml::table Table() {
                   {"vsync", s.vsync},
                   {"renderer", s.renderer ? "vulkan" : "d3d12"},
                   {"speakers", s.speakers ? "5.1" : "stereo"},
-                  {"volume", int64_t(s.volume)},
+                  {"sound_volume", int64_t(s.volume)},
                   {"volume_music", int64_t(s.volume_music)},
                   {"volume_voices", int64_t(s.volume_voices)},
                   {"volume_effects", int64_t(s.volume_effects)},

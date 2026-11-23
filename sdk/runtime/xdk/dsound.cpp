@@ -1,12 +1,17 @@
 // DirectSound (XDK 5849) on a host software mixer. Buffers and streams are read from guest memory as they play.
 #include <algorithm>
+#include <cctype>
 #include <atomic>
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
 #include <deque>
+#include <functional>
 #include <map>
+#include <mutex>
+#include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include "app/app.h"
@@ -120,6 +125,9 @@ struct Voice {
     // ADPCM block cache
     int64_t block = -1;
     int16_t decoded[65 * 8];
+    // its kind for the volumes (Sort): kUnsorted until known, and the sound it was sorted by
+    uint8_t kind = 0;
+    uint64_t kind_key = 0;
 };
 
 struct Done {
@@ -325,6 +333,150 @@ void Levels6(Voice& v, float g[2][6]) {
     }
 }
 
+// The volumes (PC Settings: Volume, Music, Voices, Effects): each voice's kind, as it is played.
+// - a stream's voice (the title's own audio streams: RenderWare Audio plays each through a looping buffer of 2048
+//   ADPCM blocks a channel, 73728 bytes): music in stereo, voices in mono (the streams it has per language: the
+//   stereo ones its score, the mono ones its long lines);
+// - PCM: the movies' sound, under the master volume alone;
+// - a sound from the title's sound banks (NoteBankRead: the folders it reads them from by language): a voice where
+//   the same bank in another language lacks it (a line spoken), an effect where it has it too (a gunshot is the same
+//   in every language). Looked up on a thread of its own, once a sound (its middle 128 bytes): until then an effect.
+enum : uint8_t { kUnsorted, kEffects, kVoices, kMusic, kMovie };
+constexpr uint32_t kStreamRing = 73728;  // a stream's buffer, a channel
+std::mutex g_sort_lock;
+std::condition_variable g_sort_cv;
+struct SortJob {
+    uint64_t key;
+    std::vector<uint8_t> window;
+    float seconds;  // (the log's)
+};
+std::deque<SortJob> g_sort_jobs;
+std::unordered_map<uint64_t, uint8_t> g_sorted;  // by sound
+std::vector<std::string> g_banks;                // as the title named them, the latest last
+bool g_sort_thread = false;
+
+std::string Lower(std::string t) {
+    for (char& c : t) c = char(std::tolower(static_cast<unsigned char>(c)));
+    return t;
+}
+
+// a bank's file, read once (the title's banks and the other languages' of the same name)
+const std::vector<uint8_t>& BankFile(const std::string& path) {
+    static std::unordered_map<std::string, std::vector<uint8_t>> files;
+    static size_t total = 0;
+    auto it = files.find(path);
+    if (it != files.end()) return it->second;
+    if (total > (96u << 20)) files.clear(), total = 0;
+    std::vector<uint8_t> b;
+    kernel::ReadGameFile(path, b);
+    total += b.size();
+    return files.emplace(path, std::move(b)).first->second;
+}
+
+bool Holds(const std::vector<uint8_t>& file, const std::vector<uint8_t>& w) {
+    return !file.empty() &&
+           std::search(file.begin(), file.end(), std::boyer_moore_horspool_searcher(w.begin(), w.end())) != file.end();
+}
+
+uint8_t SortBankSound(const std::vector<uint8_t>& w) {
+    std::vector<std::string> banks;
+    {
+        std::lock_guard<std::mutex> l(g_sort_lock);
+        banks.assign(g_banks.rbegin(), g_banks.rend());
+    }
+    for (const std::string& bank : banks) {
+        if (!Holds(BankFile(bank), w)) continue;
+        // ...\<language>\<file>: the same file in another language's folder
+        size_t file = bank.rfind('\\');
+        size_t lang = file == std::string::npos || file == 0 ? std::string::npos : bank.rfind('\\', file - 1);
+        if (lang == std::string::npos) return kEffects;
+        const std::string own = Lower(bank.substr(lang + 1, file - lang - 1));
+        for (const char* other : {"english", "french", "italian", "spanish"}) {
+            if (own == other) continue;
+            const std::vector<uint8_t>& alt = BankFile(bank.substr(0, lang + 1) + other + bank.substr(file));
+            if (alt.empty()) continue;
+            return Holds(alt, w) ? kEffects : kVoices;
+        }
+        return kEffects;
+    }
+    return kEffects;  // (in no bank the title read)
+}
+
+void SortThread() {
+    for (;;) {
+        SortJob job;
+        {
+            std::unique_lock<std::mutex> l(g_sort_lock);
+            g_sort_cv.wait(l, [] { return !g_sort_jobs.empty(); });
+            job = std::move(g_sort_jobs.front());
+            g_sort_jobs.pop_front();
+            if (g_sorted.count(job.key)) continue;
+        }
+        uint8_t kind = SortBankSound(job.window);
+        static const bool log = std::getenv("XBE_VOLUME_LOG") != nullptr;
+        if (log)
+            LOGR("dsound: sound %016llx (%.2f s) sorted %s", (unsigned long long)job.key, job.seconds, kind == kVoices ? "voices" : "effects");
+        std::lock_guard<std::mutex> l(g_sort_lock);
+        g_sorted[job.key] = kind;
+    }
+}
+
+// as Play starts the voice: its kind, or a look up queued
+void Sort(Voice& v) {
+    v.kind_key = 0;
+    if (v.tag == 1) {
+        v.kind = kMovie;
+        return;
+    }
+    // tests (XBE_VOLUME_LOG): each sound's kind as it is sorted
+    static const bool log = std::getenv("XBE_VOLUME_LOG") != nullptr;
+    if (v.looping && v.channels && v.play_len == kStreamRing * v.channels) {
+        v.kind = v.channels >= 2 ? kMusic : kVoices;
+        if (log) LOGR("dsound: stream voice %08X, %u channels at %u Hz: %s", v.obj, v.channels, v.rate, v.kind == kMusic ? "music" : "voices");
+        return;
+    }
+    uint32_t region = v.play_len ? v.play_len : v.bytes, block = 36u * std::max<uint32_t>(v.channels, 1);
+    if (!v.data || region < 16) {
+        v.kind = kEffects;
+        return;
+    }
+    uint32_t len = std::min<uint32_t>(128, region), at = region > 2 * len ? region / 2 / block * block : 0;
+    if (at + len > region) at = region - len;
+    const uint8_t* p = static_cast<const uint8_t*>(HostPtr(v.data + v.play_start + at));
+    uint64_t key = 1469598103934665603ull ^ v.channels;
+    for (uint32_t i = 0; i < len; i++) key = (key ^ p[i]) * 1099511628211ull;
+    std::lock_guard<std::mutex> l(g_sort_lock);
+    auto it = g_sorted.find(key);
+    if (it != g_sorted.end()) {
+        v.kind = it->second;
+        return;
+    }
+    v.kind = kUnsorted, v.kind_key = key;
+    if (!g_sort_thread) {
+        g_sort_thread = true;
+        std::thread(SortThread).detach();
+    }
+    const float seconds = float(region) / float(block) * 64.0f / float(std::max<uint32_t>(v.freq ? v.freq : v.rate, 1));
+    g_sort_jobs.push_back({key, std::vector<uint8_t>(p, p + len), seconds});
+    g_sort_cv.notify_one();
+}
+
+// the volume the settings give the voice's kind
+float KindGain(Voice& v) {
+    if (v.kind == kUnsorted && v.kind_key) {
+        std::lock_guard<std::mutex> l(g_sort_lock);
+        auto it = g_sorted.find(v.kind_key);
+        if (it != g_sorted.end()) v.kind = it->second, v.kind_key = 0;
+    }
+    const app::Settings& set = app::Get();
+    uint32_t k = v.kind == kMusic    ? set.volume_music
+                 : v.kind == kVoices ? set.volume_voices
+                 : v.kind == kMovie  ? 100u
+                                     : set.volume_effects;
+    float g = float(std::min<uint32_t>(set.volume, 100)) * float(std::min<uint32_t>(k, 100)) / 10000.0f;
+    return g * g;  // (a slider's half heard as about half as loud)
+}
+
 // a stream goes quiet: the synch hold ends, a started one loses its pause as well
 void Deactivate(Voice& v) {
     v.sync = false;
@@ -332,6 +484,9 @@ void Deactivate(Voice& v) {
 }
 
 void Render(float* out, uint32_t frames) {
+    static const bool levels = std::getenv("XBE_VOLUME_LOG") != nullptr;
+    static double kind_sq[5] = {};
+    static uint64_t kind_frames = 0;
     const uint32_t nc = g_out;
     std::memset(out, 0, frames * nc * sizeof(float));
     std::lock_guard<std::recursive_mutex> lock(g_lock);
@@ -345,6 +500,9 @@ void Render(float* out, uint32_t frames) {
             Levels(v, s);
             for (int c = 0; c < 2; c++) g[c][0] = s[c][0], g[c][1] = s[c][1];
         }
+        if (const float kg = KindGain(v); kg != 1.0f)
+            for (int c = 0; c < 2; c++)
+                for (uint32_t k = 0; k < nc; k++) g[c][k] *= kg;
         uint32_t base = v.data + v.play_start;
         double step = double(v.freq ? v.freq : v.rate) / audio::kRate;
         for (uint32_t i = 0; i < frames; i++) {
@@ -401,10 +559,24 @@ void Render(float* out, uint32_t frames) {
             b += (b1 - b) * t;
             float* o = out + size_t(i) * nc;
             for (uint32_t k = 0; k < nc; k++) o[k] += a * g[0][k] + b * g[1][k];
+            if (levels)
+                for (uint32_t k = 0; k < nc; k++) {
+                    const double x = a * g[0][k] + b * g[1][k];
+                    kind_sq[std::min<uint8_t>(v.kind, kMovie)] += x * x;
+                }
             v.pos += step;
         }
     }
     for (uint32_t i = 0; i < frames * nc; i++) out[i] = std::clamp(out[i], -1.0f, 1.0f);
+    // tests (XBE_VOLUME_LOG): each kind's loudness in the mix (its voices' own share, RMS over the channels, dB) every
+    // 2 seconds
+    if (levels && (kind_frames += frames) >= audio::kRate * 2) {
+        auto db = [&](double q) { return 10 * std::log10(q / double(kind_frames * nc) + 1e-12); };
+        LOGR("dsound: levels music %.1f voices %.1f effects %.1f movies %.1f dB", db(kind_sq[kMusic]), db(kind_sq[kVoices]),
+             db(kind_sq[kEffects] + kind_sq[kUnsorted]), db(kind_sq[kMovie]));
+        for (double& q : kind_sq) q = 0;
+        kind_frames = 0;
+    }
 }
 
 int64_t NowMs() {
@@ -735,6 +907,7 @@ BUFFER(Play, 4) {
     v.looping = a[3] & 1;
     if (a[3] & 2) v.pos = 0;
     v.sync = a[3] & 4;
+    Sort(v);
     return 0;
 }
 BUFFER(Stop, 1) {
@@ -1012,6 +1185,19 @@ STREAM(SetVelocity, 5) { return 0; }
 STREAM(SetI3DL2Source, 3) { return 0; }
 
 namespace xdk::dsound {
+
+void NoteBankRead(const std::string& xbox_path) {
+    const std::string low = Lower(xbox_path);
+    if (low.find("\\sb_awd\\") == std::string::npos) return;
+    std::lock_guard<std::mutex> l(g_sort_lock);
+    auto it = std::find(g_banks.begin(), g_banks.end(), xbox_path);
+    if (it != g_banks.end()) {
+        if (it + 1 == g_banks.end()) return;
+        g_banks.erase(it);
+    }
+    g_banks.push_back(xbox_path);
+    if (g_banks.size() > 256) g_banks.erase(g_banks.begin());
+}
 
 void RememberNextSound() { g_remember_until = SteadyNow() + 0.25; }
 

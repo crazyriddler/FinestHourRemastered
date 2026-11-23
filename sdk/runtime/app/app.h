@@ -23,6 +23,10 @@ struct Settings {
     bool vsync = true;
     uint32_t renderer = 0;           // the graphics API: 0 Direct3D 12, 1 Vulkan (from the next start)
     uint32_t speakers = 0;           // the sound: 0 stereo, 1 5.1 surround (from the next start)
+    uint32_t volume = 100;           // percent: all the sound (Issue #51)
+    uint32_t volume_music = 100;     // percent of that: the music, the voices and the effects (Issue #56)
+    uint32_t volume_voices = 100;
+    uint32_t volume_effects = 100;
     uint32_t aniso = 16;             // 0 as the game asks
     bool smaa = true;                // SMAA on the shown frame
     bool fxaa = true;                // Anti-Aliasing: FXAA on the 3D scene (the HUD is drawn over it after)
@@ -73,7 +77,8 @@ struct Settings {
     bool reflections = true;         // glossy surfaces (metal, glass, varnished wood, wet stone) reflect the scene
     bool sun_moon = true;            // the sun (by day) or the moon (by night) in the sky, where the level's light is
     bool clouds = true;              // drifting clouds over the sky, lit by it and the sun
-    bool remaster = true;            // the remaster pack's textures and materials, when there is one
+    bool remaster = true;            // the remaster pack's textures and materials, when there is one (the 3D world)
+    bool remaster_ui = true;         // ... and its 2D: the HUD, menus and text (Issue #52)
     bool materials = true;           // its normal, height and specular maps lighting the surfaces
     bool parallax = true;            // parallax occlusion from its height maps
     bool detail = true;              // detail normal maps tiled over the surfaces close up

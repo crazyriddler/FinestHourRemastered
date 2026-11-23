@@ -15,6 +15,7 @@
 #include "core/log.h"
 #include "gpu/backend.h"
 #include "kernel/kernel.h"
+#include "xdk/dsound.h"
 #include "xdk/hle.h"
 
 using namespace kernel;
@@ -82,6 +83,7 @@ void PatchStrings(const std::string& path, uint64_t pos, uint8_t* data, uint32_t
         uint32_t n;
         ~Then() { cod::lang::Patch(path, pos, data, n); }
     } then{path, pos, data, n};
+    if (pos == 0) xdk::dsound::NoteBankRead(path);  // (the volumes' kinds: its sound banks)
     if (path.size() < 7) return;
     std::string tail = path.substr(path.size() - 7);
     std::transform(tail.begin(), tail.end(), tail.begin(), [](unsigned char c) { return char(std::tolower(c)); });

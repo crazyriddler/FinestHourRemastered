@@ -173,7 +173,7 @@ constexpr SBool kPresetFlags[] = {
     &app::Settings::bounce_light, &app::Settings::soft_shadows, &app::Settings::volumetric_fog,
     &app::Settings::auto_exposure, &app::Settings::color_grade, &app::Settings::film_grain, &app::Settings::hit_reactions,
     &app::Settings::reflections, &app::Settings::sun_moon, &app::Settings::clouds,
-    &app::Settings::remaster, &app::Settings::materials, &app::Settings::parallax, &app::Settings::detail,
+    &app::Settings::remaster, &app::Settings::remaster_ui, &app::Settings::materials, &app::Settings::parallax, &app::Settings::detail,
     &app::Settings::pixel_lighting, &app::Settings::height_blend};
 constexpr SUint kPresetValues[] = {&app::Settings::aniso, &app::Settings::sharpening, &app::Settings::shadow_quality,
                                    &app::Settings::specular, &app::Settings::models};
@@ -424,7 +424,8 @@ std::vector<Page> BuildPages() {
     graphics.items.push_back(Toggle("Anti-Aliasing", &s.fxaa, "FXAA: smooth edges on the 3D scene, the HUD and text stay sharp."));
     graphics.items.push_back(Slider("Sharpening", &s.sharpening, 0, 10, 1, "%d", "Contrast adaptive sharpening.",
                                     [](int v) { return v ? Fmt("%d", v) : std::string("Off"); }));
-    graphics.items.push_back(Toggle("Remastered Textures", &s.remaster, "Every texture redrawn at four times the detail."));
+    graphics.items.push_back(Toggle("Remastered Textures", &s.remaster, "The world's textures redrawn at four times the detail."));
+    graphics.items.push_back(Toggle("Remastered Interface", &s.remaster_ui, "The HUD, menus and text redrawn at four times the detail."));
     graphics.items.push_back(Toggle("Character Detail", &s.character_detail, "Close up, skin's pores and uniforms' weave."));
     graphics.items.push_back(Toggle("Weapon Materials", &s.weapon_materials, "Your weapon's wood and metal with relief and a metal sheen."));
     graphics.items.push_back(Toggle("Sharper Distance", &s.sharp_distance, "Distant surfaces' textures a little sharper."));
@@ -555,6 +556,10 @@ std::vector<Page> BuildPages() {
                                    [&s](int i) { s.speakers = uint32_t(i); },
                                    "5.1 puts the battle around you on a surround system: front, centre, back and subwoofer. "
                                    "Takes effect at the next start."));
+    general.items.push_back(Slider("Volume", &s.volume, 0, 100, 5, "%d%%", "All the game's sound."));
+    general.items.push_back(Slider("Music", &s.volume_music, 0, 100, 5, "%d%%", "The score."));
+    general.items.push_back(Slider("Voices", &s.volume_voices, 0, 100, 5, "%d%%", "The lines spoken by the soldiers and the briefings."));
+    general.items.push_back(Slider("Effects", &s.volume_effects, 0, 100, 5, "%d%%", "Gunfire, explosions, vehicles and everything else."));
     pages.push_back(std::move(general));
 
     // the cheats (the players asked for them; all off by default; the testers' keys stay with developer = true)

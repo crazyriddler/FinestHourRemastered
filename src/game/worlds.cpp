@@ -126,3 +126,26 @@ X86_FUNC(sub_001DDA70) {
     }
     __imp__sub_001DDA70(ctx, base);
 }
+
+// RenderWare's frame sync (sub_001CE8E0, cdecl, no arguments): the dirty frames' list (0x407E7C, each frame's link at
+// +8) walked to the sentinel. A frame freed with the level's sections while still in it left a link of 0 there: the
+// sync read the frame before it (0xFFFFFFF8) and crashed just after a mission ended (Issue #55, level 12). The list
+// is cut at the first link that is no frame's (0, out of memory, or not back to the one before), and what was past
+// it left out: those frames' memory is no longer theirs.
+X86_EXTERN_FUNC(__imp__sub_001CE8E0);
+X86_FUNC(sub_001CE8E0) {
+    constexpr uint32_t kDirty = 0x407E7C, kRam = 0x04000000;
+    uint32_t prev = kDirty, at = R32(kDirty);
+    for (int n = 0; at != kDirty && n < 1 << 16; n++) {
+        const bool ok = at >= 0x10000 && at + 8 <= kRam && !(at & 3) && mem::IsCommitted(at) && R32(at + 4) == prev;
+        if (!ok) {
+            static int told = 0;
+            if (told++ < 8) LOGR("worlds: the dirty frames' list broken after %08X (link %08X): cut there", prev, at);
+            W32(prev, kDirty);
+            W32(kDirty + 4, prev);
+            break;
+        }
+        prev = at, at = R32(at);
+    }
+    __imp__sub_001CE8E0(ctx, base);
+}

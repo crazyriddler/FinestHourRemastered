@@ -2,18 +2,42 @@
 # update release's update.json). Only this update's changes: written anew for each update. One section a language
 # ([en] needed; the others fall back to it), its lines as the game shows them. UTF-8.
 [en]
-- A wider Field of View (PC Settings) no longer lights up buildings at the sides of the screen: the lamp-lit walls of Mission: Matmata's houses no longer glow through the night.
+- Volume settings (PC Settings, General): Volume, Music, Voices and Effects.
+- Remastered Interface (PC Settings, Graphics): the HUD, menus and text on their own, apart from the world's Remastered Textures.
+- God Mode turned off takes effect at once, not at the next mission.
+- A crash just after finishing a mission (Airfield Ambush) is gone.
 [de]
-- Ein größeres Sichtfeld (PC-Einstellungen) lässt Gebäude am Bildrand nicht mehr aufleuchten: die von Lampen beleuchteten Hauswände in Mission: Matmata glühen nachts nicht mehr hervor.
+- Lautstärke-Einstellungen (PC-Einstellungen, Allgemein): Lautstärke, Musik, Stimmen und Effekte.
+- Remasterte Oberfläche (PC-Einstellungen, Grafik): HUD, Menüs und Text für sich, getrennt von den remasterten Texturen der Welt.
+- Ein ausgeschalteter Gott-Modus wirkt sofort, nicht erst in der nächsten Mission.
+- Ein Absturz direkt nach dem Abschluss einer Mission (Airfield Ambush) ist behoben.
 [fr]
-- Un champ de vision plus large (Options PC) n'illumine plus les bâtiments sur les côtés de l'écran : les murs éclairés par les lampes dans les maisons de Mission : Matmata ne brillent plus dans la nuit.
+- Réglages du volume (Options PC, Général) : Volume, Musique, Voix et Effets.
+- Interface remastérisée (Options PC, Graphismes) : le HUD, les menus et le texte à part, séparés des textures remastérisées du monde.
+- Le mode Dieu désactivé prend effet tout de suite, et non à la mission suivante.
+- Un plantage juste après la fin d'une mission (Airfield Ambush) est corrigé.
 [it]
-- Un campo visivo più ampio (Opzioni PC) non illumina più gli edifici ai lati dello schermo: i muri delle case di Mission: Matmata illuminati dalle lampade non brillano più nella notte.
+- Impostazioni del volume (Opzioni PC, Generale): Volume, Musica, Voci ed Effetti.
+- Interfaccia rimasterizzata (Opzioni PC, Grafica): l'HUD, i menu e il testo a parte, separati dalle texture rimasterizzate del mondo.
+- La modalità Dio disattivata ha effetto subito, non alla missione successiva.
+- Un crash subito dopo la fine di una missione (Airfield Ambush) è stato risolto.
 [es]
-- Un campo de visión más amplio (Ajustes de PC) ya no ilumina los edificios en los lados de la pantalla: las paredes de las casas de Mission: Matmata iluminadas por las lámparas ya no brillan en la noche.
+- Ajustes de volumen (Ajustes de PC, General): Volumen, Música, Voces y Efectos.
+- Interfaz remasterizada (Ajustes de PC, Gráficos): el HUD, los menús y el texto por separado de las texturas remasterizadas del mundo.
+- El modo Dios desactivado surte efecto al momento, no en la misión siguiente.
+- Se ha corregido un cierre justo después de terminar una misión (Airfield Ambush).
 [pt]
-- Um campo de visão mais amplo (Opções do PC) já não ilumina os edifícios nos lados do ecrã: as paredes das casas de Mission: Matmata iluminadas pelas lâmpadas já não brilham na noite.
+- Definições de volume (Opções do PC, Geral): Volume, Música, Vozes e Efeitos.
+- Interface remasterizada (Opções do PC, Gráficos): o HUD, os menus e o texto à parte, separados das texturas remasterizadas do mundo.
+- O modo Deus desligado tem efeito de imediato, não na missão seguinte.
+- Foi corrigido um fecho do jogo logo após terminar uma missão (Airfield Ambush).
 [ru]
-- Более широкое поле зрения (Настройки ПК) больше не подсвечивает здания по краям экрана: освещённые лампами стены домов в Mission: Matmata больше не светятся в ночи.
+- Настройки громкости (Настройки ПК, Общие): громкость, музыка, голоса и эффекты.
+- Интерфейс ремастера (Настройки ПК, Графика): HUD, меню и текст отдельно от текстур ремастера для мира.
+- Выключенный режим бога действует сразу, а не со следующей миссии.
+- Исправлен вылет сразу после завершения миссии (Airfield Ambush).
 [pl]
-- Szersze pole widzenia (Opcje PC) nie rozświetla już budynków na bokach ekranu: oświetlone lampami ściany domów w Mission: Matmata nie świecą już w nocy.
+- Ustawienia głośności (Opcje PC, Ogólne): głośność, muzyka, głosy i efekty.
+- Interfejs remastera (Opcje PC, Grafika): HUD, menu i tekst osobno, niezależnie od tekstur remastera świata.
+- Wyłączony tryb boga działa od razu, a nie dopiero od następnej misji.
+- Naprawiono awarię tuż po ukończeniu misji (Airfield Ambush).

@@ -3752,7 +3752,9 @@ rhi::Resource* Renderer::BindGuestTexture(const State& s, int stage, const Textu
             return it->second.res.Get();
         }
     }
-    if (tx.id && remaster::Active()) {
+    // the pack's texture: Remastered Interface for the 2D (the game's 2D tag or pretransformed vertices: the HUD, menus
+    // and text), Remastered Textures for the rest
+    if (tx.id && remaster::Active(s.layout2d || (!(s.vs_handle & 1) && (s.vs_handle & 0xE) == 0x4))) {
         if (const remaster::Material* m = remaster::Find(tx.id)) {
             auto it = remaster_.find(tx.id);
             if (it == remaster_.end()) {
@@ -7313,7 +7315,7 @@ void Renderer::RecordCaster(const State& s, const Assembled& a, const DrawShader
     // the shadows' reach (the box about the camera), the shadows and the haze's shafts of whatever stood near
     // there in the world fell on its far hills, black lines coming and going (issue #49)
     // (its class from the pack's list: a sky texture has no material maps, no stages.mat)
-    const remaster::Material* sky_of = stages.id[0] && remaster::Active() ? remaster::Find(stages.id[0]) : nullptr;
+    const remaster::Material* sky_of = stages.id[0] && remaster::Active(false) ? remaster::Find(stages.id[0]) : nullptr;
     if (sky_of && sky_of->sky) {
         static const bool sky_log = std::getenv("XBE_SKY_LOG") != nullptr;  // tests: each sky box texture marked, once
         static std::unordered_set<uint64_t> sky_told;
@@ -10540,7 +10542,7 @@ void Renderer::SkyPass(Target& rt, const float p[16]) {
         constexpr uint64_t kOilCloudHigh = 0xca3f4e0fb7c8bad2ull;  // aOilCloud_base_high
         auto it = remaster_.find(kOilCloudHigh);
         if (it != remaster_.end() && it->second.color) cover = &it->second;
-        else if (remaster::Active() && remaster::Find(kOilCloudHigh)) remaster::Request(kOilCloudHigh);
+        else if (remaster::Active(false) && remaster::Find(kOilCloudHigh)) remaster::Request(kOilCloudHigh);
         const uint32_t qw = sky_quarter_w_, qh = sky_quarter_h_;
         if (cover && (!sky_smoke_[1] || sky_smoke_w_ != qw || sky_smoke_h_ != qh)) {
             for (auto& r : sky_smoke_)
@@ -11222,7 +11224,7 @@ void Renderer::PumpOverrides() {
 
 // the pack's reads that finished: on the GPU, a few a frame
 void Renderer::PumpRemaster() {
-    if (!details_tried_ && remaster::Active()) {
+    if (!details_tried_ && remaster::Active(false)) {
         details_tried_ = true;
         std::vector<remaster::Image> det = remaster::ReadDetails();
         if (!det.empty()) {

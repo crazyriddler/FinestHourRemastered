@@ -326,7 +326,12 @@ bool ReadDds(const std::wstring& path, Image& out) {
 
 bool Active() {
     static const bool has = !TheStore().materials.empty();
-    return has && app::Get().remaster;
+    return has && (app::Get().remaster || app::Get().remaster_ui);
+}
+
+bool Active(bool ui) {
+    static const bool has = !TheStore().materials.empty();
+    return has && (ui ? app::Get().remaster_ui : app::Get().remaster);
 }
 
 const Material* Find(uint64_t id) {

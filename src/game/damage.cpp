@@ -78,15 +78,23 @@ void LogScript(const char* what, X86Context& ctx) {
 
 // The player's entity: the game's own lookup (sub_0010F590(0), as DisablePlayerDamage uses it) kept as it answers.
 // God mode (cod.h SetGodMode, tests): its damage off (DisablePlayerDamage's flag at 0x19FC) every time it is looked
-// up, so no script turns it back on
+// up, so no script turns it back on. Turned off, the flag goes back to what the level's scripts last asked for (0,
+// damage on, unless a scripted scene holds it off): left at 1, the player stayed unhurt until the next mission
+// (Issue #50)
 namespace {
+constexpr uint32_t kNoDamage = 0x19FC;
 std::atomic<uint32_t> g_player{0};
 std::atomic<bool> g_god{false};
+std::atomic<bool> g_god_off{false};  // turned off, the flag not yet given back
+uint32_t g_script_player = 0, g_script_flag = 0;  // the scripts' own flag and whose
 }  // namespace
 
 namespace cod {
 uint32_t PlayerEntity() { return g_player; }
-void SetGodMode(bool on) { g_god = on; }
+void SetGodMode(bool on) {
+    if (g_god && !on) g_god_off = true;
+    g_god = on;
+}
 bool GodMode() { return g_god; }
 }  // namespace cod
 
@@ -96,14 +104,24 @@ X86_FUNC(sub_0010F590) {
     __imp__sub_0010F590(ctx, base);
     if (which == 0 && ctx.eax) {
         g_player = ctx.eax;
-        if (g_god) W32(ctx.eax + 0x19FC, 1);
+        if (g_god) {
+            W32(ctx.eax + kNoDamage, 1);
+        } else if (g_god_off.exchange(false)) {
+            W32(ctx.eax + kNoDamage, g_script_player == ctx.eax ? g_script_flag : 0);
+            LOGR("damage: god off, the player's damage flag back to %u", R32(ctx.eax + kNoDamage));
+        }
     }
 }
 
 X86_EXTERN_FUNC(__imp__sub_000563F0);
 X86_FUNC(sub_000563F0) {  // DisablePlayerDamage(on)
     LogScript("DisablePlayerDamage", ctx);
+    // (the flag as the script set it, before god mode's lookups write over it)
+    const bool god = g_god;
+    g_god = false;
     __imp__sub_000563F0(ctx, base);
+    g_god = god;
+    if (uint32_t p = g_player) g_script_player = p, g_script_flag = R32(p + kNoDamage);
 }
 X86_EXTERN_FUNC(__imp__sub_000563A0);
 X86_FUNC(sub_000563A0) {  // SetPlayerHealthPercentage(percent)

@@ -67,7 +67,8 @@ struct Loaded {
     Image color, normal, mat;  // normal and mat empty without pbr
 };
 
-bool Active();                        // a pack is there and the setting is on
+bool Active();                        // a pack is there and either setting is on (the world's or the 2D's)
+bool Active(bool ui);                 // ... and that one's (Remastered Textures, Remastered Interface)
 const Material* Find(uint64_t id);    // the pack's material for the texture, null for none
 void Request(uint64_t id);            // reads its maps in the background, once
 bool TakeLoaded(Loaded& out);         // render thread: one read that finished

@@ -351,6 +351,14 @@ The version installed is in `version.txt` beside the game. Unattended:
 - A wider Field of View no longer lights up buildings at the sides of the screen (Mission: Matmata's lamp-lit
   houses glowed through the night there, issue #48): the game's own projection for its lit buildings now takes the
   Field of View exactly, as the rest of the level does.
+- Volume settings (PC Settings, General; issues #51 and #56): Volume for all the sound, and Music, Voices and
+  Effects under it. The music is the game's stereo streams, the voices its spoken streams and every sound of its
+  banks that differs between the game's languages (a line spoken), the effects the rest; the movies follow Volume.
+- Remastered Interface (PC Settings, Graphics; issue #52): the remastered HUD, menus and text on their own, so the
+  world can keep its original textures with a sharp interface, or the other way round.
+- God Mode turned off in a mission takes effect at once (issue #50): the player could not be hurt until the next one.
+- A crash just after finishing a mission (Airfield Ambush, issue #55): a frame left behind in RenderWare's list of
+  frames to update, its memory freed with the level, is now dropped from the list instead of being read.
 
 Call of Duty is a trademark of Activision Publishing, Inc. This project is not affiliated with or endorsed by
 Activision.

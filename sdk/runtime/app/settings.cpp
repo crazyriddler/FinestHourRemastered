@@ -70,12 +70,17 @@ void Load() {
     s.vsync = t["vsync"].value_or(s.vsync);
     s.renderer = t["renderer"].value_or(std::string(s.renderer ? "vulkan" : "d3d12")) == "vulkan" ? 1 : 0;
     s.speakers = t["speakers"].value_or(std::string(s.speakers ? "5.1" : "stereo")) == "5.1" ? 1 : 0;
+    s.volume = std::clamp<uint32_t>(t["volume"].value_or(s.volume), 0, 100);
+    s.volume_music = std::clamp<uint32_t>(t["volume_music"].value_or(s.volume_music), 0, 100);
+    s.volume_voices = std::clamp<uint32_t>(t["volume_voices"].value_or(s.volume_voices), 0, 100);
+    s.volume_effects = std::clamp<uint32_t>(t["volume_effects"].value_or(s.volume_effects), 0, 100);
     s.aniso = t["anisotropic_filtering"].value_or(s.aniso);
     s.smaa = t["smaa"].value_or(s.smaa);
     s.fxaa = t["fxaa"].value_or(s.fxaa);
     s.language = t["language"].value_or(s.language);
     // the remaster's look, on unless the player turned a part of it off (PC settings, Graphics and Effects)
     s.remaster = t["remaster"].value_or(s.remaster);
+    s.remaster_ui = t["remaster_ui"].value_or(s.remaster);  // (from before it: as the textures were)
     s.bloom = t["bloom"].value_or(s.bloom);
     s.ao = t["ambient_occlusion"].value_or(s.ao);
     s.contact_shadows = t["contact_shadows"].value_or(s.contact_shadows);
@@ -160,6 +165,10 @@ toml::table Table() {
                   {"vsync", s.vsync},
                   {"renderer", s.renderer ? "vulkan" : "d3d12"},
                   {"speakers", s.speakers ? "5.1" : "stereo"},
+                  {"volume", int64_t(s.volume)},
+                  {"volume_music", int64_t(s.volume_music)},
+                  {"volume_voices", int64_t(s.volume_voices)},
+                  {"volume_effects", int64_t(s.volume_effects)},
                   {"anisotropic_filtering", int64_t(s.aniso)},
                   {"smaa", s.smaa},
                   {"fxaa", s.fxaa},
@@ -167,6 +176,7 @@ toml::table Table() {
                   {"sharpening", int64_t(s.sharpening)},
                   {"shadow_quality", int64_t(s.shadow_quality)},
                   {"remaster", s.remaster},
+                  {"remaster_ui", s.remaster_ui},
                   {"materials", s.materials},
                   {"parallax", s.parallax},
                   {"detail", s.detail},

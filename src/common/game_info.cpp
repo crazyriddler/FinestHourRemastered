@@ -432,6 +432,7 @@ void Command(const std::string& line_in) {
         if (std::sscanf(line.c_str(), "fx %39s %d", name, &on) == 2) {
             if (std::string(name) == "shadows") app::Get().shadow_quality = on == 1 ? 3 : std::clamp(on, 0, 3), LOGR("fx: shadows %d", on);
             else if (std::string(name) == "remaster") app::Get().remaster = on != 0, LOGR("fx: remaster %d", on);
+            else if (std::string(name) == "remaster_ui") app::Get().remaster_ui = on != 0, LOGR("fx: remaster_ui %d", on);
             // (a preset by its number plus one: 1 Very High, as "fx <name> 1" puts an effect back, 5 Original)
             else if (std::string(name) == "preset") cod::overlay::ApplyPreset(on - 1), LOGR("fx: preset %d", on - 1);
             else if (std::string(name) == "specular") app::Get().specular = uint32_t(std::max(on, 0)), LOGR("fx: specular %d", on);
